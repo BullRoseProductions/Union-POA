@@ -63,11 +63,25 @@ const PS = {
 };
 
 /* ---------- Role helpers (exact shape from fire) ---------- */
-const hasAny = (rs, set) => Array.isArray(rs) && rs.some(r => set.includes(r));
-const BOARD_ROLES   = ["Board", "DeptAdmin", "ProjectAdmin"];
-const MANAGE_ROLES  = ["Board", "DeptAdmin", "Officer", "ProjectAdmin"];
-const isBoard       = rs => hasAny(rs, BOARD_ROLES);
-const canManage     = rs => hasAny(rs, MANAGE_ROLES);
+const hasAny      = (rs, set) => Array.isArray(rs) && rs.some(r => set.includes(r));
+
+// Three tiers:
+// Member       — view-only, own actions, QR self-check-in
+// Board        — full board console, add events, file minutes, manage causes (no hard-delete, no roster edits)
+// DeptAdmin    — everything Board has + roster management + hard-delete
+//                (Administrative Assistant / Secretary / POA President)
+
+const BOARD_ROLES     = ["Board", "DeptAdmin", "ProjectAdmin"];
+const DEPTADMIN_ROLES = ["DeptAdmin", "ProjectAdmin"];
+const MANAGE_ROLES    = ["Board", "DeptAdmin", "ProjectAdmin"];
+
+const isBoard     = rs => hasAny(rs, BOARD_ROLES);
+const isDeptAdmin = rs => hasAny(rs, DEPTADMIN_ROLES);
+const canManage   = rs => hasAny(rs, MANAGE_ROLES);
+// canEdit = Board + DeptAdmin can create/edit (not delete causes, not roster)
+// canAdmin = DeptAdmin only — roster edits, hard-deletes
+const canEdit     = rs => hasAny(rs, BOARD_ROLES);
+const canAdmin    = rs => hasAny(rs, DEPTADMIN_ROLES);
 
 /* ---------- Helpers ---------- */
 const fmtDate  = d => d ? new Date(d).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "—";
@@ -391,10 +405,10 @@ function MemberEvents() {
   return (
     <div>
       <PageTitle sub="Upcoming meetings and association events">Events</PageTitle>
-      {meetings.filter(m => m.status === "open").length === 0 && (
+      {meetings.filter(m => m.visibility !== "board").length === 0 && (
         <Card><div style={{ color: POA.textMuted, fontSize: 13.5 }}>No upcoming meetings scheduled yet.</div></Card>
       )}
-      {meetings.filter(m => m.status === "open").map(m => (
+      {meetings.filter(m => m.visibility !== "board").map(m => (
         <Card key={m.id}>
           <div style={{ fontWeight: 700, fontSize: 15, color: POA.textPrimary }}>{m.title}</div>
           <div style={{ fontSize: 12.5, color: POA.textMuted, marginTop: 3 }}>
@@ -667,9 +681,17 @@ function CausesBoard({ me }) {
     setEditing(false); await loadDetail(detail.id);
   }
   async function remove() {
-    if (!confirm("Delete this cause?")) return;
-    await supabase.from("causes").delete().eq("id", detail.id);
-    setDetail(null); await load();
+    // DeptAdmin = hard delete; Board = soft archive (same pattern as fire cancel)
+    if (isDeptAdmin(me.access)) {
+      if (!confirm("Permanently delete this cause? This cannot be undone.")) return;
+      await supabase.from("causes").delete().eq("id", detail.id);
+      setDetail(null);
+    } else {
+      if (!confirm("Archive this cause? It can be restored by your Department Admin.")) return;
+      await supabase.from("causes").update({ status: "archived" }).eq("id", detail.id);
+      setDetail(prev => ({ ...prev, status: "archived" }));
+    }
+    await load();
   }
   async function addCauseEntry() {
     setErr("");
@@ -708,7 +730,9 @@ function CausesBoard({ me }) {
             <div style={{ display: "flex", gap: 8 }}>
               <button style={PS.btnPrimary} onClick={update}>Save</button>
               <button style={PS.btn} onClick={() => setEditing(false)}>Cancel</button>
-              <button style={{ ...PS.btn, color: POA.red, marginLeft: "auto" }} onClick={remove}>Delete</button>
+              <button style={{ ...PS.btn, color: POA.red, marginLeft: "auto" }} onClick={remove}>
+                {isDeptAdmin(me.access) ? "Delete" : "Archive"}
+              </button>
             </div>
           </Card>
         ) : (
@@ -831,7 +855,7 @@ function MembersBoard({ me }) {
   const filtered = members.filter(m => !q || m.full_name?.toLowerCase().includes(q.toLowerCase()) || m.email?.toLowerCase().includes(q.toLowerCase()));
   return (
     <div>
-      <PageTitle sub="Your association's full roster">Members</PageTitle>
+      <PageTitle sub={isDeptAdmin(me.access) ? "Full roster — you can add and edit members" : "Your association's full roster"}>Members</PageTitle>
       <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search name or email…" style={{ ...PS.input, marginBottom: 14 }} />
       {filtered.map(m => (
         <Card key={m.id}>
@@ -952,7 +976,7 @@ function MeetingAttendance({ me }) {
   const [err, setErr]             = useState("");
   const [busy, setBusy]           = useState(false);
   const [newEvt, setNewEvt]       = useState({
-    title: "", kind: "meeting", event_date: "", event_time: "", location: "", notes: "",
+    title: "", kind: "meeting", event_date: "", event_time: "", location: "", notes: "", visibility: "all",
   });
 
   async function load() {
@@ -1031,10 +1055,11 @@ function MeetingAttendance({ me }) {
         event_time: newEvt.event_time || null,
         location: newEvt.location.trim() || null,
         notes: newEvt.notes.trim() || null,
+        visibility: newEvt.visibility,
         created_by: me.id,
       });
       setAdding(false);
-      setNewEvt({ title: "", kind: "meeting", event_date: "", event_time: "", location: "", notes: "" });
+      setNewEvt({ title: "", kind: "meeting", event_date: "", event_time: "", location: "", notes: "", visibility: "all" });
       await load();
     } catch (e) { setErr(e.message); }
     finally { setBusy(false); }
@@ -1253,6 +1278,13 @@ function MeetingAttendance({ me }) {
               <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Type</div>
               <select value={newEvt.kind} onChange={e => setNewEvt({ ...newEvt, kind: e.target.value })} style={PS.input}>
                 {["meeting","board","training","community","general","other"].map(k => <option key={k} value={k}>{k}</option>)}
+              </select>
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Who sees this</div>
+              <select value={newEvt.visibility} onChange={e => setNewEvt({ ...newEvt, visibility: e.target.value })} style={PS.input}>
+                <option value="all">All members</option>
+                <option value="board">Board only</option>
               </select>
             </div>
             <div>
