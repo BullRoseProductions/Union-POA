@@ -70,3 +70,49 @@ export async function draftMinutes({ title, agenda, notes }) {
   const json = await res.json()
   return json.minutes
 }
+
+// --- org (so the app shows the right POA name, never hardcoded) ---
+export async function getMyOrg() {
+  const { data, error } = await supabase.from('departments').select('*').single()
+  if (error) throw error
+  return data
+}
+
+// --- causes (editable per-org content) ---
+export async function listCauses() {
+  const { data, error } = await supabase.from('causes').select('*')
+    .order('sort', { ascending: true }).order('created_at', { ascending: false })
+  if (error) throw error
+  return data
+}
+export async function getCause(id) {
+  const { data, error } = await supabase.from('causes')
+    .select('*, cause_entries(*)').eq('id', id).single()
+  if (error) throw error
+  data.cause_entries = (data.cause_entries || [])
+    .sort((a, b) => new Date(b.occurred_on || b.created_at) - new Date(a.occurred_on || a.created_at))
+  return data
+}
+export async function createCause(row) {
+  const { data, error } = await supabase.from('causes').insert(row).select().single()
+  if (error) throw error
+  return data
+}
+export async function updateCause(id, patch) {
+  const { data, error } = await supabase.from('causes').update(patch).eq('id', id).select().single()
+  if (error) throw error
+  return data
+}
+export async function deleteCause(id) {
+  const { error } = await supabase.from('causes').delete().eq('id', id)
+  if (error) throw error
+}
+export async function addCauseEntry(row) {
+  const { data, error } = await supabase.from('cause_entries').insert(row).select().single()
+  if (error) throw error
+  return data
+}
+export async function deleteCauseEntry(id) {
+  const { error } = await supabase.from('cause_entries').delete().eq('id', id)
+  if (error) throw error
+}

@@ -3,7 +3,7 @@ import * as api from '../lib/api'
 
 const fmt = d => d ? new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : ''
 
-export default function Home({ me, onOpenMeeting, go }) {
+export default function Home({ me, org, onOpenMeeting, go }) {
   const [nextMtg, setNextMtg] = useState(null)
   const [openCount, setOpenCount] = useState(null)
 
@@ -20,7 +20,7 @@ export default function Home({ me, onOpenMeeting, go }) {
   const first = me.full_name?.split(' ').slice(-1)[0] || me.full_name
   return (
     <div className="screen pad">
-      <div className="stop"><div className="o">Fort Worth POA</div><span className="ey">Member Hub</span></div>
+      <div className="stop"><div className="o">{org?.name || 'Your Association'}</div><span className="ey">Member Hub</span></div>
       <div className="greet">Good day, {first}</div>
       <div className="sub">Here's what's happening in your association.</div>
 

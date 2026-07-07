@@ -8,14 +8,18 @@ import Home from './screens/Home'
 import Meetings from './screens/Meetings'
 import MeetingDetail from './screens/MeetingDetail'
 import ActionItems from './screens/ActionItems'
+import Causes from './screens/Causes'
+import CauseDetail from './screens/CauseDetail'
 import Profile from './screens/Profile'
 
 export default function App() {
   const [session, setSession] = useState(null)
   const [ready, setReady] = useState(false)
   const [me, setMe] = useState(undefined) // undefined = loading, null = no member row
+  const [org, setOrg] = useState(null)    // the POA — name comes from data, never hardcoded
   const [tab, setTab] = useState('home')
   const [meetingId, setMeetingId] = useState(null)
+  const [causeId, setCauseId] = useState(null)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => { setSession(data.session); setReady(true) })
@@ -27,6 +31,10 @@ export default function App() {
     if (!session) { setMe(undefined); return }
     api.getMe().then(setMe).catch(() => setMe(null))
   }, [session])
+
+  useEffect(() => {
+    if (me && me.id) api.getMyOrg().then(setOrg).catch(() => setOrg(null))
+  }, [me])
 
   if (!ready) return <PhoneFrame><div className="loading">Loading…</div></PhoneFrame>
   if (!session) return <PhoneFrame><SignIn /></PhoneFrame>
@@ -43,12 +51,15 @@ export default function App() {
   )
 
   function openMeeting(id) { setMeetingId(id); setTab('meeting') }
-  function navigate(t) { setMeetingId(null); setTab(t) }
+  function openCause(id) { setCauseId(id); setTab('cause') }
+  function navigate(t) { setMeetingId(null); setCauseId(null); setTab(t) }
 
   const screens = {
-    home: <Home me={me} onOpenMeeting={openMeeting} go={navigate} />,
+    home: <Home me={me} org={org} onOpenMeeting={openMeeting} go={navigate} />,
     meetings: <Meetings onOpen={openMeeting} />,
     meeting: <MeetingDetail id={meetingId} me={me} back={() => navigate('meetings')} />,
+    causes: <Causes me={me} onOpen={openCause} />,
+    cause: <CauseDetail id={causeId} me={me} back={() => navigate('causes')} />,
     actions: <ActionItems me={me} />,
     profile: <Profile me={me} />,
   }
