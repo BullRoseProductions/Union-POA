@@ -1713,6 +1713,7 @@ export default function App() {
   const [org, setOrg]           = useState(null);
   const [view, setView]         = useState(null); // null = use default for role
   const [sideOpen, setSideOpen] = useState(false);
+  const [viewAs, setViewAs]     = useState(null); // 'board' | 'member' — board users can preview the member view; null = role default
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => { setSession(data.session); setReady(true); });
@@ -1729,9 +1730,10 @@ export default function App() {
     if (me?.id) getMyOrg().then(setOrg).catch(() => null);
   }, [me]);
 
-  // default view by role
-  const activeView = view || (me ? (isBoard(me.access) ? "b_dash" : "m_dash") : null);
-  const nav        = me ? (isBoard(me.access) ? BOARD_NAV : MEMBER_NAV) : [];
+  // which console to show — board users can toggle to preview the member view (viewAs); null = role default
+  const curViewAs  = me ? (viewAs || (isBoard(me.access) ? "board" : "member")) : null;
+  const activeView = view || (me ? (curViewAs === "board" ? "b_dash" : "m_dash") : null);
+  const nav        = me ? (curViewAs === "board" ? BOARD_NAV : MEMBER_NAV) : [];
 
   if (!ready) return <Loading />;
   if (!session) return <Login />;
@@ -1760,8 +1762,27 @@ export default function App() {
         <div style={{ padding: "22px 18px 16px", borderBottom: `0.5px solid ${POA.hairline}` }}>
           <div style={{ fontSize: 11, letterSpacing: ".18em", textTransform: "uppercase", color: POA.accent, fontWeight: 700, marginBottom: 3 }}>Before the Call</div>
           <div style={{ fontSize: 13.5, fontWeight: 700, color: POA.textPrimary }}>{org?.name || "POA"}</div>
-          <div style={{ fontSize: 11, color: POA.textMuted, marginTop: 2 }}>{isBoard(me.access) ? "Board Console" : "Member Hub"}</div>
+          <div style={{ fontSize: 11, color: POA.textMuted, marginTop: 2 }}>{curViewAs === "board" ? "Board Console" : "Member Hub"}</div>
         </div>
+
+        {/* View-as toggle — board users can preview the member experience */}
+        {isBoard(me.access) && (
+          <div style={{ padding: "12px 14px", borderBottom: `0.5px solid ${POA.hairline}`, display: "flex", gap: 6 }}>
+            {[
+              { key: "member", label: "Member" },
+              { key: "board",  label: "Board" },
+            ].map(opt => {
+              const on = curViewAs === opt.key;
+              return (
+                <button key={opt.key}
+                  onClick={() => { setViewAs(opt.key); setView(null); setSideOpen(false); }}
+                  style={{ flex: 1, padding: "6px 0", fontSize: 12, fontWeight: 700, fontFamily: "inherit", cursor: "pointer", borderRadius: 8, border: `0.5px solid ${on ? POA.accent : POA.btnBorder}`, background: on ? POA.accent : "transparent", color: on ? POA.white : POA.navLabel }}>
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         {/* Nav */}
         <nav style={{ flex: 1, padding: "10px 8px" }}>
