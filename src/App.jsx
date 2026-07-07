@@ -5,7 +5,7 @@ import {
   CalendarCheck, ClipboardList, DollarSign, Heart, Megaphone,
   BookOpen, Mail, Users, BarChart3, LogOut, Menu, X, ChevronRight,
   Sparkles, CheckCircle2, Clock, Loader2, Send, Building2,
-  Plus, Pencil, Trash2, ArrowLeft, RefreshCw, FileText, QrCode,
+  Plus, Pencil, Trash2, ArrowLeft, RefreshCw, FileText, QrCode, Settings,
 } from "lucide-react";
 import { supabase } from "./lib/supabase";
 import { QRCodeCanvas } from "qrcode.react";
@@ -121,6 +121,13 @@ const BOARD_NAV = [
   { id: "b_correspondence",label: "Correspondence",   Icon: Mail },
   { id: "b_members",      label: "Members",           Icon: Users },
   { id: "b_ledger",       label: "Value Ledger",      Icon: TrendingUp },
+];
+
+const PA_NAV = [
+  { id: "pa_dash",   label: "PA Dashboard",     Icon: LayoutDashboard },
+  { id: "pa_orgs",   label: "Manage Orgs",      Icon: Building2 },
+  { id: "pa_config", label: "Org Config",       Icon: Settings },
+  { id: "pa_add",    label: "Add Organization", Icon: Plus },
 ];
 
 /* ================================================================
@@ -1663,8 +1670,200 @@ function BoardContinuity({ me }) {
   );
 }
 
+async function listStoreItems() {
+  const { data, error } = await supabase.from("store_items")
+    .select("*").order("sort").order("created_at");
+  if (error) throw error;
+  return data || [];
+}
+async function listSpaceBookings() {
+  const { data, error } = await supabase.from("space_bookings")
+    .select("*, members(full_name)").order("booking_date").order("start_time");
+  if (error) throw error;
+  return data || [];
+}
+async function getOrgFeatures() {
+  const { data, error } = await supabase.from("org_features").select("*");
+  if (error) throw error;
+  const map = {};
+  (data || []).forEach(r => { map[r.feature_key] = r.enabled; });
+  return map;
+}
+async function getOrgSettings() {
+  const { data, error } = await supabase.from("org_settings").select("*");
+  if (error) throw error;
+  const map = {};
+  (data || []).forEach(r => { map[r.key] = r.value; });
+  return map;
+}
+async function listAllDepts() {
+  const { data, error } = await supabase.from("departments").select("*, members(count)");
+  if (error) throw error;
+  return data || [];
+}
+async function setOrgFeature(deptId, key, enabled) {
+  const { error } = await supabase.rpc("set_org_feature", { p_dept: deptId, p_key: key, p_enabled: enabled });
+  if (error) throw error;
+}
+async function setOrgSetting(deptId, key, value) {
+  const { error } = await supabase.rpc("set_org_setting", { p_dept: deptId, p_key: key, p_value: value });
+  if (error) throw error;
+}
+
 function POABuilding({ me }) {
   return <ComingSoon label="POA Building — Store & Space" />;
+}
+
+function PADash() {
+  const [depts, setDepts] = useState(null);
+  useEffect(() => { listAllDepts().then(setDepts); }, []);
+  if (!depts) return <Spinner />;
+  return (
+    <div>
+      <PageTitle sub="Before the Call · Project Admin">PA Dashboard</PageTitle>
+      <StatRow stats={[
+        { n: depts.length, label: 'Organizations', color: POA.accent },
+        { n: depts.filter(d => d.org_type === 'poa').length, label: 'POA', color: POA.green },
+        { n: depts.filter(d => d.org_type === 'fire').length, label: 'Fire/EMS', color: POA.amber },
+      ]} />
+      <SectionTitle>All organizations</SectionTitle>
+      {depts.map(d => (
+        <Card key={d.id}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 700, color: POA.textPrimary }}>{d.name}</div>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginTop: 2 }}>{d.org_type}</div>
+            </div>
+            <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 9px', borderRadius: 999, background: POA.accentSoft, color: POA.accent }}>{d.org_type}</span>
+          </div>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
+function PAOrgConfig() {
+  const [depts, setDepts]     = useState(null);
+  const [selected, setSelected] = useState(null);
+  const [feats, setFeats]     = useState({});
+  const [settings, setSettings] = useState({ building_name: '', org_short_name: '', org_type_label: '' });
+  const [busy, setBusy]       = useState(false);
+  const [msg, setMsg]         = useState('');
+  const ALL_FEATURES = [
+    { key: 'm_call', label: 'Who to Call', group: 'Member' },
+    { key: 'm_ask', label: 'Ask B4C', group: 'Member' },
+    { key: 'm_partners', label: 'Trusted Partners', group: 'Member' },
+    { key: 'm_value', label: 'My Value', group: 'Member' },
+    { key: 'm_benefits', label: 'Benefits', group: 'Member' },
+    { key: 'm_events', label: 'Events', group: 'Member' },
+    { key: 'm_card', label: 'My Card', group: 'Member' },
+    { key: 'm_vote', label: 'VoteLink', group: 'Member' },
+    { key: 'm_store', label: 'Store', group: 'Member' },
+    { key: 'b_attendance', label: 'Meeting Attendance', group: 'Board' },
+    { key: 'b_meetings', label: 'Agenda & Minutes', group: 'Board' },
+    { key: 'b_stipend', label: 'Stipend Log', group: 'Board' },
+    { key: 'b_causes', label: 'Causes', group: 'Board' },
+    { key: 'b_fundraising', label: 'Fundraising', group: 'Board' },
+    { key: 'b_social', label: 'Social & Media', group: 'Board' },
+    { key: 'b_building', label: 'POA Building', group: 'Board' },
+    { key: 'b_continuity', label: 'Board Continuity', group: 'Board' },
+    { key: 'b_correspondence', label: 'Correspondence', group: 'Board' },
+    { key: 'b_members', label: 'Members', group: 'Board' },
+    { key: 'b_ledger', label: 'Value Ledger', group: 'Board' },
+  ];
+  async function loadOrg(dept) {
+    setSelected(dept);
+    const [f, s] = await Promise.all([
+      supabase.from('org_features').select('*').eq('department_id', dept.id),
+      supabase.from('org_settings').select('*').eq('department_id', dept.id),
+    ]);
+    const fm = {}; (f.data || []).forEach(r => { fm[r.feature_key] = r.enabled; });
+    const sm = { building_name: '', org_short_name: '', org_type_label: '' };
+    (s.data || []).forEach(r => { if (r.key in sm) sm[r.key] = r.value; });
+    setFeats(fm); setSettings(sm);
+  }
+  async function toggleFeature(key) {
+    const next = feats[key] === false ? true : false;
+    setFeats(f => ({ ...f, [key]: next }));
+    await setOrgFeature(selected.id, key, next);
+  }
+  async function saveSettings() {
+    setBusy(true); setMsg('');
+    try {
+      await Promise.all(Object.entries(settings).map(([k, v]) => v ? setOrgSetting(selected.id, k, v) : Promise.resolve()));
+      setMsg('Saved.');
+    } catch(e) { setMsg(e.message); }
+    finally { setBusy(false); }
+  }
+  useEffect(() => { listAllDepts().then(setDepts); }, []);
+  if (!depts) return <Spinner />;
+  const memberFeats = ALL_FEATURES.filter(f => f.group === 'Member');
+  const boardFeats  = ALL_FEATURES.filter(f => f.group === 'Board');
+  return (
+    <div>
+      <PageTitle sub="Configure features and terminology per organization">Org Config</PageTitle>
+      {!selected ? (
+        <>
+          <SectionTitle>Select an organization</SectionTitle>
+          {depts.map(d => (
+            <Card key={d.id} style={{ cursor: 'pointer' }} onClick={() => loadOrg(d)}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 700, color: POA.textPrimary }}>{d.name}</div>
+                  <div style={{ fontSize: 12, color: POA.textMuted }}>{d.org_type}</div>
+                </div>
+                <ChevronRight size={15} color={POA.textMuted} />
+              </div>
+            </Card>
+          ))}
+        </>
+      ) : (
+        <>
+          <button onClick={() => setSelected(null)} style={{ ...PS.btn, marginBottom: 16 }}><ArrowLeft size={13} /> All orgs</button>
+          <PageTitle sub={selected.org_type}>{selected.name}</PageTitle>
+          <SectionTitle>Terminology</SectionTitle>
+          <Card>
+            {[['building_name','Building name (e.g. POA Building)'],['org_short_name','Short name (e.g. FWPOA)'],['org_type_label','Type label (e.g. Association)']].map(([k, label]) => (
+              <div key={k} style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>{label}</div>
+                <input value={settings[k]} onChange={e => setSettings(s => ({ ...s, [k]: e.target.value }))} style={PS.input} />
+              </div>
+            ))}
+            {msg && <div style={{ fontSize: 12, color: msg === 'Saved.' ? POA.green : POA.red, marginBottom: 8 }}>{msg}</div>}
+            <button style={PS.btnPrimary} disabled={busy} onClick={saveSettings}>{busy ? 'Saving…' : 'Save terminology'}</button>
+          </Card>
+          <SectionTitle>Member features</SectionTitle>
+          <Card>
+            {memberFeats.map(f => (
+              <div key={f.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: `0.5px solid ${POA.hairline}` }}>
+                <div style={{ fontSize: 13.5, color: POA.textPrimary }}>{f.label}</div>
+                <button onClick={() => toggleFeature(f.key)}
+                  style={{ width: 42, height: 24, borderRadius: 12, border: 'none', cursor: 'pointer', background: feats[f.key] === false ? POA.track : POA.accent, position: 'relative', transition: '.2s' }}>
+                  <div style={{ width: 18, height: 18, borderRadius: '50%', background: '#fff', position: 'absolute', top: 3, left: feats[f.key] === false ? 3 : 21, transition: '.2s' }} />
+                </button>
+              </div>
+            ))}
+          </Card>
+          <SectionTitle>Board features</SectionTitle>
+          <Card>
+            {boardFeats.map(f => (
+              <div key={f.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: `0.5px solid ${POA.hairline}` }}>
+                <div style={{ fontSize: 13.5, color: POA.textPrimary }}>{f.label}</div>
+                <button onClick={() => toggleFeature(f.key)}
+                  style={{ width: 42, height: 24, borderRadius: 12, border: 'none', cursor: 'pointer', background: feats[f.key] === false ? POA.track : POA.accent, position: 'relative', transition: '.2s' }}>
+                  <div style={{ width: 18, height: 18, borderRadius: '50%', background: '#fff', position: 'absolute', top: 3, left: feats[f.key] === false ? 3 : 21, transition: '.2s' }} />
+                </button>
+              </div>
+            ))}
+          </Card>
+        </>
+      )}
+    </div>
+  );
+}
+
+function PAAddOrg() {
+  return <ComingSoon label="Add Organization — coming next" />;
 }
 
 /* ================================================================
@@ -1699,6 +1898,10 @@ function renderScreen(view, { me, org, setView }) {
     case "b_continuity":    return <BoardContinuity me={me} />;
     case "b_correspondence":return <ComingSoon label="Correspondence" />;
     case "b_ledger":        return <ComingSoon label="Value Ledger" />;
+    case "pa_dash":         return <PADash />;
+    case "pa_orgs":         return <PADash />;
+    case "pa_config":       return <PAOrgConfig />;
+    case "pa_add":          return <PAAddOrg />;
     default:                return <ComingSoon label={view} />;
   }
 }
@@ -1714,6 +1917,8 @@ export default function App() {
   const [view, setView]         = useState(null); // null = use default for role
   const [sideOpen, setSideOpen] = useState(false);
   const [viewAs, setViewAs]     = useState(null); // 'board' | 'member' — board users can preview the member view; null = role default
+  const [features, setFeatures] = useState({});
+  const [orgSettings, setOrgSettings] = useState({});
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => { setSession(data.session); setReady(true); });
@@ -1727,13 +1932,22 @@ export default function App() {
   }, [session]);
 
   useEffect(() => {
-    if (me?.id) getMyOrg().then(setOrg).catch(() => null);
+    if (me?.id) {
+      getMyOrg().then(setOrg).catch(() => null);
+      getOrgFeatures().then(setFeatures).catch(() => null);
+      getOrgSettings().then(setOrgSettings).catch(() => null);
+    }
   }, [me]);
 
   // which console to show — board users can toggle to preview the member view (viewAs); null = role default
   const curViewAs  = me ? (viewAs || (isBoard(me.access) ? "board" : "member")) : null;
-  const activeView = view || (me ? (curViewAs === "board" ? "b_dash" : "m_dash") : null);
-  const nav        = me ? (curViewAs === "board" ? BOARD_NAV : MEMBER_NAV) : [];
+  const isPA = me ? hasAny(me.access, ["ProjectAdmin"]) : false;
+  const activeView = view || (me ? (isPA ? "pa_dash" : curViewAs === "board" ? "b_dash" : "m_dash") : null);
+
+  // build dynamic nav from org_features
+  const filteredMemberNav = MEMBER_NAV.filter(n => features[n.id] !== false);
+  const filteredBoardNav  = BOARD_NAV.filter(n => features[n.id] !== false);
+  const nav = !me ? [] : isPA ? [...filteredBoardNav, ...PA_NAV] : curViewAs === "board" ? filteredBoardNav : filteredMemberNav;
 
   if (!ready) return <Loading />;
   if (!session) return <Login />;
@@ -1762,6 +1976,7 @@ export default function App() {
         <div style={{ padding: "22px 18px 16px", borderBottom: `0.5px solid ${POA.hairline}` }}>
           <div style={{ fontSize: 11, letterSpacing: ".18em", textTransform: "uppercase", color: POA.accent, fontWeight: 700, marginBottom: 3 }}>Before the Call</div>
           <div style={{ fontSize: 13.5, fontWeight: 700, color: POA.textPrimary }}>{org?.name || "POA"}</div>
+          <div style={{ fontSize: 11, color: POA.textMuted }}>{orgSettings.org_short_name || ""}</div>
           <div style={{ fontSize: 11, color: POA.textMuted, marginTop: 2 }}>{curViewAs === "board" ? "Board Console" : "Member Hub"}</div>
         </div>
 
@@ -1796,6 +2011,11 @@ export default function App() {
               </button>
             );
           })}
+          {isPA && (
+            <div style={{ margin: "12px 0 6px", padding: "0 10px", fontSize: 10, fontWeight: 700, letterSpacing: ".14em", textTransform: "uppercase", color: POA.accentDim }}>
+              Project Admin
+            </div>
+          )}
         </nav>
 
         {/* User / sign-out */}
