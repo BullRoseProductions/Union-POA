@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
   LayoutDashboard, Phone, MessageSquare, Handshake, TrendingUp, Shield,
-  Calendar, CreditCard, Vote, ShoppingBag, Bell,
+  Calendar, CreditCard, Vote, ShoppingBag, AlertTriangle, Bell,
   CalendarCheck, ClipboardList, DollarSign, Heart, Megaphone,
   BookOpen, Mail, Users, BarChart3, LogOut, Menu, X, ChevronRight,
   Sparkles, CheckCircle2, Clock, Loader2, Send, Building2,
@@ -106,6 +106,7 @@ const MEMBER_NAV = [
   { id: "m_card",     label: "My Card",          Icon: CreditCard },
   { id: "m_vote",     label: "VoteLink",         Icon: Vote },
   { id: "m_store",    label: "Store",            Icon: ShoppingBag },
+  { id: "m_correspondence", label: "Correspondence", Icon: Mail },
 ];
 
 const BOARD_NAV = [
@@ -241,14 +242,26 @@ function ComingSoon({ label }) {
 function MemberDash({ me, org, setView }) {
   const [next, setNext] = useState(null);
   const [openCount, setOpenCount] = useState(null);
+  const [activeAlert, setActiveAlert] = useState(null);
   useEffect(() => {
     listMeetings().then(ms => setNext(ms.filter(m => m.status === "open")[0] || null));
     myActionItems(me.id).then(items => setOpenCount(items.filter(i => i.status === "open").length));
   }, [me.id]);
+  useEffect(() => { getActiveAlert().then(setActiveAlert).catch(() => null); }, []);
 
   const first = me.full_name?.split(" ").slice(-1)[0] || me.full_name;
   return (
     <div>
+      {activeAlert && (
+        <div style={{ background: "rgba(239,106,100,.1)", border: "1px solid rgba(239,106,100,.4)", borderRadius: 12, padding: "14px 16px", marginBottom: 18, display: "flex", alignItems: "flex-start", gap: 12 }}>
+          <AlertTriangle size={18} color={POA.red} style={{ flexShrink: 0, marginTop: 2 }} />
+          <div>
+            <div style={{ fontWeight: 700, color: POA.red, fontSize: 13, marginBottom: 3 }}>CRITICAL ALERT</div>
+            <div style={{ fontWeight: 700, color: POA.textPrimary, marginBottom: 3 }}>{activeAlert.subject}</div>
+            <div style={{ fontSize: 13, color: POA.textSecondary, lineHeight: 1.55 }}>{activeAlert.body}</div>
+          </div>
+        </div>
+      )}
       <PageTitle sub={`${org?.name || "Your Association"} · Member Hub`}>Good day, {first}.</PageTitle>
 
       <StatRow stats={[
@@ -1709,6 +1722,88 @@ async function setOrgSetting(deptId, key, value) {
   const { error } = await supabase.rpc("set_org_setting", { p_dept: deptId, p_key: key, p_value: value });
   if (error) throw error;
 }
+async function getActiveAlert() {
+  const { data, error } = await supabase
+    .from("correspondence")
+    .select("*")
+    .eq("kind", "alert")
+    .eq("status", "active")
+    .order("created_at", { ascending: false })
+    .limit(1);
+  if (error) throw error;
+  return data?.[0] || null;
+}
+async function listAnnouncements() {
+  const { data, error } = await supabase
+    .from("correspondence")
+    .select("*, members(full_name)")
+    .eq("kind", "announcement")
+    .eq("status", "active")
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+async function listMessages() {
+  const { data, error } = await supabase
+    .from("correspondence")
+    .select("*, members(full_name), replies:correspondence!thread_id(*)")
+    .eq("kind", "message")
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+async function postAlert(subject, body) {
+  const { data, error } = await supabase
+    .rpc("post_alert", { p_subject: subject, p_body: body });
+  if (error) throw error;
+  return data;
+}
+async function clearAlert() {
+  const { error } = await supabase.rpc("clear_alert");
+  if (error) throw error;
+}
+async function postAnnouncement(subject, body, audience, audienceValue) {
+  const { data, error } = await supabase.rpc("post_announcement", {
+    p_subject: subject,
+    p_body: body,
+    p_audience: audience || "all",
+    p_audience_value: audienceValue || null,
+  });
+  if (error) throw error;
+  return data;
+}
+async function sendMessage(subject, body) {
+  const me = await getMe();
+  const { data, error } = await supabase
+    .from("correspondence")
+    .insert({
+      department_id: me.department_id,
+      kind: "message",
+      subject,
+      body,
+      member_id: me.id,
+      audience: "all",
+    })
+    .select().single();
+  if (error) throw error;
+  return data;
+}
+async function replyToMessage(threadId, body) {
+  const me = await getMe();
+  const { data, error } = await supabase
+    .from("correspondence")
+    .insert({
+      department_id: me.department_id,
+      kind: "reply",
+      body,
+      thread_id: threadId,
+      member_id: me.id,
+      audience: "all",
+    })
+    .select().single();
+  if (error) throw error;
+  return data;
+}
 
 function POABuilding({ me }) {
   return <ComingSoon label="POA Building — Store & Space" />;
@@ -1866,6 +1961,362 @@ function PAAddOrg() {
   return <ComingSoon label="Add Organization — coming next" />;
 }
 
+function BoardCorrespondence({ me, members }) {
+  const [tab, setTab]         = useState("inbox");
+  const [announcements, setAnnouncements] = useState(null);
+  const [messages, setMessages]           = useState(null);
+  const [alert, setAlert]     = useState(null);
+  const [err, setErr]         = useState("");
+  const [busy, setBusy]       = useState(false);
+  const [form, setForm]       = useState({ subject: "", body: "", audience: "all", audience_value: "" });
+  const [alertForm, setAlertForm] = useState({ subject: "", body: "" });
+  const [replyText, setReplyText] = useState({});
+  const [selectedMsg, setSelectedMsg] = useState(null);
+
+  async function load() {
+    const [ann, msgs, act] = await Promise.all([
+      listAnnouncements(), listMessages(), getActiveAlert()
+    ]);
+    setAnnouncements(ann);
+    setMessages(msgs);
+    setAlert(act);
+  }
+  useEffect(() => { load(); }, []);
+
+  async function doPostAnnouncement() {
+    if (!form.subject.trim() || !form.body.trim()) { setErr("Subject and message are required."); return; }
+    setBusy(true); setErr("");
+    try {
+      await postAnnouncement(form.subject, form.body, form.audience, form.audience_value || null);
+      setForm({ subject: "", body: "", audience: "all", audience_value: "" });
+      await load();
+    } catch(e) { setErr(e.message); }
+    finally { setBusy(false); }
+  }
+
+  async function doPostAlert() {
+    if (!alertForm.subject.trim() || !alertForm.body.trim()) { setErr("Subject and message required."); return; }
+    if (!confirm("Post a CRITICAL ALERT? This will appear as a red banner on every member's dashboard immediately.")) return;
+    setBusy(true); setErr("");
+    try {
+      await postAlert(alertForm.subject, alertForm.body);
+      setAlertForm({ subject: "", body: "" });
+      await load();
+    } catch(e) { setErr(e.message); }
+    finally { setBusy(false); }
+  }
+
+  async function doClearAlert() {
+    if (!confirm("Clear the active alert? The banner will disappear from all member dashboards.")) return;
+    setBusy(true); setErr("");
+    try { await clearAlert(); await load(); }
+    catch(e) { setErr(e.message); }
+    finally { setBusy(false); }
+  }
+
+  async function doReply(threadId) {
+    const text = replyText[threadId];
+    if (!text?.trim()) return;
+    setBusy(true); setErr("");
+    try {
+      await replyToMessage(threadId, text);
+      setReplyText(r => ({ ...r, [threadId]: "" }));
+      await load();
+      if (selectedMsg?.id === threadId) {
+        const updated = await listMessages();
+        setMessages(updated);
+        setSelectedMsg(updated.find(m => m.id === threadId) || null);
+      }
+    } catch(e) { setErr(e.message); }
+    finally { setBusy(false); }
+  }
+
+  const TABS = [
+    { id: "inbox", label: "Inbox" },
+    { id: "announce", label: "Post Announcement" },
+    { id: "alert", label: "🚨 Alert" },
+  ];
+
+  return (
+    <div>
+      <PageTitle sub="Member messages, announcements, and critical alerts">Correspondence</PageTitle>
+
+      {/* Active alert banner for board */}
+      {alert && (
+        <div style={{ background: "rgba(239,106,100,.12)", border: "1px solid rgba(239,106,100,.4)", borderRadius: 12, padding: "14px 16px", marginBottom: 18, display: "flex", alignItems: "flex-start", gap: 12 }}>
+          <AlertTriangle size={18} color={POA.red} style={{ flexShrink: 0, marginTop: 2 }} />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 700, color: POA.red, fontSize: 13, marginBottom: 3 }}>ACTIVE ALERT — visible to all members</div>
+            <div style={{ fontWeight: 700, color: POA.textPrimary, marginBottom: 2 }}>{alert.subject}</div>
+            <div style={{ fontSize: 13, color: POA.textSecondary }}>{alert.body}</div>
+          </div>
+          <button style={{ ...PS.btn, color: POA.red, flexShrink: 0 }} disabled={busy} onClick={doClearAlert}>Clear alert</button>
+        </div>
+      )}
+
+      <ErrBox msg={err} />
+
+      {/* Tabs */}
+      <div style={{ display: "flex", gap: 6, marginBottom: 20 }}>
+        {TABS.map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)}
+            style={{ ...PS.btn, background: tab === t.id ? POA.accent : POA.btnBg, color: tab === t.id ? "#fff" : POA.btnText, border: tab === t.id ? "none" : `0.5px solid ${POA.btnBorder}` }}>
+            {t.label}
+            {t.id === "inbox" && messages && messages.length > 0 && (
+              <span style={{ background: POA.accentSoft, color: POA.accent, borderRadius: 999, padding: "1px 7px", fontSize: 11, fontWeight: 700 }}>{messages.length}</span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* INBOX */}
+      {tab === "inbox" && (
+        <div>
+          {!messages ? <Spinner /> : messages.length === 0 ? (
+            <Card><div style={{ color: POA.textMuted, fontSize: 13.5 }}>No messages from members yet.</div></Card>
+          ) : selectedMsg ? (
+            <div>
+              <button onClick={() => setSelectedMsg(null)} style={{ ...PS.btn, marginBottom: 16 }}><ArrowLeft size={13} /> Inbox</button>
+              <Card>
+                <div style={{ fontWeight: 700, fontSize: 15, color: POA.textPrimary, marginBottom: 4 }}>{selectedMsg.subject}</div>
+                <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 10 }}>
+                  From {selectedMsg.members?.full_name || "Member"} · {fmtDate(selectedMsg.created_at)}
+                </div>
+                <div style={{ fontSize: 13.5, color: POA.textSecondary, lineHeight: 1.65, marginBottom: 14 }}>{selectedMsg.body}</div>
+                {(selectedMsg.replies || []).map(r => (
+                  <div key={r.id} style={{ borderTop: `0.5px solid ${POA.hairline}`, paddingTop: 12, marginTop: 12 }}>
+                    <div style={{ fontSize: 11, color: POA.textMuted, marginBottom: 6 }}>Board reply · {fmtDate(r.created_at)}</div>
+                    <div style={{ fontSize: 13.5, color: POA.textSecondary, lineHeight: 1.65 }}>{r.body}</div>
+                  </div>
+                ))}
+              </Card>
+              <div style={{ marginTop: 12 }}>
+                <label className="fl" style={{ fontSize: 12, color: POA.textMuted, marginBottom: 6, display: "block" }}>Reply</label>
+                <textarea value={replyText[selectedMsg.id] || ""} onChange={e => setReplyText(r => ({ ...r, [selectedMsg.id]: e.target.value }))}
+                  placeholder="Type your reply…" style={{ ...PS.textarea, minHeight: 100 }} />
+                <button style={{ ...PS.btnPrimary, marginTop: 8 }} disabled={busy || !replyText[selectedMsg.id]?.trim()} onClick={() => doReply(selectedMsg.id)}>
+                  <Send size={14} /> Send reply
+                </button>
+              </div>
+            </div>
+          ) : (
+            messages.map(m => (
+              <Card key={m.id} style={{ cursor: "pointer" }} onClick={() => setSelectedMsg(m)}>
+                <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 700, fontSize: 14, color: POA.textPrimary }}>{m.subject || "Message"}</div>
+                    <div style={{ fontSize: 12, color: POA.textMuted, marginTop: 2 }}>
+                      {m.members?.full_name || "Member"} · {fmtDate(m.created_at)}
+                    </div>
+                    <div style={{ fontSize: 13, color: POA.textMuted, marginTop: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.body}</div>
+                  </div>
+                  {(m.replies || []).length > 0 && (
+                    <span style={{ fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 999, background: "rgba(70,199,147,.14)", color: POA.green, flexShrink: 0 }}>Replied</span>
+                  )}
+                  <ChevronRight size={15} color={POA.textMuted} style={{ flexShrink: 0 }} />
+                </div>
+              </Card>
+            ))
+          )}
+        </div>
+      )}
+
+      {/* POST ANNOUNCEMENT */}
+      {tab === "announce" && (
+        <div>
+          <Card>
+            <SectionTitle>New announcement</SectionTitle>
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Subject</div>
+              <input value={form.subject} onChange={e => setForm({ ...form, subject: e.target.value })}
+                placeholder="e.g. Meeting reminder — July 12" style={PS.input} />
+            </div>
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Message</div>
+              <textarea value={form.body} onChange={e => setForm({ ...form, body: e.target.value })}
+                placeholder="What do members need to know?" style={PS.textarea} />
+            </div>
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Audience</div>
+              <select value={form.audience} onChange={e => setForm({ ...form, audience: e.target.value, audience_value: "" })} style={PS.input}>
+                <option value="all">All members</option>
+                <option value="district">Specific district</option>
+                <option value="role">Specific role</option>
+              </select>
+            </div>
+            {form.audience !== "all" && (
+              <div style={{ marginBottom: 10 }}>
+                <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>
+                  {form.audience === "district" ? "District" : "Role"}
+                </div>
+                <input value={form.audience_value}
+                  onChange={e => setForm({ ...form, audience_value: e.target.value })}
+                  placeholder={form.audience === "district" ? "e.g. District 4" : "e.g. Board"}
+                  style={PS.input} />
+              </div>
+            )}
+            <button style={{ ...PS.btnPrimary, width: "100%" }} disabled={busy} onClick={doPostAnnouncement}>
+              <Send size={14} /> Post announcement
+            </button>
+          </Card>
+
+          <SectionTitle>Recent announcements</SectionTitle>
+          {!announcements ? <Spinner /> : announcements.length === 0 ? (
+            <Card><div style={{ color: POA.textMuted, fontSize: 13.5 }}>No announcements yet.</div></Card>
+          ) : announcements.map(a => (
+            <Card key={a.id}>
+              <div style={{ fontWeight: 700, color: POA.textPrimary, marginBottom: 3 }}>{a.subject}</div>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 6 }}>
+                {fmtDate(a.created_at)} · {a.audience === "all" ? "All members" : `${a.audience}: ${a.audience_value}`}
+              </div>
+              <div style={{ fontSize: 13, color: POA.textSecondary, lineHeight: 1.55 }}>{a.body}</div>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* CRITICAL ALERT */}
+      {tab === "alert" && (
+        <div>
+          <div style={{ background: "rgba(239,106,100,.06)", border: "1px solid rgba(239,106,100,.2)", borderRadius: 12, padding: "14px 16px", marginBottom: 18 }}>
+            <div style={{ fontWeight: 700, color: POA.red, marginBottom: 6 }}>Critical Alert</div>
+            <div style={{ fontSize: 13, color: POA.textMuted, lineHeight: 1.6 }}>
+              Posting an alert immediately shows a red banner on every member's dashboard. Use only for genuine critical incidents — officer down, active threat, urgent member safety notice. Clear it as soon as the situation is resolved.
+            </div>
+          </div>
+          {alert ? (
+            <Card style={{ borderColor: "rgba(239,106,100,.4)" }}>
+              <div style={{ fontWeight: 700, color: POA.red, marginBottom: 6 }}>⚠ Active alert</div>
+              <div style={{ fontWeight: 700, color: POA.textPrimary, marginBottom: 4 }}>{alert.subject}</div>
+              <div style={{ fontSize: 13, color: POA.textSecondary, marginBottom: 14 }}>{alert.body}</div>
+              <button style={{ ...PS.btnPrimary, background: POA.red, width: "100%" }} disabled={busy} onClick={doClearAlert}>
+                Clear alert — remove from all member dashboards
+              </button>
+            </Card>
+          ) : (
+            <Card>
+              <div style={{ marginBottom: 10 }}>
+                <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Alert subject</div>
+                <input value={alertForm.subject} onChange={e => setAlertForm({ ...alertForm, subject: e.target.value })}
+                  placeholder="e.g. Officer down — District 4" style={PS.input} />
+              </div>
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Alert message</div>
+                <textarea value={alertForm.body} onChange={e => setAlertForm({ ...alertForm, body: e.target.value })}
+                  placeholder="What members need to know right now…" style={{ ...PS.textarea, minHeight: 80 }} />
+              </div>
+              <button style={{ ...PS.btnPrimary, background: POA.red, width: "100%" }} disabled={busy} onClick={doPostAlert}>
+                <AlertTriangle size={14} /> Post critical alert
+              </button>
+            </Card>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MemberCorrespondence({ me }) {
+  const [tab, setTab]           = useState('announcements');
+  const [announcements, setAnnouncements] = useState(null);
+  const [messages, setMessages] = useState(null);
+  const [form, setForm]         = useState({ subject: '', body: '' });
+  const [busy, setBusy]         = useState(false);
+  const [err, setErr]           = useState('');
+  const [sent, setSent]         = useState(false);
+
+  async function load() {
+    const [ann, msgs] = await Promise.all([listAnnouncements(), listMessages()]);
+    setAnnouncements(ann);
+    setMessages(msgs.filter(m => m.member_id === me.id));
+  }
+  useEffect(() => { load(); }, [me.id]);
+
+  async function doSend() {
+    if (!form.subject.trim() || !form.body.trim()) { setErr('Subject and message required.'); return; }
+    setBusy(true); setErr('');
+    try {
+      await sendMessage(form.subject, form.body);
+      setForm({ subject: '', body: '' });
+      setSent(true);
+      await load();
+    } catch(e) { setErr(e.message); }
+    finally { setBusy(false); }
+  }
+
+  const TABS = [{ id: 'announcements', label: 'Announcements' }, { id: 'messages', label: 'My Messages' }, { id: 'new', label: '+ New Message' }];
+
+  return (
+    <div>
+      <PageTitle sub="Association announcements and your messages to the board">Correspondence</PageTitle>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 20 }}>
+        {TABS.map(t => (
+          <button key={t.id} onClick={() => { setTab(t.id); setSent(false); setErr(''); }}
+            style={{ ...PS.btn, background: tab === t.id ? POA.accent : POA.btnBg, color: tab === t.id ? '#fff' : POA.btnText, border: tab === t.id ? 'none' : `0.5px solid ${POA.btnBorder}` }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+      {tab === 'announcements' && (
+        <div>
+          {!announcements ? <Spinner /> : announcements.length === 0 ? (
+            <Card><div style={{ color: POA.textMuted, fontSize: 13.5 }}>No announcements yet.</div></Card>
+          ) : announcements.map(a => (
+            <Card key={a.id}>
+              <div style={{ fontWeight: 700, color: POA.textPrimary, marginBottom: 3 }}>{a.subject}</div>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 8 }}>{fmtDate(a.created_at)}</div>
+              <div style={{ fontSize: 13.5, color: POA.textSecondary, lineHeight: 1.65 }}>{a.body}</div>
+            </Card>
+          ))}
+        </div>
+      )}
+      {tab === 'messages' && (
+        <div>
+          {!messages ? <Spinner /> : messages.length === 0 ? (
+            <Card><div style={{ color: POA.textMuted, fontSize: 13.5 }}>No messages sent yet. Use '+ New Message' to contact the board.</div></Card>
+          ) : messages.map(m => (
+            <Card key={m.id}>
+              <div style={{ fontWeight: 700, color: POA.textPrimary, marginBottom: 3 }}>{m.subject}</div>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 6 }}>{fmtDate(m.created_at)}</div>
+              <div style={{ fontSize: 13.5, color: POA.textSecondary, lineHeight: 1.55, marginBottom: m.replies?.length ? 12 : 0 }}>{m.body}</div>
+              {(m.replies || []).map(r => (
+                <div key={r.id} style={{ borderTop: `0.5px solid ${POA.hairline}`, paddingTop: 10, marginTop: 10 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: POA.accent, marginBottom: 4 }}>Board replied · {fmtDate(r.created_at)}</div>
+                  <div style={{ fontSize: 13.5, color: POA.textSecondary, lineHeight: 1.55 }}>{r.body}</div>
+                </div>
+              ))}
+              <div style={{ marginTop: 8 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 9px', borderRadius: 999, background: (m.replies||[]).length ? 'rgba(70,199,147,.14)' : POA.accentSoft, color: (m.replies||[]).length ? POA.green : POA.textMuted }}>
+                  {(m.replies||[]).length ? 'Replied' : 'Pending'}
+                </span>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+      {tab === 'new' && (
+        <Card>
+          <SectionTitle>Message the board</SectionTitle>
+          {sent && <div style={{ background: 'rgba(70,199,147,.1)', border: '0.5px solid rgba(70,199,147,.3)', borderRadius: 10, padding: '11px 14px', fontSize: 13, color: POA.greenText, marginBottom: 12 }}>Message sent. The board will follow up with you here.</div>}
+          <ErrBox msg={err} />
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Subject</div>
+            <input value={form.subject} onChange={e => setForm({ ...form, subject: e.target.value })} placeholder="What's this about?" style={PS.input} />
+          </div>
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Message</div>
+            <textarea value={form.body} onChange={e => setForm({ ...form, body: e.target.value })} placeholder="Tell the board what you need…" style={PS.textarea} />
+          </div>
+          <button style={{ ...PS.btnPrimary, width: '100%' }} disabled={busy || !form.subject.trim() || !form.body.trim()} onClick={doSend}>
+            <Send size={14} /> Send to board
+          </button>
+          <div style={{ fontSize: 11.5, color: POA.textMuted, marginTop: 8, fontStyle: 'italic' }}>Messages go directly to the board. Replies appear under 'My Messages'.</div>
+        </Card>
+      )}
+    </div>
+  );
+}
+
 /* ================================================================
    SCREEN ROUTER
    ================================================================ */
@@ -1882,6 +2333,7 @@ function renderScreen(view, { me, org, setView }) {
       case "m_benefits": return <Benefits me={me} />;
       case "m_vote":     return <VoteLink />;
       case "m_store":    return <Store />;
+      case "m_correspondence": return <MemberCorrespondence me={me} />;
       default:           return <ComingSoon label={view} />;
     }
   }
@@ -1896,7 +2348,7 @@ function renderScreen(view, { me, org, setView }) {
     case "b_social":        return <ComingSoon label="Social & Media" />;
     case "b_building":      return <POABuilding me={me} />;
     case "b_continuity":    return <BoardContinuity me={me} />;
-    case "b_correspondence":return <ComingSoon label="Correspondence" />;
+    case "b_correspondence":return <BoardCorrespondence me={me} />;
     case "b_ledger":        return <ComingSoon label="Value Ledger" />;
     case "pa_dash":         return <PADash />;
     case "pa_orgs":         return <PADash />;
