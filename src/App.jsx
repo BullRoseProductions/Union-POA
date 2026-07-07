@@ -1736,7 +1736,7 @@ async function getActiveAlert() {
 async function listAnnouncements() {
   const { data, error } = await supabase
     .from("correspondence")
-    .select("*, members(full_name)")
+    .select("*, poster:members!correspondence_posted_by_fkey(full_name)")
     .eq("kind", "announcement")
     .eq("status", "active")
     .order("created_at", { ascending: false });
@@ -1746,7 +1746,7 @@ async function listAnnouncements() {
 async function listMessages() {
   const { data, error } = await supabase
     .from("correspondence")
-    .select("*, members(full_name), replies:correspondence!thread_id(*)")
+    .select("*, sender:members!correspondence_member_id_fkey(full_name), replies:correspondence!thread_id(*)")
     .eq("kind", "message")
     .order("created_at", { ascending: false });
   if (error) throw error;
@@ -2080,7 +2080,7 @@ function BoardCorrespondence({ me, members }) {
               <Card>
                 <div style={{ fontWeight: 700, fontSize: 15, color: POA.textPrimary, marginBottom: 4 }}>{selectedMsg.subject}</div>
                 <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 10 }}>
-                  From {selectedMsg.members?.full_name || "Member"} · {fmtDate(selectedMsg.created_at)}
+                  From {selectedMsg.sender?.full_name || "Member"} · {fmtDate(selectedMsg.created_at)}
                 </div>
                 <div style={{ fontSize: 13.5, color: POA.textSecondary, lineHeight: 1.65, marginBottom: 14 }}>{selectedMsg.body}</div>
                 {(selectedMsg.replies || []).map(r => (
@@ -2106,7 +2106,7 @@ function BoardCorrespondence({ me, members }) {
                   <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: 700, fontSize: 14, color: POA.textPrimary }}>{m.subject || "Message"}</div>
                     <div style={{ fontSize: 12, color: POA.textMuted, marginTop: 2 }}>
-                      {m.members?.full_name || "Member"} · {fmtDate(m.created_at)}
+                      {m.sender?.full_name || "Member"} · {fmtDate(m.created_at)}
                     </div>
                     <div style={{ fontSize: 13, color: POA.textMuted, marginTop: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.body}</div>
                   </div>
