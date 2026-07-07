@@ -1947,7 +1947,8 @@ export default function App() {
   // build dynamic nav from org_features
   const filteredMemberNav = MEMBER_NAV.filter(n => features[n.id] !== false);
   const filteredBoardNav  = BOARD_NAV.filter(n => features[n.id] !== false);
-  const nav = !me ? [] : isPA ? [...filteredBoardNav, ...PA_NAV] : curViewAs === "board" ? filteredBoardNav : filteredMemberNav;
+  // PA gets the board nav here; the PA_NAV section is rendered separately below the divider
+  const nav = !me ? [] : (isPA || curViewAs === "board") ? filteredBoardNav : filteredMemberNav;
 
   if (!ready) return <Loading />;
   if (!session) return <Login />;
@@ -2012,9 +2013,21 @@ export default function App() {
             );
           })}
           {isPA && (
-            <div style={{ margin: "12px 0 6px", padding: "0 10px", fontSize: 10, fontWeight: 700, letterSpacing: ".14em", textTransform: "uppercase", color: POA.accentDim }}>
-              Project Admin
-            </div>
+            <>
+              <div style={{ margin: "12px 0 6px", padding: "0 10px", fontSize: 10, fontWeight: 700, letterSpacing: ".14em", textTransform: "uppercase", color: POA.accentDim }}>
+                Project Admin
+              </div>
+              {PA_NAV.map(({ id, label, Icon }) => {
+                const on = activeView === id;
+                return (
+                  <button key={id} className="nav-item" onClick={() => { setView(id); setSideOpen(false); }}
+                    style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "9px 10px", borderRadius: 9, border: "none", cursor: "pointer", fontFamily: "inherit", fontSize: 13.5, fontWeight: on ? 600 : 400, color: on ? POA.white : POA.navLabel, background: on ? POA.accent : "transparent", marginBottom: 2, textAlign: "left", borderLeft: on ? `3px solid ${POA.accentBright}` : "3px solid transparent" }}>
+                    <Icon size={16} style={{ flexShrink: 0, opacity: on ? 1 : 0.7 }} />
+                    {label}
+                  </button>
+                );
+              })}
+            </>
           )}
         </nav>
 
