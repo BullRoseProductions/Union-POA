@@ -976,7 +976,7 @@ function MeetingAttendance({ me }) {
   const [err, setErr]             = useState("");
   const [busy, setBusy]           = useState(false);
   const [newEvt, setNewEvt]       = useState({
-    title: "", kind: "meeting", event_date: "", event_time: "", location: "", notes: "", visibility: "all",
+    title: "", kind: "meeting", event_date: "", event_time: "", location: "", notes: "", visibility: "all", attendance_mode: "qr", assign_all: true,
   });
 
   async function load() {
@@ -1056,10 +1056,12 @@ function MeetingAttendance({ me }) {
         location: newEvt.location.trim() || null,
         notes: newEvt.notes.trim() || null,
         visibility: newEvt.visibility,
+        attendance_mode: newEvt.attendance_mode,
+        assign_all: newEvt.assign_all,
         created_by: me.id,
       });
       setAdding(false);
-      setNewEvt({ title: "", kind: "meeting", event_date: "", event_time: "", location: "", notes: "", visibility: "all" });
+      setNewEvt({ title: "", kind: "meeting", event_date: "", event_time: "", location: "", notes: "", visibility: "all", attendance_mode: "qr", assign_all: true });
       await load();
     } catch (e) { setErr(e.message); }
     finally { setBusy(false); }
@@ -1129,7 +1131,7 @@ function MeetingAttendance({ me }) {
         )}
 
         {/* ---- QR sign-in panel (board only, event not done) ---- */}
-        {manage && !detail.done && (
+        {manage && !detail.done && (detail.attendance_mode === 'qr' || !detail.attendance_mode) && (
           <div style={{ ...PS.card, padding: "16px 18px", marginBottom: 16 }}>
             <p style={{ ...PS.kicker, marginBottom: 10 }}>QR sign-in</p>
             {!liveToken ? (
@@ -1285,6 +1287,21 @@ function MeetingAttendance({ me }) {
               <select value={newEvt.visibility} onChange={e => setNewEvt({ ...newEvt, visibility: e.target.value })} style={PS.input}>
                 <option value="all">All members</option>
                 <option value="board">Board only</option>
+              </select>
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Attendance tracking</div>
+              <select value={newEvt.attendance_mode} onChange={e => setNewEvt({ ...newEvt, attendance_mode: e.target.value })} style={PS.input}>
+                <option value="qr">QR scan (tamper-proof)</option>
+                <option value="manual">Manual roll (board marks)</option>
+                <option value="none">No tracking</option>
+              </select>
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Who's invited</div>
+              <select value={newEvt.assign_all ? "all" : "specific"} onChange={e => setNewEvt({ ...newEvt, assign_all: e.target.value === "all" })} style={PS.input}>
+                <option value="all">All members</option>
+                <option value="specific">Specific members</option>
               </select>
             </div>
             <div>
