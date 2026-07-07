@@ -116,6 +116,7 @@ const BOARD_NAV = [
   { id: "b_causes",       label: "Causes",            Icon: Heart },
   { id: "b_fundraising",  label: "Fundraising",       Icon: Megaphone },
   { id: "b_social",       label: "Social & Media",    Icon: BarChart3 },
+  { id: "b_building",     label: "POA Building",      Icon: Building2 },
   { id: "b_continuity",   label: "Board Continuity",  Icon: BookOpen },
   { id: "b_correspondence",label: "Correspondence",   Icon: Mail },
   { id: "b_members",      label: "Members",           Icon: Users },
@@ -1662,6 +1663,10 @@ function BoardContinuity({ me }) {
   );
 }
 
+function POABuilding({ me }) {
+  return <ComingSoon label="POA Building — Store & Space" />;
+}
+
 /* ================================================================
    SCREEN ROUTER
    ================================================================ */
@@ -1690,6 +1695,7 @@ function renderScreen(view, { me, org, setView }) {
     case "b_stipend":       return <ComingSoon label="Stipend Log" />;
     case "b_fundraising":   return <ComingSoon label="Fundraising" />;
     case "b_social":        return <ComingSoon label="Social & Media" />;
+    case "b_building":      return <POABuilding me={me} />;
     case "b_continuity":    return <BoardContinuity me={me} />;
     case "b_correspondence":return <ComingSoon label="Correspondence" />;
     case "b_ledger":        return <ComingSoon label="Value Ledger" />;
