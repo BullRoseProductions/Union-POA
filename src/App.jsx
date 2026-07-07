@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
   LayoutDashboard, Phone, MessageSquare, Handshake, TrendingUp, Shield,
-  Calendar, CreditCard, Vote, ShoppingBag, AlertTriangle, Bell,
+  Calendar, CreditCard, Vote, ShoppingBag, Bell,
   CalendarCheck, ClipboardList, DollarSign, Heart, Megaphone,
   BookOpen, Mail, Users, BarChart3, LogOut, Menu, X, ChevronRight,
   Sparkles, CheckCircle2, Clock, Loader2, Send, Building2,
@@ -241,12 +241,6 @@ function MemberDash({ me, org, setView }) {
   const first = me.full_name?.split(" ").slice(-1)[0] || me.full_name;
   return (
     <div>
-      {/* Critical incident banner — always visible */}
-      <div style={{ background: "rgba(239,106,100,.08)", border: `0.5px solid rgba(239,106,100,.3)`, borderRadius: 12, padding: "12px 16px", marginBottom: 18, display: "flex", alignItems: "center", gap: 10 }}>
-        <AlertTriangle size={16} color={POA.red} />
-        <div style={{ flex: 1, fontSize: 13 }}><span style={{ fontWeight: 700, color: POA.redText }}>No active incidents.</span> <span style={{ color: POA.textMuted }}>Your board will post here if something needs your attention.</span></div>
-      </div>
-
       <PageTitle sub={`${org?.name || "Your Association"} · Member Hub`}>Good day, {first}.</PageTitle>
 
       <StatRow stats={[
