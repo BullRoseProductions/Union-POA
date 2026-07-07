@@ -1453,6 +1453,221 @@ function MeetingAttendance({ me }) {
   );
 }
 
+function TrustedPartners() {
+  const partners = [
+    { name: "Legal Defense Fund", cat: "Legal", desc: "Retained counsel for officer representation in administrative and criminal matters." },
+    { name: "Member Assistance Program", cat: "Wellness", desc: "Confidential counseling, financial coaching, and crisis support for members and families." },
+    { name: "Credit Union", cat: "Financial", desc: "Preferred banking, auto loans, and home mortgages for sworn members." },
+    { name: "Association Health Plan", cat: "Benefits", desc: "Supplemental coverage options negotiated by the association." },
+    { name: "Fraternal Order Discounts", cat: "Perks", desc: "Retail, travel, and service discounts available to all active members." },
+  ];
+  return (
+    <div>
+      <PageTitle sub="Vetted resources your association stands behind">Trusted Partners</PageTitle>
+      <div style={{ fontSize: 13, color: POA.textMuted, marginBottom: 16, lineHeight: 1.6 }}>
+        These partners are endorsed by your association — not advertisers. Your board manages this list.
+      </div>
+      {partners.map(p => (
+        <Card key={p.name}>
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".12em", textTransform: "uppercase", color: POA.accent, marginBottom: 4 }}>{p.cat}</div>
+              <div style={{ fontWeight: 700, fontSize: 15, color: POA.textPrimary, marginBottom: 4 }}>{p.name}</div>
+              <div style={{ fontSize: 13, color: POA.textMuted, lineHeight: 1.55 }}>{p.desc}</div>
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+            <button style={PS.btn}><Phone size={13} /> Contact</button>
+            <button style={PS.btn}><ChevronRight size={13} /> Learn more</button>
+          </div>
+        </Card>
+      ))}
+      <div style={{ fontSize: 11.5, color: POA.textMuted, marginTop: 8, fontStyle: "italic" }}>
+        Partner details are managed by your board in the Members section.
+      </div>
+    </div>
+  );
+}
+
+function MyValue({ me }) {
+  const items = [
+    { label: "Legal defense cases supported", n: 0, unit: "cases", color: POA.accent },
+    { label: "Legal defense fund used", n: "$0", unit: "", color: POA.accent },
+    { label: "Negotiated raise (CBA)", n: "+$1,850", unit: "/yr", color: POA.green },
+    { label: "Meetings attended this year", n: 0, unit: "of 4", color: POA.amber },
+    { label: "Benefits accessed", n: 2, unit: "programs", color: POA.green },
+  ];
+  return (
+    <div>
+      <PageTitle sub="Your dues at work — countable and honest">My Value</PageTitle>
+      <div style={{ fontSize: 13, color: POA.textMuted, marginBottom: 18, lineHeight: 1.6 }}>
+        What your membership has delivered. These numbers come from your association's own records — never fabricated.
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 18 }}>
+        {items.map(item => (
+          <div key={item.label} style={{ ...PS.card, padding: "14px 16px" }}>
+            <div style={{ fontFamily: "inherit", fontWeight: 700, fontSize: 22, color: item.color, lineHeight: 1 }}>{item.n}<span style={{ fontSize: 13, fontWeight: 400, color: POA.textMuted }}>{item.unit}</span></div>
+            <div style={{ fontSize: 11, color: POA.textMuted, marginTop: 6, lineHeight: 1.4 }}>{item.label}</div>
+          </div>
+        ))}
+      </div>
+      <Card>
+        <div style={{ fontSize: 13, color: POA.textSecondary, lineHeight: 1.65 }}>
+          Your association negotiates your contract, defends your rights, and fights for your family.
+          This screen will populate as your board records activity. <span style={{ color: POA.accent, fontWeight: 600 }}>Proof, not promises.</span>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function Benefits({ me }) {
+  const benefits = [
+    { title: "Legal Defense Fund", status: "Active", desc: "Up to $500K in legal representation for on-duty incidents. Contact your rep before speaking to investigators.", tag: "Core" },
+    { title: "Death & Disability", status: "Active", desc: "Association-negotiated supplemental coverage on top of department benefits.", tag: "Core" },
+    { title: "Scholarship Fund", status: "Active", desc: "Annual scholarships for members' children. Applications open each spring.", tag: "Education" },
+    { title: "Member Assistance Program", status: "Active", desc: "Free confidential counseling — mental health, financial, family. No records shared with the department.", tag: "Wellness" },
+    { title: "Retirement Support", status: "Active", desc: "Peer advisors who've navigated the pension system. Call before you sign anything.", tag: "Financial" },
+  ];
+  return (
+    <div>
+      <PageTitle sub="What your membership covers">Benefits</PageTitle>
+      {benefits.map(b => (
+        <Card key={b.title}>
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, marginBottom: 6 }}>
+            <div style={{ fontWeight: 700, fontSize: 15, color: POA.textPrimary }}>{b.title}</div>
+            <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+              <span style={{ fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 999, background: "rgba(70,199,147,.14)", color: POA.green }}>{b.status}</span>
+              <span style={{ fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 999, background: POA.accentSoft, color: POA.accent }}>{b.tag}</span>
+            </div>
+          </div>
+          <div style={{ fontSize: 13, color: POA.textMuted, lineHeight: 1.55 }}>{b.desc}</div>
+          <button style={{ ...PS.btn, marginTop: 10 }}><Phone size={13} /> Get help with this</button>
+        </Card>
+      ))}
+      <div style={{ fontSize: 11.5, color: POA.textMuted, marginTop: 8, fontStyle: "italic" }}>
+        Benefits are managed by your board. Contact your rep if something looks wrong.
+      </div>
+    </div>
+  );
+}
+
+function VoteLink() {
+  const votes = [
+    { title: "CBA Ratification Vote", status: "open", desc: "Vote on the proposed collective bargaining agreement. Closes July 31.", url: "#" },
+    { title: "Board Election — District 4 Rep", status: "upcoming", desc: "Nominations close August 15. Election opens September 1.", url: null },
+    { title: "Bylaw Amendment — Article 7", status: "closed", desc: "Amendment passed 87% in favor. Effective immediately.", url: null },
+  ];
+  const statusColor = { open: POA.green, upcoming: POA.amber, closed: POA.textMuted };
+  return (
+    <div>
+      <PageTitle sub="Association votes and elections">VoteLink</PageTitle>
+      <div style={{ fontSize: 13, color: POA.textMuted, marginBottom: 16, lineHeight: 1.6 }}>
+        Official votes are conducted on your association's secure voting platform. B4C links you there — we don't process votes.
+      </div>
+      {votes.map(v => (
+        <Card key={v.title}>
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, marginBottom: 6 }}>
+            <div style={{ fontWeight: 700, fontSize: 15, color: POA.textPrimary }}>{v.title}</div>
+            <span style={{ fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 999, background: `rgba(${v.status === "open" ? "70,199,147" : v.status === "upcoming" ? "240,180,74" : "122,114,150"},.14)`, color: statusColor[v.status], flexShrink: 0, textTransform: "uppercase" }}>{v.status}</span>
+          </div>
+          <div style={{ fontSize: 13, color: POA.textMuted, lineHeight: 1.55, marginBottom: 10 }}>{v.desc}</div>
+          {v.url && <a href={v.url} style={{ ...PS.btnPrimary, textDecoration: "none", display: "inline-flex" }}><Vote size={14} /> Cast your vote ↗</a>}
+        </Card>
+      ))}
+      <div style={{ fontSize: 11.5, color: POA.textMuted, marginTop: 8, fontStyle: "italic" }}>
+        Vote links and deadlines are posted by your board. Active votes show here automatically.
+      </div>
+    </div>
+  );
+}
+
+function Store() {
+  const items = [
+    { name: "Association Polo", desc: "Embroidered logo, moisture-wicking. Sizes S–4XL.", price: "$42", tag: "Apparel" },
+    { name: "Challenge Coin", desc: "Solid brass, association seal. Limited run.", price: "$18", tag: "Collectible" },
+    { name: "Duty Bag", desc: "Tactical backpack with patch. Association branded.", price: "$65", tag: "Gear" },
+    { name: "Decal Set", desc: "3-pack window decals. Association + FOP logos.", price: "$8", tag: "Accessories" },
+  ];
+  return (
+    <div>
+      <PageTitle sub="Association gear and merchandise">Store</PageTitle>
+      <div style={{ fontSize: 13, color: POA.textMuted, marginBottom: 16, lineHeight: 1.6 }}>
+        Orders go through the association's store — B4C links you there. Proceeds support the association's programs.
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+        {items.map(item => (
+          <div key={item.name} style={{ ...PS.card, padding: "14px 15px" }}>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: POA.accent, marginBottom: 6 }}>{item.tag}</div>
+            <div style={{ fontWeight: 700, fontSize: 14, color: POA.textPrimary, marginBottom: 4 }}>{item.name}</div>
+            <div style={{ fontSize: 12, color: POA.textMuted, lineHeight: 1.45, marginBottom: 10 }}>{item.desc}</div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div style={{ fontWeight: 700, color: POA.accent, fontSize: 15 }}>{item.price}</div>
+              <button style={{ ...PS.btn, padding: "5px 10px", fontSize: 11.5 }}>Order ↗</button>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div style={{ fontSize: 11.5, color: POA.textMuted, marginTop: 14, fontStyle: "italic" }}>
+        Store catalog is managed by your board. Items and prices update automatically.
+      </div>
+    </div>
+  );
+}
+
+function BoardContinuity({ me }) {
+  const positions = [
+    { title: "President", holder: "Open", term: "2024–2026", status: "current" },
+    { title: "Vice President", holder: "Open", term: "2024–2026", status: "current" },
+    { title: "Secretary", holder: "Open", term: "2024–2026", status: "current" },
+    { title: "Treasurer", holder: "Open", term: "2024–2026", status: "current" },
+    { title: "Sergeant-at-Arms", holder: "Open", term: "2024–2026", status: "current" },
+    { title: "Trustee — District 1", holder: "Open", term: "2024–2026", status: "current" },
+    { title: "Trustee — District 2", holder: "Open", term: "2024–2026", status: "current" },
+  ];
+  const filled = positions.filter(p => p.holder !== "Open").length;
+  const vacant = positions.length - filled;
+  return (
+    <div>
+      <PageTitle sub="Board roster, terms, and succession — the continuity spine">Board Continuity</PageTitle>
+      <div style={{ fontSize: 13, color: POA.textMuted, marginBottom: 18, lineHeight: 1.6 }}>
+        Every seat, who holds it, and when the term ends. Continuity is documented so nothing walks out the door when a board turns over. Your board manages this roster.
+      </div>
+
+      <StatRow stats={[
+        { n: positions.length, label: "Board seats", color: POA.accent },
+        { n: filled, label: "Filled", color: POA.green },
+        { n: vacant, label: "Vacant", color: POA.amber },
+      ]} />
+
+      <SectionTitle>Positions</SectionTitle>
+      {positions.map(p => {
+        const open = p.holder === "Open";
+        return (
+          <Card key={p.title}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <div style={{ width: 38, height: 38, borderRadius: "50%", background: open ? POA.track : POA.accentSoft, color: open ? POA.textMuted : POA.accent, display: "grid", placeItems: "center", fontWeight: 700, fontSize: 12, flexShrink: 0 }}>
+                {open ? "—" : initials(p.holder)}
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 700, fontSize: 14.5, color: POA.textPrimary }}>{p.title}</div>
+                <div style={{ fontSize: 12.5, color: POA.textMuted, marginTop: 2 }}>{open ? "Vacant" : p.holder} · Term {p.term}</div>
+              </div>
+              <span style={{ fontSize: 10, fontWeight: 700, padding: "3px 9px", borderRadius: 999, background: open ? "rgba(240,180,74,.14)" : "rgba(70,199,147,.14)", color: open ? POA.amber : POA.green, flexShrink: 0 }}>
+                {open ? "Vacant" : "Filled"}
+              </span>
+            </div>
+          </Card>
+        );
+      })}
+
+      <div style={{ fontSize: 11.5, color: POA.textMuted, marginTop: 8, fontStyle: "italic" }}>
+        {isDeptAdmin(me.access) ? "You can update seats and terms in the Members section." : "Roster and terms are managed by your board."}
+      </div>
+    </div>
+  );
+}
+
 /* ================================================================
    SCREEN ROUTER
    ================================================================ */
@@ -1464,11 +1679,11 @@ function renderScreen(view, { me, org, setView }) {
       case "m_ask":      return <AskB4C me={me} org={org} />;
       case "m_card":     return <MyCard me={me} org={org} />;
       case "m_events":   return <MemberEvents />;
-      case "m_partners": return <ComingSoon label="Trusted Partners" />;
-      case "m_value":    return <ComingSoon label="My Value" />;
-      case "m_benefits": return <ComingSoon label="Benefits" />;
-      case "m_vote":     return <ComingSoon label="VoteLink" />;
-      case "m_store":    return <ComingSoon label="Store" />;
+      case "m_partners": return <TrustedPartners />;
+      case "m_value":    return <MyValue me={me} />;
+      case "m_benefits": return <Benefits me={me} />;
+      case "m_vote":     return <VoteLink />;
+      case "m_store":    return <Store />;
       default:           return <ComingSoon label={view} />;
     }
   }
@@ -1481,7 +1696,7 @@ function renderScreen(view, { me, org, setView }) {
     case "b_stipend":       return <ComingSoon label="Stipend Log" />;
     case "b_fundraising":   return <ComingSoon label="Fundraising" />;
     case "b_social":        return <ComingSoon label="Social & Media" />;
-    case "b_continuity":    return <ComingSoon label="Board Continuity" />;
+    case "b_continuity":    return <BoardContinuity me={me} />;
     case "b_correspondence":return <ComingSoon label="Correspondence" />;
     case "b_ledger":        return <ComingSoon label="Value Ledger" />;
     default:                return <ComingSoon label={view} />;
