@@ -239,6 +239,36 @@ function ComingSoon({ label }) {
 /* ================================================================
    MEMBER SCREENS
    ================================================================ */
+function RecentVideos({ deptId }) {
+  const [videos, setVideos] = useState([]);
+  useEffect(() => {
+    listVideos().then(v => setVideos(v.slice(0, 3))).catch(() => null);
+  }, []);
+  if (videos.length === 0) return null;
+  return (
+    <div style={{ marginTop: 20 }}>
+      <SectionTitle>From your association</SectionTitle>
+      {videos.map(v => {
+        const embedUrl = vimeoEmbedUrl(v.vimeo_url);
+        return (
+          <Card key={v.id} style={{ marginBottom: 14 }}>
+            {v.series_name && <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".12em", textTransform: "uppercase", color: POA.accent, marginBottom: 5 }}>{v.series_name}</div>}
+            <div style={{ fontWeight: 700, fontSize: 14.5, color: POA.textPrimary, marginBottom: 4 }}>{v.title}</div>
+            {v.description && <div style={{ fontSize: 12.5, color: POA.textMuted, marginBottom: 10, lineHeight: 1.5 }}>{v.description}</div>}
+            {embedUrl && (
+              <div style={{ position: "relative", paddingBottom: "56.25%", height: 0, overflow: "hidden", borderRadius: 10 }}>
+                <iframe src={embedUrl} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", border: "none", borderRadius: 10 }}
+                  allow="autoplay; fullscreen; picture-in-picture" allowFullScreen title={v.title} />
+              </div>
+            )}
+            <div style={{ fontSize: 11.5, color: POA.textMuted, marginTop: 8 }}>{fmtDate(v.created_at)}</div>
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
+
 function MemberDash({ me, org, setView }) {
   const [next, setNext] = useState(null);
   const [openCount, setOpenCount] = useState(null);
@@ -300,6 +330,9 @@ function MemberDash({ me, org, setView }) {
           </button>
         ))}
       </div>
+
+      {/* Recent videos from the association */}
+      <RecentVideos deptId={me.department_id} />
     </div>
   );
 }
@@ -2997,6 +3030,285 @@ function SocialMedia({ me, org }) {
   );
 }
 
+function Fundraising({ me, org }) {
+  const [tab, setTab]         = useState("planner");
+  const [log, setLog]         = useState([]);
+  const [drafts, setDrafts]   = useState([]);
+  const [openDraft, setOpenDraft] = useState(null);
+  const [addingLog, setAddingLog] = useState(false);
+  const [ln, setLn]           = useState("");
+  const [ld, setLd]           = useState("");
+  const [la, setLa]           = useState("");
+  const [detail, setDetail]   = useState("");
+  const [goalAmt, setGoalAmt] = useState("");
+  const [targetDate, setTargetDate] = useState("");
+  const [out, setOut]         = useState("");
+  const [saveTitle, setSaveTitle] = useState("");
+  const [saving, setSaving]   = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr]         = useState("");
+
+  const totalRaised = log.reduce((s, e) => s + (Number(e.amount) || 0), 0);
+
+  const IDEA_BANK = [
+    { title: "Golf scramble", desc: "Strong sponsor tie-ins and bigger checks. Great for annual events." },
+    { title: "Fundraising dinner / banquet", desc: "Ticket sales + sponsor tables. The association's signature annual event." },
+    { title: "PAC fundraiser", desc: "Political action committee fundraising within state regulations." },
+    { title: "Memorial / honor event", desc: "5K, golf, or dinner honoring fallen or retired officers." },
+    { title: "Community raffle", desc: "Check your state's raffle rules. Strong earner with low overhead." },
+    { title: "Charity auction", desc: "Live or silent — experiences and donated items work well." },
+    { title: "Poker run / motorcycle event", desc: "Member engagement + community visibility." },
+    { title: "Sporting clays / shooting event", desc: "Popular with first-responder community and sponsors." },
+    { title: "Concert or comedy night", desc: "Ticket sales + bar — works well with a local venue partner." },
+    { title: "Fill-the-boot / roadside drive", desc: "Visible, low-cost, quick to organize." },
+  ];
+
+  async function loadAll() {
+    const [l, d] = await Promise.all([
+      listFundraiserLog(),
+      listAIOutputs("fundraiser"),
+    ]);
+    setLog(l); setDrafts(d);
+  }
+  useEffect(() => { loadAll(); }, []);
+
+  async function doGenerate() {
+    if (!detail.trim()) { setErr("Tell us about the fundraiser first."); return; }
+    setLoading(true); setErr(""); setOut("");
+    const sys = `You help a police officers' association plan a fundraiser. Given their event idea, return a practical plain-text plan the association board can actually run: a one-line goal, a simple timeline/checklist, the roles needed, a few promotion steps, and a realistic money target. Then the most important part — an in-depth Sponsorship Packages section tailored to THIS specific event: three or four headline tiers (Title/Presenting, Gold, Silver, Bronze) each with a suggested dollar amount and exactly what that sponsor gets. An a-la-carte list of individual sponsorship items with suggested prices. One short ready-to-send outreach line the association can text or email to a local business. Keep dollar amounts realistic. Use clear short headings and dash bullets. Aim for 450-650 words.`;
+    const user = `Association: ${org?.name || "Police Officers' Association"}\nEvent idea: ${detail}\nGoal amount: ${goalAmt || "not specified"}\nTarget date: ${targetDate || "flexible"}\nToday's date: ${new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}`;
+    try {
+      const t = await callClaudeAI(sys, user);
+      setOut(t);
+      setSaveTitle(detail.trim().slice(0, 60));
+    } catch(e) { setErr("AI planning failed. Check ANTHROPIC_API_KEY in Vercel."); }
+    finally { setLoading(false); }
+  }
+
+  async function doSaveDraft() {
+    if (!out || !saveTitle.trim()) return;
+    setSaving(true);
+    try {
+      await saveAIDraft({
+        department_id: me.department_id,
+        feature: "fundraiser",
+        title: saveTitle.trim(),
+        ai_text: out,
+        created_by: me.id,
+      });
+      await loadAll();
+      setOut(""); setDetail(""); setGoalAmt(""); setTargetDate(""); setSaveTitle("");
+    } catch(e) { setErr(e.message); }
+    finally { setSaving(false); }
+  }
+
+  async function doAddLog() {
+    if (!ln.trim()) return;
+    try {
+      await addFundraiserLog({
+        department_id: me.department_id,
+        name: ln.trim(),
+        event_when: ld.trim() || null,
+        amount: Number(String(la).replace(/[^0-9.]/g, "")) || 0,
+        created_by: me.id,
+      });
+      setLn(""); setLd(""); setLa(""); setAddingLog(false);
+      await loadAll();
+    } catch(e) { setErr(e.message); }
+  }
+
+  async function doRemoveLog(id) {
+    if (!confirm("Remove this entry?")) return;
+    try { await removeFundraiserLog(id); await loadAll(); }
+    catch(e) { setErr(e.message); }
+  }
+
+  async function doDeleteDraft(id) {
+    if (!confirm("Delete this draft?")) return;
+    try { await deleteAIDraft(id); await loadAll(); }
+    catch(e) { setErr(e.message); }
+  }
+
+  const TABS = [
+    { id: "planner", label: "Fundraiser Planner" },
+    { id: "log", label: "Fundraiser Log" },
+    { id: "drafts", label: `Saved Drafts${drafts.length ? ` (${drafts.length})` : ""}` },
+  ];
+
+  return (
+    <div>
+      <PageTitle sub="Plan fundraisers, write the appeals, line up sponsors">Fundraising</PageTitle>
+      <div style={{ display: "flex", gap: 6, marginBottom: 20, flexWrap: "wrap" }}>
+        {TABS.map(t => (
+          <button key={t.id} onClick={() => { setTab(t.id); setOpenDraft(null); }}
+            style={{ ...PS.btn, background: tab === t.id ? POA.accent : POA.btnBg, color: tab === t.id ? "#fff" : POA.btnText, border: tab === t.id ? "none" : `0.5px solid ${POA.btnBorder}` }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+      <ErrBox msg={err} />
+
+      {/* PLANNER */}
+      {tab === "planner" && (
+        <div>
+          <Card style={{ borderLeft: `3px solid ${POA.accent}`, borderRadius: "0 14px 14px 0", marginBottom: 16 }}>
+            <SectionTitle>Fundraiser Planner</SectionTitle>
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Tell us about it</div>
+              <textarea value={detail} onChange={e => setDetail(e.target.value)}
+                placeholder="e.g. A golf scramble to raise money for the legal defense fund and officer scholarships."
+                style={{ ...PS.textarea, minHeight: 80 }} />
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
+              <div>
+                <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Goal amount</div>
+                <input value={goalAmt} onChange={e => setGoalAmt(e.target.value)} style={PS.input} placeholder="$10,000" />
+              </div>
+              <div>
+                <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Target date</div>
+                <input type="date" value={targetDate} onChange={e => setTargetDate(e.target.value)} style={PS.input} />
+              </div>
+            </div>
+            <button style={PS.btnPrimary} disabled={loading || !detail.trim()} onClick={doGenerate}>
+              <Sparkles size={14} /> {loading ? "Building the plan…" : "Get a plan + sponsorship packages"}
+            </button>
+          </Card>
+
+          {out && (
+            <Card>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                <SectionTitle>Your fundraiser plan</SectionTitle>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button style={PS.btn} onClick={() => navigator.clipboard.writeText(out)}>Copy</button>
+                  <button style={{ ...PS.btnPrimary }} disabled={saving} onClick={doSaveDraft}>
+                    {saving ? "Saving…" : "Save draft"}
+                  </button>
+                </div>
+              </div>
+              <div style={{ fontSize: 13.5, color: POA.textSecondary, lineHeight: 1.75, whiteSpace: "pre-wrap" }}>{out}</div>
+              <div style={{ fontSize: 11.5, color: POA.textMuted, marginTop: 12, fontStyle: "italic" }}>AI drafts the plan — your board runs it. Review before sharing.</div>
+            </Card>
+          )}
+
+          <SectionTitle>Event ideas</SectionTitle>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            {IDEA_BANK.map(idea => (
+              <div key={idea.title} style={{ ...PS.card, padding: "13px 14px" }}>
+                <div style={{ fontWeight: 700, fontSize: 13.5, color: POA.textPrimary, marginBottom: 4 }}>{idea.title}</div>
+                <div style={{ fontSize: 12, color: POA.textMuted, lineHeight: 1.45, marginBottom: 10 }}>{idea.desc}</div>
+                <button style={{ ...PS.btn, width: "100%", justifyContent: "center" }}
+                  onClick={() => { setDetail(`A ${idea.title.toLowerCase()} to raise money for the association.`); setTab("planner"); window.scrollTo({ top: 0, behavior: "smooth" }); }}>
+                  <Sparkles size={12} /> Plan this
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* FUNDRAISER LOG */}
+      {tab === "log" && (
+        <div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 15, color: POA.textPrimary }}>Recent fundraisers</div>
+              <div style={{ fontSize: 13, color: POA.textMuted, marginTop: 2 }}>What you've run and what it brought in.</div>
+            </div>
+            <button style={PS.btn} onClick={() => setAddingLog(!addingLog)}><Plus size={13} /> Log one</button>
+          </div>
+
+          {addingLog && (
+            <Card style={{ marginBottom: 14 }}>
+              <SectionTitle>Log a fundraiser</SectionTitle>
+              <div style={{ marginBottom: 10 }}>
+                <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Event name</div>
+                <input value={ln} onChange={e => setLn(e.target.value)} style={PS.input} placeholder="e.g. Annual Golf Scramble" />
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
+                <div>
+                  <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>When</div>
+                  <input value={ld} onChange={e => setLd(e.target.value)} style={PS.input} placeholder="e.g. June 2026" />
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Amount raised</div>
+                  <input value={la} onChange={e => setLa(e.target.value)} style={PS.input} placeholder="$12,500" />
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button style={PS.btnPrimary} disabled={!ln.trim()} onClick={doAddLog}>Save</button>
+                <button style={PS.btn} onClick={() => setAddingLog(false)}>Cancel</button>
+              </div>
+            </Card>
+          )}
+
+          {log.length > 0 && (
+            <Card style={{ marginBottom: 14 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                <div style={{ fontSize: 12, color: POA.textMuted }}>Total tracked</div>
+                <div style={{ fontWeight: 700, color: POA.green, fontSize: 15 }}>${totalRaised.toLocaleString()}</div>
+              </div>
+            </Card>
+          )}
+
+          {log.length === 0 && !addingLog && (
+            <Card><div style={{ color: POA.textMuted, fontSize: 13.5 }}>Nothing logged yet. Add a fundraiser to start tracking.</div></Card>
+          )}
+          {log.map(e => (
+            <Card key={e.id}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 700, fontSize: 14, color: POA.textPrimary }}>{e.name}</div>
+                  <div style={{ fontSize: 12, color: POA.textMuted, marginTop: 2 }}>
+                    {e.event_when || "Recent"}{e.amount > 0 ? ` · $${Number(e.amount).toLocaleString()} raised` : ""}
+                  </div>
+                </div>
+                <button style={{ ...PS.btn, color: POA.red, fontSize: 12 }} onClick={() => doRemoveLog(e.id)}>Remove</button>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* SAVED DRAFTS */}
+      {tab === "drafts" && (
+        <div>
+          {drafts.length === 0 && (
+            <Card><div style={{ color: POA.textMuted, fontSize: 13.5 }}>No saved drafts yet. Generate a plan and save it.</div></Card>
+          )}
+          {openDraft ? (
+            <div>
+              <button onClick={() => setOpenDraft(null)} style={{ ...PS.btn, marginBottom: 14 }}><ArrowLeft size={13} /> All drafts</button>
+              <Card>
+                <div style={{ fontWeight: 700, fontSize: 16, color: POA.textPrimary, marginBottom: 4 }}>{openDraft.title}</div>
+                <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 14 }}>{fmtDate(openDraft.created_at)}</div>
+                <div style={{ fontSize: 13.5, color: POA.textSecondary, lineHeight: 1.75, whiteSpace: "pre-wrap" }}>{openDraft.ai_text}</div>
+                <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+                  <button style={PS.btn} onClick={() => navigator.clipboard.writeText(openDraft.ai_text)}>Copy</button>
+                  <button style={{ ...PS.btn, color: POA.red }} onClick={() => { doDeleteDraft(openDraft.id); setOpenDraft(null); }}>Delete</button>
+                </div>
+              </Card>
+            </div>
+          ) : (
+            drafts.map(d => (
+              <Card key={d.id} style={{ cursor: "pointer" }} onClick={() => setOpenDraft(d)}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 700, fontSize: 14, color: POA.textPrimary }}>{d.title}</div>
+                    <div style={{ fontSize: 12, color: POA.textMuted, marginTop: 2 }}>
+                      {d.members?.full_name || "Board"} · {fmtDate(d.created_at)}
+                    </div>
+                  </div>
+                  <ChevronRight size={15} color={POA.textMuted} />
+                </div>
+              </Card>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ================================================================
    SCREEN ROUTER
    ================================================================ */
@@ -3024,7 +3336,7 @@ function renderScreen(view, { me, org, setView }) {
     case "b_members":       return <MembersBoard me={me} />;
     case "b_attendance":    return <MeetingAttendance me={me} />;
     case "b_stipend":       return <ComingSoon label="Stipend Log" />;
-    case "b_fundraising":   return <ComingSoon label="Fundraising" />;
+    case "b_fundraising":   return <Fundraising me={me} org={org} />;
     case "b_social":        return <SocialMedia me={me} org={org} />;
     case "b_building":      return <POABuilding me={me} />;
     case "b_continuity":    return <BoardContinuity me={me} />;
