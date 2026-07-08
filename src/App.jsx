@@ -2188,6 +2188,25 @@ async function removeFundraiserLog(id) {
   const { error } = await supabase.from("fundraiser_log").delete().eq("id", id);
   if (error) throw error;
 }
+async function listFundingEvents(year, month) {
+  const start = `${year}-${String(month + 1).padStart(2, "0")}-01`;
+  const end   = `${year}-${String(month + 1).padStart(2, "0")}-${new Date(year, month + 1, 0).getDate()}`;
+  const { data, error } = await supabase.from("funding_events")
+    .select("*").gte("date", start).lte("date", end)
+    .order("date", { ascending: true });
+  if (error) throw error;
+  return data || [];
+}
+async function addFundingEvent(row) {
+  const { data, error } = await supabase.from("funding_events")
+    .insert(row).select().single();
+  if (error) throw error;
+  return data;
+}
+async function removeFundingEvent(id) {
+  const { error } = await supabase.from("funding_events").delete().eq("id", id);
+  if (error) throw error;
+}
 async function listAIOutputs(feature) {
   const { data, error } = await supabase.from("ai_outputs")
     .select("*, members(full_name)").eq("feature", feature)
@@ -3912,280 +3931,596 @@ function SocialMedia({ me, org }) {
   );
 }
 
+const FUNDRAISER_COLORS = ["#F0B44A","#9B6BE6","#46C793","#57B6E0","#EF6A64","#B48AEF"];
+
+const POA_IDEA_BANK = [
+  { title: "Golf scramble",           pitch: "Strong sponsor tie-ins and bigger checks. Great annual event.",        key: "golf" },
+  { title: "Fundraising banquet",     pitch: "Ticket sales + sponsor tables. The signature annual event.",           key: "banquet" },
+  { title: "PAC fundraiser",          pitch: "Political action committee fundraising within state regulations.",      key: "pac" },
+  { title: "Memorial / honor event",  pitch: "5K, golf, or dinner honoring fallen or retired officers.",             key: "memorial" },
+  { title: "Community raffle",        pitch: "Check your state rules. Strong earner with low overhead.",             key: "raffle" },
+  { title: "Charity auction",         pitch: "Live or silent — experiences and donated items work well.",            key: "auction" },
+  { title: "Poker run",               pitch: "Member engagement + community visibility. Easy to sponsor.",           key: "poker" },
+  { title: "Sporting clays / shoot",  pitch: "Popular with first-responder community and sponsors.",                 key: "clays" },
+  { title: "Concert or comedy night", pitch: "Ticket sales + bar. Works well with a local venue partner.",          key: "concert" },
+  { title: "Fill-the-boot drive",     pitch: "Visible, low-cost, quick to organize. Great community touchpoint.",   key: "boot" },
+];
+
+const BRAINSTORM_SYS = `You help a police officers' association brainstorm fundraisers. Given their goal, effort level, and what they're raising for, propose EXACTLY 6 ideas spanning a range: ~2 proven/reliable, ~2 fresh, ~2 bold/creative. Return ONLY a valid JSON array of 6 objects: {"name": string, "pitch": "one punchy sentence"}. No text outside the JSON.`;
+
+const PLAN_SYS_POA = `You help a police officers' association plan a fundraiser. Given their event idea, return a practical plain-text plan the board can actually run: a one-line goal, a simple timeline/checklist, roles needed, promotion steps, and a realistic money target. Then the most important part — an in-depth Sponsorship Packages section: three or four headline tiers (Title/Presenting, Gold, Silver, Bronze) each with a suggested dollar amount and exactly what that sponsor gets. An a-la-carte list of individual items with suggested prices. One short ready-to-send outreach line for a local business. Keep amounts realistic. Use clear short headings and dash bullets. 450-650 words.`;
+
+const EXTRACT_SYS = `You convert a police officers' association fundraiser plan into trackable work. Respond with ONLY one valid JSON object, no markdown, no code fences. Schema: {"action_items":[{"task":string,"suggested_owner":string|null,"suggested_due_date":"YYYY-MM-DD"|null}],"calendar_events":[{"title":string,"date":"YYYY-MM-DD"}]}. DATES: resolve every relative timing into a real YYYY-MM-DD between today and the target date. calendar_events must be ONLY the 3-5 most important dates. NEVER invent an owner — leave null for a human to fill in. Return ONLY the JSON object.`;
+
 function Fundraising({ me, org }) {
-  const [tab, setTab]         = useState("planner");
-  const [log, setLog]         = useState([]);
-  const [drafts, setDrafts]   = useState([]);
-  const [openDraft, setOpenDraft] = useState(null);
-  const [addingLog, setAddingLog] = useState(false);
-  const [ln, setLn]           = useState("");
-  const [ld, setLd]           = useState("");
-  const [la, setLa]           = useState("");
-  const [detail, setDetail]   = useState("");
-  const [goalAmt, setGoalAmt] = useState("");
+  const today = new Date();
+
+  // planner state
+  const [phase, setPhase]           = useState("input");
+  const [detail, setDetail]         = useState("");
+  const [goalAmt, setGoalAmt]       = useState("");
+  const [effortLevel, setEffortLevel] = useState("Medium");
   const [targetDate, setTargetDate] = useState("");
-  const [out, setOut]         = useState("");
-  const [saveTitle, setSaveTitle] = useState("");
-  const [saving, setSaving]   = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [err, setErr]         = useState("");
+  const [ideas, setIdeas]           = useState([]);
+  const [chosenIdea, setChosenIdea] = useState(null);
+  const [out, setOut]               = useState("");
+  const [planReview, setPlanReview] = useState(null);
+  const [loading, setLoading]       = useState(false);
+  const [loadingLabel, setLoadingLabel] = useState("Working…");
+  const [operationalizing, setOperationalizing] = useState(false);
+  const [addingToApp, setAddingToApp] = useState(false);
+  const [saveTitle, setSaveTitle]   = useState("");
+  const [saving, setSaving]         = useState(false);
+  const [err, setErr]               = useState("");
+
+  // collapsible sections
+  const [ideasOpen, setIdeasOpen]   = useState(false);
+  const [calOpen, setCalOpen]       = useState(true);
+  const [logOpen, setLogOpen]       = useState(false);
+  const [draftsOpen, setDraftsOpen] = useState(false);
+
+  // calendar state
+  const [calCur, setCalCur]         = useState({ y: today.getFullYear(), m: today.getMonth() });
+  const [calEvents, setCalEvents]   = useState([]);
+  const [calReloadKey, setCalReloadKey] = useState(0);
+  const [showAddCal, setShowAddCal] = useState(false);
+  const [calTitle, setCalTitle]     = useState("");
+  const [calDay, setCalDay]         = useState(today.getDate());
+  const [calColor, setCalColor]     = useState(FUNDRAISER_COLORS[0]);
+
+  // log + drafts
+  const [log, setLog]               = useState([]);
+  const [drafts, setDrafts]         = useState([]);
+  const [openDraft, setOpenDraft]   = useState(null);
+  const [addingLog, setAddingLog]   = useState(false);
+  const [ln, setLn]                 = useState("");
+  const [ld, setLd]                 = useState("");
+  const [la, setLa]                 = useState("");
+
+  // members for owner matching
+  const [members, setMembers]       = useState([]);
 
   const totalRaised = log.reduce((s, e) => s + (Number(e.amount) || 0), 0);
 
-  const IDEA_BANK = [
-    { title: "Golf scramble", desc: "Strong sponsor tie-ins and bigger checks. Great for annual events." },
-    { title: "Fundraising dinner / banquet", desc: "Ticket sales + sponsor tables. The association's signature annual event." },
-    { title: "PAC fundraiser", desc: "Political action committee fundraising within state regulations." },
-    { title: "Memorial / honor event", desc: "5K, golf, or dinner honoring fallen or retired officers." },
-    { title: "Community raffle", desc: "Check your state's raffle rules. Strong earner with low overhead." },
-    { title: "Charity auction", desc: "Live or silent — experiences and donated items work well." },
-    { title: "Poker run / motorcycle event", desc: "Member engagement + community visibility." },
-    { title: "Sporting clays / shooting event", desc: "Popular with first-responder community and sponsors." },
-    { title: "Concert or comedy night", desc: "Ticket sales + bar — works well with a local venue partner." },
-    { title: "Fill-the-boot / roadside drive", desc: "Visible, low-cost, quick to organize." },
-  ];
-
   async function loadAll() {
-    const [l, d] = await Promise.all([
+    const [l, d, m, ev] = await Promise.all([
       listFundraiserLog(),
       listAIOutputs("fundraiser"),
+      listMembers(),
+      listFundingEvents(calCur.y, calCur.m),
     ]);
-    setLog(l); setDrafts(d);
+    setLog(l); setDrafts(d); setMembers(m); setCalEvents(ev);
   }
   useEffect(() => { loadAll(); }, []);
+  useEffect(() => {
+    listFundingEvents(calCur.y, calCur.m).then(setCalEvents).catch(() => null);
+  }, [calCur.y, calCur.m, calReloadKey]);
 
-  async function doGenerate() {
-    if (!detail.trim()) { setErr("Tell us about the fundraiser first."); return; }
-    setLoading(true); setErr(""); setOut("");
-    const sys = `You help a police officers' association plan a fundraiser. Given their event idea, return a practical plain-text plan the association board can actually run: a one-line goal, a simple timeline/checklist, the roles needed, a few promotion steps, and a realistic money target. Then the most important part — an in-depth Sponsorship Packages section tailored to THIS specific event: three or four headline tiers (Title/Presenting, Gold, Silver, Bronze) each with a suggested dollar amount and exactly what that sponsor gets. An a-la-carte list of individual sponsorship items with suggested prices. One short ready-to-send outreach line the association can text or email to a local business. Keep dollar amounts realistic. Use clear short headings and dash bullets. Aim for 450-650 words.`;
-    const user = `Association: ${org?.name || "Police Officers' Association"}\nEvent idea: ${detail}\nGoal amount: ${goalAmt || "not specified"}\nTarget date: ${targetDate || "flexible"}\nToday's date: ${new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}`;
+  // --- owner matching (same pattern as fire) ---
+  function matchOwnerId(name) {
+    const n = (name || "").trim().toLowerCase();
+    if (!n) return "";
+    const exact = members.filter(m => m.full_name?.toLowerCase() === n);
+    if (exact.length === 1) return exact[0].id;
+    const tok = members.filter(m => m.full_name?.toLowerCase().split(/\s+/).includes(n));
+    if (tok.length === 1) return tok[0].id;
+    return "";
+  }
+  const normalizeDate = s => (typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s.trim())) ? s.trim() : "";
+
+  // --- brainstorm → ideas ---
+  async function brainstorm() {
+    if (!detail.trim()) { setErr("Tell us what you're raising for first."); return; }
+    setLoading(true); setLoadingLabel("Brainstorming ideas…"); setErr(""); setIdeas([]); setOut("");
+    const recent = log.slice(0, 8).map(e => `${e.name}${e.event_when ? ` (${e.event_when})` : ""}`).join("; ") || "none yet";
+    const user = `Association: ${org?.name || "POA"}\nGoal: ${goalAmt || "not specified"}\nEffort level: ${effortLevel}\nTarget date: ${targetDate || "flexible"}\nWhat they're raising for: ${detail}\nRecently run (avoid repeating): ${recent}`;
     try {
-      const t = await callClaudeAI(sys, user);
-      setOut(t);
-      setSaveTitle(detail.trim().slice(0, 60));
-    } catch(e) { setErr("AI planning failed. Check ANTHROPIC_API_KEY in Vercel."); }
+      const raw = await callClaudeAI(BRAINSTORM_SYS, user);
+      const clean = raw.replace(/```json|```/g, "").trim();
+      const parsed = JSON.parse(clean);
+      if (!Array.isArray(parsed)) throw new Error("bad format");
+      setIdeas(parsed); setPhase("ideas");
+    } catch { setErr("Couldn't brainstorm ideas right now — check ANTHROPIC_API_KEY in Vercel."); }
     finally { setLoading(false); }
   }
 
+  // --- choose idea → build full plan ---
+  async function chooseIdea(idea) {
+    setChosenIdea(idea); setPhase("plan"); setOut(""); setErr("");
+    setLoading(true); setLoadingLabel("Building the plan…");
+    const user = `Association: ${org?.name || "POA"}\nChosen fundraiser: ${idea.name} — ${idea.pitch}\nGoal: ${goalAmt || "not specified"}\nEffort: ${effortLevel}\nToday: ${today.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}\nTarget date: ${targetDate || "flexible"}\nRaising for: ${detail}`;
+    try {
+      const t = await callClaudeAI(PLAN_SYS_POA, user);
+      setOut(t); setSaveTitle(idea.name.slice(0, 60));
+    } catch { setErr("Couldn't build the plan right now. Try again."); }
+    finally { setLoading(false); }
+  }
+
+  // --- operationalize: extract action items + calendar events ---
+  async function extractPlanWork() {
+    setOperationalizing(true); setErr("");
+    const user = `Today: ${today.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}. Target date: ${targetDate || "flexible"}.\n\nFundraiser plan:\n${out}`;
+    try {
+      const raw = await callClaudeAI(EXTRACT_SYS, user);
+      const clean = raw.replace(/```json|```/g, "").trim();
+      const parsed = JSON.parse(clean);
+      setPlanReview({
+        sourceLabel: `Fundraiser: ${chosenIdea?.name || "plan"}`,
+        actionItems: (parsed.action_items || []).map((it, i) => ({
+          id: Date.now() + i, task: it.task,
+          ownerId: matchOwnerId(it.suggested_owner),
+          due: normalizeDate(it.suggested_due_date), keep: true,
+        })),
+        calendarEvents: (parsed.calendar_events || []).map((ev, i) => ({
+          id: Date.now() + 5000 + i, title: ev.title,
+          date: normalizeDate(ev.date), keep: true,
+        })),
+      });
+      setPhase("operationalize");
+    } catch {
+      setPlanReview({ sourceLabel: `Fundraiser: ${chosenIdea?.name || "plan"}`, actionItems: [], calendarEvents: [] });
+      setErr("Auto-extraction didn't work — add tasks and events manually below.");
+      setPhase("operationalize");
+    } finally { setOperationalizing(false); }
+  }
+
+  // --- add to app: write action items + funding events ---
+  async function addToApp() {
+    if (!planReview) return;
+    const validDate = d => typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d);
+    const items  = planReview.actionItems.filter(r => r.keep && r.task.trim());
+    const events = planReview.calendarEvents.filter(r => r.keep && r.title.trim() && validDate(r.date));
+    if (!items.length && !events.length) { setErr("Keep at least one action item or calendar event."); return; }
+    setAddingToApp(true); setErr("");
+    try {
+      if (items.length) {
+        const { error } = await supabase.from("action_items").insert(
+          items.map(r => ({ department_id: me.department_id, title: r.task.trim(), owner_member_id: r.ownerId || null, due_date: r.due || null }))
+        );
+        if (error) throw error;
+      }
+      if (events.length) {
+        const { error } = await supabase.from("funding_events").insert(
+          events.map(r => ({ department_id: me.department_id, title: r.title.trim(), date: r.date, color: FUNDRAISER_COLORS[0], source_label: planReview.sourceLabel }))
+        );
+        if (error) throw error;
+        setCalReloadKey(k => k + 1);
+      }
+      setPlanReview(null); setPhase("plan"); setErr("");
+    } catch(e) { setErr(e.message); }
+    finally { setAddingToApp(false); }
+  }
+
+  // --- save draft ---
   async function doSaveDraft() {
     if (!out || !saveTitle.trim()) return;
     setSaving(true);
     try {
-      await saveAIDraft({
-        department_id: me.department_id,
-        feature: "fundraiser",
-        title: saveTitle.trim(),
-        ai_text: out,
-        created_by: me.id,
-      });
-      await loadAll();
-      setOut(""); setDetail(""); setGoalAmt(""); setTargetDate(""); setSaveTitle("");
+      await saveAIDraft({ department_id: me.department_id, feature: "fundraiser", title: saveTitle.trim(), ai_text: out, created_by: me.id });
+      const d = await listAIOutputs("fundraiser"); setDrafts(d);
     } catch(e) { setErr(e.message); }
     finally { setSaving(false); }
   }
 
+  // --- fundraiser log ---
   async function doAddLog() {
     if (!ln.trim()) return;
     try {
-      await addFundraiserLog({
-        department_id: me.department_id,
-        name: ln.trim(),
-        event_when: ld.trim() || null,
-        amount: Number(String(la).replace(/[^0-9.]/g, "")) || 0,
-        created_by: me.id,
-      });
+      await addFundraiserLog({ department_id: me.department_id, name: ln.trim(), event_when: ld.trim() || null, amount: Number(String(la).replace(/[^0-9.]/g, "")) || 0, created_by: me.id });
       setLn(""); setLd(""); setLa(""); setAddingLog(false);
-      await loadAll();
+      const l = await listFundraiserLog(); setLog(l);
     } catch(e) { setErr(e.message); }
   }
-
   async function doRemoveLog(id) {
     if (!confirm("Remove this entry?")) return;
-    try { await removeFundraiserLog(id); await loadAll(); }
+    try { await removeFundraiserLog(id); const l = await listFundraiserLog(); setLog(l); }
     catch(e) { setErr(e.message); }
   }
 
-  async function doDeleteDraft(id) {
-    if (!confirm("Delete this draft?")) return;
-    try { await deleteAIDraft(id); await loadAll(); }
+  // --- funding calendar ---
+  const calDim = new Date(calCur.y, calCur.m + 1, 0).getDate();
+  const calByDay = {};
+  calEvents.forEach(e => { const d = new Date(e.date + "T12:00:00").getDate(); (calByDay[d] = calByDay[d] || []).push(e); });
+  const isTodayCal = d => d && calCur.y === today.getFullYear() && calCur.m === today.getMonth() && d === today.getDate();
+  const calCells = [];
+  for (let i = 0; i < new Date(calCur.y, calCur.m, 1).getDay(); i++) calCells.push(null);
+  for (let d = 1; d <= calDim; d++) calCells.push(d);
+  while (calCells.length % 7) calCells.push(null);
+
+  async function doAddCalEvent() {
+    if (!calTitle.trim()) return;
+    try {
+      await addFundingEvent({ department_id: me.department_id, title: calTitle.trim(), date: `${calCur.y}-${String(calCur.m + 1).padStart(2,"0")}-${String(calDay).padStart(2,"0")}`, color: calColor });
+      setCalTitle(""); setShowAddCal(false); setCalReloadKey(k => k + 1);
+    } catch(e) { setErr(e.message); }
+  }
+  async function doRemoveCalEvent(id, title) {
+    if (!confirm(`Remove "${title}" from the calendar?`)) return;
+    try { await removeFundingEvent(id); setCalReloadKey(k => k + 1); }
     catch(e) { setErr(e.message); }
   }
 
-  const TABS = [
-    { id: "planner", label: "Fundraiser Planner" },
-    { id: "log", label: "Fundraiser Log" },
-    { id: "drafts", label: `Saved Drafts${drafts.length ? ` (${drafts.length})` : ""}` },
-  ];
+  function startOver() { setPhase("input"); setIdeas([]); setChosenIdea(null); setOut(""); setErr(""); setPlanReview(null); }
 
   return (
     <div>
       <PageTitle sub="Plan fundraisers, write the appeals, line up sponsors">Fundraising</PageTitle>
-      <div style={{ display: "flex", gap: 6, marginBottom: 20, flexWrap: "wrap" }}>
-        {TABS.map(t => (
-          <button key={t.id} onClick={() => { setTab(t.id); setOpenDraft(null); }}
-            style={{ ...PS.btn, background: tab === t.id ? POA.accent : POA.btnBg, color: tab === t.id ? "#fff" : POA.btnText, border: tab === t.id ? "none" : `0.5px solid ${POA.btnBorder}` }}>
-            {t.label}
-          </button>
-        ))}
-      </div>
       <ErrBox msg={err} />
 
-      {/* PLANNER */}
-      {tab === "planner" && (
-        <div>
-          <Card style={{ borderLeft: `3px solid ${POA.accent}`, borderRadius: "0 14px 14px 0", marginBottom: 16 }}>
-            <SectionTitle>Fundraiser Planner</SectionTitle>
+      {/* ── PLANNER ── */}
+      <Card style={{ borderLeft: `3px solid ${POA.accent}`, borderRadius: "0 14px 14px 0", marginBottom: 18 }}>
+        <SectionTitle>Fundraiser Planner</SectionTitle>
+
+        {/* INPUT phase */}
+        {phase === "input" && (
+          <>
             <div style={{ marginBottom: 10 }}>
-              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Tell us about it</div>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>What are you trying to do?</div>
               <textarea value={detail} onChange={e => setDetail(e.target.value)}
-                placeholder="e.g. A golf scramble to raise money for the legal defense fund and officer scholarships."
-                style={{ ...PS.textarea, minHeight: 80 }} />
+                style={{ ...PS.textarea, minHeight: 70 }} placeholder="e.g. Raise money for the legal defense fund and officer scholarships." />
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 14 }}>
               <div>
                 <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Goal amount</div>
                 <input value={goalAmt} onChange={e => setGoalAmt(e.target.value)} style={PS.input} placeholder="$10,000" />
+              </div>
+              <div>
+                <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Effort level</div>
+                <select value={effortLevel} onChange={e => setEffortLevel(e.target.value)} style={PS.input}>
+                  <option>Quick & easy</option>
+                  <option>Medium</option>
+                  <option>Big event</option>
+                </select>
               </div>
               <div>
                 <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Target date</div>
                 <input type="date" value={targetDate} onChange={e => setTargetDate(e.target.value)} style={PS.input} />
               </div>
             </div>
-            <button style={PS.btnPrimary} disabled={loading || !detail.trim()} onClick={doGenerate}>
-              <Sparkles size={14} /> {loading ? "Building the plan…" : "Get a plan + sponsorship packages"}
+            <button style={PS.btnPrimary} disabled={loading || !detail.trim()} onClick={brainstorm}>
+              <Sparkles size={14} /> {loading ? loadingLabel : "Get ideas"}
             </button>
-          </Card>
+          </>
+        )}
 
-          {out && (
-            <Card>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-                <SectionTitle>Your fundraiser plan</SectionTitle>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button style={PS.btn} onClick={() => navigator.clipboard.writeText(out)}>Copy</button>
-                  <button style={{ ...PS.btnPrimary }} disabled={saving} onClick={doSaveDraft}>
-                    {saving ? "Saving…" : "Save draft"}
+        {/* IDEAS phase */}
+        {phase === "ideas" && (
+          <>
+            <div style={{ fontSize: 13, color: POA.textMuted, marginBottom: 12, lineHeight: 1.55 }}>
+              Six ideas across proven, fresh, and bold. Pick one to build a full plan.
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px,1fr))", gap: 8, marginBottom: 14 }}>
+              {ideas.map((idea, i) => (
+                <div key={i} style={{ ...PS.card, padding: "12px 13px", display: "flex", flexDirection: "column" }}>
+                  <div style={{ fontWeight: 700, fontSize: 13.5, color: POA.textPrimary, marginBottom: 4 }}>{idea.name}</div>
+                  <div style={{ fontSize: 12, color: POA.textMuted, lineHeight: 1.4, flex: 1, marginBottom: 10 }}>{idea.pitch}</div>
+                  <button style={{ ...PS.btnPrimary, fontSize: 12, padding: "8px 10px", width: "100%", justifyContent: "center" }}
+                    onClick={() => chooseIdea(idea)}>
+                    <Sparkles size={12} /> Build the plan
                   </button>
                 </div>
-              </div>
-              <div style={{ fontSize: 13.5, color: POA.textSecondary, lineHeight: 1.75, whiteSpace: "pre-wrap" }}>{out}</div>
-              <div style={{ fontSize: 11.5, color: POA.textMuted, marginTop: 12, fontStyle: "italic" }}>AI drafts the plan — your board runs it. Review before sharing.</div>
-            </Card>
-          )}
+              ))}
+            </div>
+            <button style={PS.btn} onClick={startOver}><ArrowLeft size={13} /> Start over</button>
+          </>
+        )}
 
-          <SectionTitle>Event ideas</SectionTitle>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            {IDEA_BANK.map(idea => (
-              <div key={idea.title} style={{ ...PS.card, padding: "13px 14px" }}>
+        {/* PLAN phase */}
+        {phase === "plan" && (
+          <>
+            <div style={{ fontSize: 13, color: POA.textMuted, marginBottom: 10 }}>
+              Plan: <b style={{ color: POA.textPrimary }}>{chosenIdea?.name}</b>
+              {loading && <span style={{ display: "inline-flex", alignItems: "center", gap: 6, marginLeft: 10, color: POA.textMuted }}>
+                <Loader2 size={13} style={{ animation: "spin 1s linear infinite" }} /> {loadingLabel}
+              </span>}
+            </div>
+            {out && (
+              <>
+                <div style={{ background: POA.sidebar, border: `0.5px solid ${POA.hairline}`, borderRadius: 10, padding: "14px 16px", fontSize: 13.5, color: POA.textSecondary, lineHeight: 1.75, whiteSpace: "pre-wrap", maxHeight: 420, overflowY: "auto", marginBottom: 14 }}>
+                  {out}
+                </div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+                  <div style={{ flex: 1, minWidth: 180 }}>
+                    <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Save as</div>
+                    <input value={saveTitle} onChange={e => setSaveTitle(e.target.value)} style={PS.input} placeholder="Draft title" />
+                  </div>
+                  <button style={{ ...PS.btn, alignSelf: "flex-end" }} disabled={saving || !saveTitle.trim()} onClick={doSaveDraft}>
+                    <FileText size={13} /> {saving ? "Saving…" : "Save draft"}
+                  </button>
+                </div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button style={{ ...PS.btnPrimary, opacity: operationalizing ? 0.7 : 1 }}
+                    disabled={operationalizing} onClick={extractPlanWork}>
+                    {operationalizing
+                      ? <><Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> Turning plan into tasks…</>
+                      : <><ClipboardList size={14} /> Create action items + calendar</>}
+                  </button>
+                  <button style={PS.btn} onClick={() => setPhase("ideas")}><ArrowLeft size={13} /> Back to ideas</button>
+                  <button style={PS.btn} onClick={startOver}>Start over</button>
+                </div>
+              </>
+            )}
+          </>
+        )}
+
+        {/* OPERATIONALIZE phase */}
+        {phase === "operationalize" && planReview && (
+          <div style={{ borderLeft: `3px solid ${POA.amber}`, paddingLeft: 14, marginTop: 8 }}>
+            <div style={{ ...PS.kicker, marginBottom: 4 }}>Review & confirm — turn the plan into tracked work</div>
+            <div style={{ fontSize: 12.5, color: POA.textMuted, marginBottom: 14 }}>
+              From: <b style={{ color: POA.textPrimary }}>{planReview.sourceLabel}</b>
+            </div>
+
+            <div style={{ ...PS.kicker, fontSize: 11, marginBottom: 6 }}>Action items</div>
+            {planReview.actionItems.map((r, i) => (
+              <div key={r.id} style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap", padding: "8px 0", borderBottom: `0.5px solid ${POA.hairline}` }}>
+                <input type="checkbox" checked={r.keep} style={{ marginBottom: 10 }}
+                  onChange={e => setPlanReview(p => ({ ...p, actionItems: p.actionItems.map((x,j) => j===i ? { ...x, keep: e.target.checked } : x) }))} />
+                <div style={{ flex: 1, minWidth: 180 }}>
+                  <div style={{ fontSize: 11, color: POA.textMuted, marginBottom: 3 }}>Task</div>
+                  <input value={r.task} style={PS.input}
+                    onChange={e => setPlanReview(p => ({ ...p, actionItems: p.actionItems.map((x,j) => j===i ? { ...x, task: e.target.value } : x) }))} />
+                </div>
+                <div style={{ minWidth: 150 }}>
+                  <div style={{ fontSize: 11, color: POA.textMuted, marginBottom: 3 }}>Owner</div>
+                  <select value={r.ownerId} style={PS.input}
+                    onChange={e => setPlanReview(p => ({ ...p, actionItems: p.actionItems.map((x,j) => j===i ? { ...x, ownerId: e.target.value } : x) }))}>
+                    <option value="">Unassigned</option>
+                    {members.map(m => <option key={m.id} value={m.id}>{m.full_name}</option>)}
+                  </select>
+                </div>
+                <div style={{ minWidth: 140 }}>
+                  <div style={{ fontSize: 11, color: POA.textMuted, marginBottom: 3 }}>Due</div>
+                  <input type="date" value={r.due} style={PS.input}
+                    onChange={e => setPlanReview(p => ({ ...p, actionItems: p.actionItems.map((x,j) => j===i ? { ...x, due: e.target.value } : x) }))} />
+                </div>
+              </div>
+            ))}
+            <button style={{ ...PS.btn, marginTop: 8 }}
+              onClick={() => setPlanReview(p => ({ ...p, actionItems: [...p.actionItems, { id: Date.now(), task: "", ownerId: "", due: "", keep: true }] }))}>
+              <Plus size={13} /> Add action item
+            </button>
+
+            <div style={{ ...PS.kicker, fontSize: 11, margin: "16px 0 6px" }}>Calendar events</div>
+            {planReview.calendarEvents.map((r, i) => (
+              <div key={r.id} style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap", padding: "8px 0", borderBottom: `0.5px solid ${POA.hairline}` }}>
+                <input type="checkbox" checked={r.keep} style={{ marginBottom: 10 }}
+                  onChange={e => setPlanReview(p => ({ ...p, calendarEvents: p.calendarEvents.map((x,j) => j===i ? { ...x, keep: e.target.checked } : x) }))} />
+                <div style={{ flex: 1, minWidth: 180 }}>
+                  <div style={{ fontSize: 11, color: POA.textMuted, marginBottom: 3 }}>Event</div>
+                  <input value={r.title} style={PS.input}
+                    onChange={e => setPlanReview(p => ({ ...p, calendarEvents: p.calendarEvents.map((x,j) => j===i ? { ...x, title: e.target.value } : x) }))} />
+                </div>
+                <div style={{ minWidth: 150 }}>
+                  <div style={{ fontSize: 11, color: POA.textMuted, marginBottom: 3 }}>Date</div>
+                  <input type="date" value={r.date} style={PS.input}
+                    onChange={e => setPlanReview(p => ({ ...p, calendarEvents: p.calendarEvents.map((x,j) => j===i ? { ...x, date: e.target.value } : x) }))} />
+                </div>
+              </div>
+            ))}
+            <button style={{ ...PS.btn, marginTop: 8 }}
+              onClick={() => setPlanReview(p => ({ ...p, calendarEvents: [...p.calendarEvents, { id: Date.now(), title: "", date: "", keep: true }] }))}>
+              <Plus size={13} /> Add event
+            </button>
+
+            <div style={{ display: "flex", gap: 8, marginTop: 16, flexWrap: "wrap" }}>
+              <button style={{ ...PS.btnPrimary, opacity: addingToApp ? 0.7 : 1 }} disabled={addingToApp} onClick={addToApp}>
+                {addingToApp ? <><Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> Adding…</> : <><ClipboardList size={14} /> Add to the app</>}
+              </button>
+              <button style={PS.btn} onClick={() => setPhase("plan")}><ArrowLeft size={13} /> Back to plan</button>
+              <button style={PS.btn} onClick={() => { setPlanReview(null); setPhase("plan"); }}>Discard</button>
+            </div>
+          </div>
+        )}
+      </Card>
+
+      {/* ── EVENT IDEAS (collapsible) ── */}
+      <div onClick={() => setIdeasOpen(v => !v)}
+        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", marginBottom: ideasOpen ? 10 : 16 }}>
+        <p style={{ ...PS.kicker, margin: 0 }}>Event ideas ({POA_IDEA_BANK.length})</p>
+        {ideasOpen ? <ChevronUp size={15} color={POA.textMuted} /> : <ChevronDown size={15} color={POA.textMuted} />}
+      </div>
+      {ideasOpen && (
+        <>
+          <div style={{ fontSize: 13, color: POA.textMuted, marginBottom: 12 }}>
+            Tap "Plan this" to load an idea into the planner above.
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(190px,1fr))", gap: 8, marginBottom: 18 }}>
+            {POA_IDEA_BANK.map(idea => (
+              <div key={idea.key} style={{ ...PS.card, padding: "12px 13px" }}>
                 <div style={{ fontWeight: 700, fontSize: 13.5, color: POA.textPrimary, marginBottom: 4 }}>{idea.title}</div>
-                <div style={{ fontSize: 12, color: POA.textMuted, lineHeight: 1.45, marginBottom: 10 }}>{idea.desc}</div>
-                <button style={{ ...PS.btn, width: "100%", justifyContent: "center" }}
-                  onClick={() => { setDetail(`A ${idea.title.toLowerCase()} to raise money for the association.`); setTab("planner"); window.scrollTo({ top: 0, behavior: "smooth" }); }}>
+                <div style={{ fontSize: 12, color: POA.textMuted, lineHeight: 1.4, marginBottom: 10 }}>{idea.pitch}</div>
+                <button style={{ ...PS.btn, width: "100%", justifyContent: "center", fontSize: 12 }}
+                  onClick={() => { setDetail(`A ${idea.title.toLowerCase()} to raise money for the association.`); setPhase("input"); window.scrollTo({ top: 0, behavior: "smooth" }); }}>
                   <Sparkles size={12} /> Plan this
                 </button>
               </div>
             ))}
           </div>
-        </div>
+        </>
       )}
 
-      {/* FUNDRAISER LOG */}
-      {tab === "log" && (
-        <div>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-            <div>
-              <div style={{ fontWeight: 700, fontSize: 15, color: POA.textPrimary }}>Recent fundraisers</div>
-              <div style={{ fontSize: 13, color: POA.textMuted, marginTop: 2 }}>What you've run and what it brought in.</div>
+      {/* ── FUNDRAISING CALENDAR (collapsible) ── */}
+      <div onClick={() => setCalOpen(v => !v)}
+        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", marginBottom: calOpen ? 10 : 16 }}>
+        <p style={{ ...PS.kicker, margin: 0 }}>Fundraising calendar</p>
+        {calOpen ? <ChevronUp size={15} color={POA.textMuted} /> : <ChevronDown size={15} color={POA.textMuted} />}
+      </div>
+      {calOpen && (
+        <Card style={{ marginBottom: 18 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+            <div style={{ fontWeight: 700, fontSize: 16, color: POA.textPrimary }}>{MONTHS[calCur.m]} {calCur.y}</div>
+            <div style={{ display: "flex", gap: 6 }}>
+              <button style={PS.btn} onClick={() => setCalCur(c => c.m === 0 ? { y: c.y-1, m: 11 } : { ...c, m: c.m-1 })}>‹</button>
+              <button style={PS.btn} onClick={() => setCalCur({ y: today.getFullYear(), m: today.getMonth() })}>Today</button>
+              <button style={PS.btn} onClick={() => setCalCur(c => c.m === 11 ? { y: c.y+1, m: 0 } : { ...c, m: c.m+1 })}>›</button>
+              <button style={PS.btn} onClick={() => setShowAddCal(v => !v)}><Plus size={13} /> Add</button>
             </div>
-            <button style={PS.btn} onClick={() => setAddingLog(!addingLog)}><Plus size={13} /> Log one</button>
           </div>
+          {showAddCal && (
+            <div style={{ background: POA.sidebar, borderRadius: 10, padding: "12px 14px", marginBottom: 12, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
+              <div style={{ flex: 1, minWidth: 180 }}>
+                <div style={{ fontSize: 11, color: POA.textMuted, marginBottom: 4 }}>Title</div>
+                <input value={calTitle} onChange={e => setCalTitle(e.target.value)} style={PS.input} placeholder="e.g. Golf scramble setup day" />
+              </div>
+              <div style={{ minWidth: 80 }}>
+                <div style={{ fontSize: 11, color: POA.textMuted, marginBottom: 4 }}>Day</div>
+                <select value={calDay} onChange={e => setCalDay(e.target.value)} style={PS.input}>
+                  {Array.from({ length: calDim }, (_, i) => i+1).map(d => <option key={d}>{d}</option>)}
+                </select>
+              </div>
+              <div>
+                <div style={{ fontSize: 11, color: POA.textMuted, marginBottom: 4 }}>Color</div>
+                <div style={{ display: "flex", gap: 5 }}>
+                  {FUNDRAISER_COLORS.map(c => (
+                    <button key={c} onClick={() => setCalColor(c)}
+                      style={{ width: 22, height: 22, borderRadius: "50%", background: c, border: calColor === c ? "2px solid #fff" : "none", cursor: "pointer" }} />
+                  ))}
+                </div>
+              </div>
+              <button style={PS.btnPrimary} onClick={doAddCalEvent}><Plus size={13} /> Add</button>
+              <button style={PS.btn} onClick={() => setShowAddCal(false)}>Cancel</button>
+            </div>
+          )}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 2, marginBottom: 8 }}>
+            {DOW.map(d => <div key={d} style={{ fontSize: 10, fontWeight: 700, textAlign: "center", color: POA.textMuted, textTransform: "uppercase", letterSpacing: ".06em", padding: "4px 0" }}>{d}</div>)}
+          </div>
+          {Array.from({ length: calCells.length / 7 }, (_, w) => (
+            <div key={w} style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 2, marginBottom: 2 }}>
+              {calCells.slice(w*7, w*7+7).map((d, i) => (
+                <div key={i} style={{ minHeight: 64, background: isTodayCal(d) ? "rgba(155,107,230,.12)" : "transparent", border: `0.5px solid ${isTodayCal(d) ? POA.accent : POA.hairline}`, borderRadius: 7, padding: "4px 5px" }}>
+                  {d && (
+                    <>
+                      <div style={{ fontSize: 11, fontWeight: isTodayCal(d) ? 700 : 400, color: isTodayCal(d) ? POA.accent : POA.textMuted, marginBottom: 3 }}>{d}</div>
+                      {(calByDay[d] || []).map(e => (
+                        <button key={e.id} onClick={() => doRemoveCalEvent(e.id, e.title)}
+                          title={`${e.title} (tap to remove)`}
+                          style={{ display: "block", width: "100%", textAlign: "left", background: e.color || FUNDRAISER_COLORS[0], border: "none", borderRadius: 4, padding: "2px 5px", fontSize: 10, fontWeight: 600, color: "#fff", marginBottom: 2, cursor: "pointer", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {e.title}
+                        </button>
+                      ))}
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+          ))}
+          <div style={{ fontSize: 12, color: POA.textMuted, marginTop: 8 }}>
+            {calEvents.length} event{calEvents.length !== 1 ? "s" : ""} in {MONTHS[calCur.m]} · tap an event to remove it
+          </div>
+        </Card>
+      )}
 
+      {/* ── RECENT FUNDRAISERS LOG (collapsible) ── */}
+      <div onClick={() => setLogOpen(v => !v)}
+        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", marginBottom: logOpen ? 10 : 16 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <p style={{ ...PS.kicker, margin: 0 }}>Recent fundraisers</p>
+          {totalRaised > 0 && <span style={{ fontWeight: 700, color: POA.greenText, fontSize: 12 }}>${totalRaised.toLocaleString()} raised</span>}
+        </div>
+        {logOpen ? <ChevronUp size={15} color={POA.textMuted} /> : <ChevronDown size={15} color={POA.textMuted} />}
+      </div>
+      {logOpen && (
+        <>
+          <div style={{ fontSize: 13, color: POA.textMuted, marginBottom: 10 }}>
+            What you've run and what it brought in. Logged events inform the brainstormer so it avoids repeats.
+          </div>
           {addingLog && (
-            <Card style={{ marginBottom: 14 }}>
-              <SectionTitle>Log a fundraiser</SectionTitle>
-              <div style={{ marginBottom: 10 }}>
-                <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Event name</div>
-                <input value={ln} onChange={e => setLn(e.target.value)} style={PS.input} placeholder="e.g. Annual Golf Scramble" />
+            <Card style={{ marginBottom: 12, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
+              <div style={{ flex: 1, minWidth: 160 }}>
+                <div style={{ fontSize: 11, color: POA.textMuted, marginBottom: 4 }}>Event</div>
+                <input value={ln} onChange={e => setLn(e.target.value)} style={PS.input} placeholder="e.g. Golf Scramble" />
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
-                <div>
-                  <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>When</div>
-                  <input value={ld} onChange={e => setLd(e.target.value)} style={PS.input} placeholder="e.g. June 2026" />
-                </div>
-                <div>
-                  <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Amount raised</div>
-                  <input value={la} onChange={e => setLa(e.target.value)} style={PS.input} placeholder="$12,500" />
-                </div>
+              <div style={{ minWidth: 120 }}>
+                <div style={{ fontSize: 11, color: POA.textMuted, marginBottom: 4 }}>When</div>
+                <input value={ld} onChange={e => setLd(e.target.value)} style={PS.input} placeholder="e.g. June 2026" />
               </div>
-              <div style={{ display: "flex", gap: 8 }}>
-                <button style={PS.btnPrimary} disabled={!ln.trim()} onClick={doAddLog}>Save</button>
-                <button style={PS.btn} onClick={() => setAddingLog(false)}>Cancel</button>
+              <div style={{ minWidth: 120 }}>
+                <div style={{ fontSize: 11, color: POA.textMuted, marginBottom: 4 }}>Raised ($)</div>
+                <input value={la} onChange={e => setLa(e.target.value)} style={PS.input} placeholder="12500" />
               </div>
+              <button style={PS.btnPrimary} onClick={doAddLog}><Plus size={13} /> Log it</button>
+              <button style={PS.btn} onClick={() => setAddingLog(false)}>Cancel</button>
             </Card>
           )}
-
-          {log.length > 0 && (
-            <Card style={{ marginBottom: 14 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                <div style={{ fontSize: 12, color: POA.textMuted }}>Total tracked</div>
-                <div style={{ fontWeight: 700, color: POA.green, fontSize: 15 }}>${totalRaised.toLocaleString()}</div>
-              </div>
-            </Card>
-          )}
-
-          {log.length === 0 && !addingLog && (
-            <Card><div style={{ color: POA.textMuted, fontSize: 13.5 }}>Nothing logged yet. Add a fundraiser to start tracking.</div></Card>
-          )}
+          <button style={{ ...PS.btn, marginBottom: 10 }} onClick={() => setAddingLog(v => !v)}>
+            <Plus size={13} /> Log a fundraiser
+          </button>
+          {log.length === 0 && <Card><div style={{ color: POA.textMuted, fontSize: 13.5 }}>Nothing logged yet.</div></Card>}
           {log.map(e => (
             <Card key={e.id}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 700, fontSize: 14, color: POA.textPrimary }}>{e.name}</div>
                   <div style={{ fontSize: 12, color: POA.textMuted, marginTop: 2 }}>
-                    {e.event_when || "Recent"}{e.amount > 0 ? ` · $${Number(e.amount).toLocaleString()} raised` : ""}
+                    {e.event_when || "Recent"}{Number(e.amount) > 0 ? ` · $${Number(e.amount).toLocaleString()} raised` : ""}
                   </div>
                 </div>
                 <button style={{ ...PS.btn, color: POA.red, fontSize: 12 }} onClick={() => doRemoveLog(e.id)}>Remove</button>
               </div>
             </Card>
           ))}
-        </div>
+        </>
       )}
 
-      {/* SAVED DRAFTS */}
-      {tab === "drafts" && (
-        <div>
-          {drafts.length === 0 && (
-            <Card><div style={{ color: POA.textMuted, fontSize: 13.5 }}>No saved drafts yet. Generate a plan and save it.</div></Card>
-          )}
+      {/* ── SAVED DRAFTS (collapsible) ── */}
+      <div onClick={() => setDraftsOpen(v => !v)}
+        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", marginBottom: draftsOpen ? 10 : 0 }}>
+        <p style={{ ...PS.kicker, margin: 0 }}>Saved drafts{drafts.length ? ` (${drafts.length})` : ""}</p>
+        {draftsOpen ? <ChevronUp size={15} color={POA.textMuted} /> : <ChevronDown size={15} color={POA.textMuted} />}
+      </div>
+      {draftsOpen && (
+        <>
           {openDraft ? (
-            <div>
-              <button onClick={() => setOpenDraft(null)} style={{ ...PS.btn, marginBottom: 14 }}><ArrowLeft size={13} /> All drafts</button>
+            <>
+              <button onClick={() => setOpenDraft(null)} style={{ ...PS.btn, margin: "10px 0" }}><ArrowLeft size={13} /> All drafts</button>
               <Card>
-                <div style={{ fontWeight: 700, fontSize: 16, color: POA.textPrimary, marginBottom: 4 }}>{openDraft.title}</div>
-                <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 14 }}>{fmtDate(openDraft.created_at)}</div>
+                <div style={{ fontWeight: 700, fontSize: 15, color: POA.textPrimary, marginBottom: 4 }}>{openDraft.title}</div>
+                <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 12 }}>{fmtDate(openDraft.created_at)}</div>
                 <div style={{ fontSize: 13.5, color: POA.textSecondary, lineHeight: 1.75, whiteSpace: "pre-wrap" }}>{openDraft.ai_text}</div>
                 <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
                   <button style={PS.btn} onClick={() => navigator.clipboard.writeText(openDraft.ai_text)}>Copy</button>
-                  <button style={{ ...PS.btn, color: POA.red }} onClick={() => { doDeleteDraft(openDraft.id); setOpenDraft(null); }}>Delete</button>
+                  <button style={{ ...PS.btn, color: POA.red }} onClick={async () => { await deleteAIDraft(openDraft.id); setOpenDraft(null); const d = await listAIOutputs("fundraiser"); setDrafts(d); }}>Delete</button>
                 </div>
               </Card>
-            </div>
+            </>
           ) : (
-            drafts.map(d => (
-              <Card key={d.id} style={{ cursor: "pointer" }} onClick={() => setOpenDraft(d)}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 700, fontSize: 14, color: POA.textPrimary }}>{d.title}</div>
-                    <div style={{ fontSize: 12, color: POA.textMuted, marginTop: 2 }}>
-                      {d.members?.full_name || "Board"} · {fmtDate(d.created_at)}
+            <>
+              {drafts.length === 0 && <Card style={{ marginTop: 10 }}><div style={{ color: POA.textMuted, fontSize: 13.5 }}>No saved drafts yet.</div></Card>}
+              {drafts.map(d => (
+                <Card key={d.id} style={{ cursor: "pointer", marginTop: 8 }} onClick={() => setOpenDraft(d)}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 700, fontSize: 14, color: POA.textPrimary }}>{d.title}</div>
+                      <div style={{ fontSize: 12, color: POA.textMuted, marginTop: 2 }}>{fmtDate(d.created_at)}</div>
                     </div>
+                    <ChevronRight size={15} color={POA.textMuted} />
                   </div>
-                  <ChevronRight size={15} color={POA.textMuted} />
-                </div>
-              </Card>
-            ))
+                </Card>
+              ))}
+            </>
           )}
-        </div>
+        </>
       )}
     </div>
   );
