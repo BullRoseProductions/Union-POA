@@ -1963,9 +1963,9 @@ async function uploadStoreImage(file, itemName) {
   const ext = file.name.split(".").pop();
   const path = `${Date.now()}-${itemName.replace(/\s+/g, "-").toLowerCase()}.${ext}`;
   const { data, error } = await supabase.storage
-    .from("store-images").upload(path, file, { upsert: true });
+    .from("store-items").upload(path, file, { upsert: true });
   if (error) throw error;
-  const { data: pub } = supabase.storage.from("store-images").getPublicUrl(path);
+  const { data: pub } = supabase.storage.from("store-items").getPublicUrl(path);
   return pub.publicUrl;
 }
 
