@@ -1812,6 +1812,87 @@ async function getValueLedger(start, end) {
   if (error) throw error;
   return data;
 }
+async function listContentCalendar(year, month) {
+  const start = `${year}-${String(month + 1).padStart(2, "0")}-01`;
+  const end = `${year}-${String(month + 1).padStart(2, "0")}-${new Date(year, month + 1, 0).getDate()}`;
+  const { data, error } = await supabase.from("content_calendar")
+    .select("*").gte("date", start).lte("date", end)
+    .order("date", { ascending: true });
+  if (error) throw error;
+  return data || [];
+}
+async function listPostCategories() {
+  const { data, error } = await supabase.from("post_categories")
+    .select("*").order("sort_order", { ascending: true });
+  if (error) throw error;
+  return data || [];
+}
+async function addContentPost(row) {
+  const { data, error } = await supabase.from("content_calendar").insert(row).select().single();
+  if (error) throw error;
+  return data;
+}
+async function removeContentPost(id) {
+  const { error } = await supabase.from("content_calendar").delete().eq("id", id);
+  if (error) throw error;
+}
+async function addPostCategory(row) {
+  const { data, error } = await supabase.from("post_categories").insert(row).select().single();
+  if (error) throw error;
+  return data;
+}
+async function deletePostCategory(id) {
+  const { error } = await supabase.from("post_categories").delete().eq("id", id);
+  if (error) throw error;
+}
+async function listFundraiserLog() {
+  const { data, error } = await supabase.from("fundraiser_log")
+    .select("*, members(full_name)").order("created_at", { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+async function addFundraiserLog(row) {
+  const { data, error } = await supabase.from("fundraiser_log").insert(row).select().single();
+  if (error) throw error;
+  return data;
+}
+async function removeFundraiserLog(id) {
+  const { error } = await supabase.from("fundraiser_log").delete().eq("id", id);
+  if (error) throw error;
+}
+async function listAIOutputs(feature) {
+  const { data, error } = await supabase.from("ai_outputs")
+    .select("*, members(full_name)").eq("feature", feature)
+    .is("deleted_at", null).order("created_at", { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+async function saveAIDraft(row) {
+  const { data, error } = await supabase.from("ai_outputs").insert(row).select().single();
+  if (error) throw error;
+  return data;
+}
+async function deleteAIDraft(id) {
+  const { error } = await supabase.from("ai_outputs")
+    .update({ deleted_at: new Date().toISOString() }).eq("id", id);
+  if (error) throw error;
+}
+async function listVideos() {
+  const { data, error } = await supabase.from("association_videos")
+    .select("*").order("created_at", { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+async function addVideo(row) {
+  const { data, error } = await supabase.from("association_videos")
+    .insert(row).select().single();
+  if (error) throw error;
+  return data;
+}
+async function removeVideo(id) {
+  const { error } = await supabase.from("association_videos").delete().eq("id", id);
+  if (error) throw error;
+}
 
 function POABuilding({ me }) {
   return <ComingSoon label="POA Building — Store & Space" />;
@@ -2531,6 +2612,391 @@ function ValueLedger({ me }) {
   );
 }
 
+function vimeoEmbedUrl(url) {
+  if (!url) return null;
+  // handles https://vimeo.com/123456789 and https://player.vimeo.com/video/123456789
+  const m = url.match(/vimeo\.com\/(?:video\/)?(\d+)/);
+  return m ? `https://player.vimeo.com/video/${m[1]}?title=0&byline=0&portrait=0` : null;
+}
+
+// Calls Claude through the /api/claude serverless proxy (mirrors /api/draft-minutes).
+// The ANTHROPIC_API_KEY lives server-side only — never shipped in the browser bundle.
+async function callClaudeAI(systemPrompt, userContent) {
+  const res = await fetch("/api/claude", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ system: systemPrompt, content: userContent }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  const data = await res.json().catch(() => ({}));
+  return (data.text || "").trim();
+}
+
+function SocialMedia({ me, org }) {
+  const today = new Date();
+  const [cur, setCur]           = useState({ y: today.getFullYear(), m: today.getMonth() });
+  const [posts, setPosts]       = useState([]);
+  const [cats, setCats]         = useState([]);
+  const [videos, setVideos]     = useState([]);
+  const [tab, setTab]           = useState("calendar");
+  const [showAdd, setShowAdd]   = useState(false);
+  const [showAddCat, setShowAddCat] = useState(false);
+  const [showAddVid, setShowAddVid] = useState(false);
+  const [selCat, setSelCat]     = useState(null);
+  const [postDay, setPostDay]   = useState(today.getDate());
+  const [postText, setPostText] = useState("");
+  const [newCat, setNewCat]     = useState({ label: "", color: "#9B6BE6", default_text: "" });
+  const [newVid, setNewVid]     = useState({ title: "", description: "", vimeo_url: "", series_name: "" });
+  const [caption, setCaption]   = useState("");
+  const [captionTopic, setCaptionTopic] = useState("");
+  const [captionBusy, setCaptionBusy]   = useState(false);
+  const [captionOut, setCaptionOut]     = useState("");
+  const [err, setErr]           = useState("");
+  const [busy, setBusy]         = useState(false);
+
+  const COLORS = ["#9B6BE6","#46C793","#57B6E0","#F0B44A","#EF6A64","#B48AEF","#7AD8B0","#E8A87C"];
+
+  async function loadAll() {
+    const [p, c, v] = await Promise.all([
+      listContentCalendar(cur.y, cur.m),
+      listPostCategories(),
+      listVideos(),
+    ]);
+    setPosts(p); setCats(c); setVideos(v);
+    if (c.length && !selCat) setSelCat(c[0]);
+  }
+  useEffect(() => { loadAll(); }, [cur.y, cur.m]);
+
+  async function doAddPost() {
+    if (!selCat) return;
+    setBusy(true); setErr("");
+    try {
+      await addContentPost({
+        department_id: me.department_id,
+        date: `${cur.y}-${String(cur.m + 1).padStart(2,"0")}-${String(postDay).padStart(2,"0")}`,
+        theme: selCat.label,
+        caption: postText.trim() || selCat.default_text || "",
+        color: selCat.color,
+      });
+      setShowAdd(false); setPostText("");
+      await loadAll();
+    } catch(e) { setErr(e.message); }
+    finally { setBusy(false); }
+  }
+
+  async function doRemovePost(id) {
+    if (!confirm("Remove this post from the calendar?")) return;
+    try { await removeContentPost(id); await loadAll(); }
+    catch(e) { setErr(e.message); }
+  }
+
+  async function doAddCat() {
+    if (!newCat.label.trim()) return;
+    setBusy(true); setErr("");
+    try {
+      const sortOrder = cats.reduce((mx, c) => Math.max(mx, c.sort_order || 0), 0) + 1;
+      await addPostCategory({
+        department_id: me.department_id,
+        label: newCat.label.trim(),
+        color: newCat.color,
+        default_text: newCat.default_text.trim() || null,
+        is_default: false,
+        sort_order: sortOrder,
+      });
+      setNewCat({ label: "", color: "#9B6BE6", default_text: "" });
+      setShowAddCat(false);
+      await loadAll();
+    } catch(e) { setErr(e.message); }
+    finally { setBusy(false); }
+  }
+
+  async function doAddVideo() {
+    if (!newVid.title.trim() || !newVid.vimeo_url.trim()) { setErr("Title and Vimeo URL required."); return; }
+    setBusy(true); setErr("");
+    try {
+      await addVideo({
+        department_id: me.department_id,
+        title: newVid.title.trim(),
+        description: newVid.description.trim() || null,
+        vimeo_url: newVid.vimeo_url.trim(),
+        series_name: newVid.series_name.trim() || null,
+        posted_by: me.id,
+      });
+      setNewVid({ title: "", description: "", vimeo_url: "", series_name: "" });
+      setShowAddVid(false);
+      await loadAll();
+    } catch(e) { setErr(e.message); }
+    finally { setBusy(false); }
+  }
+
+  async function doCaptionDraft() {
+    if (!captionTopic.trim()) return;
+    setCaptionBusy(true); setCaptionOut(""); setErr("");
+    try {
+      const sys = `You write short, warm social media captions for a police officers' association to build community visibility and trust. Match a professional but approachable voice. Plain, genuine, under 60 words, with a tasteful hashtag or two. Never reference sensitive law enforcement details or ongoing cases. Return only the caption.`;
+      const out = await callClaudeAI(sys, `Association: ${org?.name || "Police Officers' Association"}\nPost topic: ${captionTopic}`);
+      setCaptionOut(out);
+    } catch(e) { setErr("AI caption drafting failed. Check ANTHROPIC_API_KEY in Vercel."); }
+    finally { setCaptionBusy(false); }
+  }
+
+  // calendar grid
+  const dim      = new Date(cur.y, cur.m + 1, 0).getDate();
+  const startDow = new Date(cur.y, cur.m, 1).getDay();
+  const cells    = [];
+  for (let i = 0; i < startDow; i++) cells.push(null);
+  for (let d = 1; d <= dim; d++) cells.push(d);
+  while (cells.length % 7) cells.push(null);
+  const byDay = {};
+  posts.forEach(p => {
+    const d = new Date(p.date + "T12:00:00").getDate();
+    (byDay[d] = byDay[d] || []).push(p);
+  });
+  const isToday = d => d && cur.y === today.getFullYear() && cur.m === today.getMonth() && d === today.getDate();
+
+  const TABS = [{ id: "calendar", label: "Content Calendar" }, { id: "caption", label: "AI Caption Helper" }, { id: "videos", label: "Videos" }];
+
+  return (
+    <div>
+      <PageTitle sub="Content calendar, AI captions, and your video library">Social & Media</PageTitle>
+      <div style={{ display: "flex", gap: 6, marginBottom: 20 }}>
+        {TABS.map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)}
+            style={{ ...PS.btn, background: tab === t.id ? POA.accent : POA.btnBg, color: tab === t.id ? "#fff" : POA.btnText, border: tab === t.id ? "none" : `0.5px solid ${POA.btnBorder}` }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+      <ErrBox msg={err} />
+
+      {/* CONTENT CALENDAR */}
+      {tab === "calendar" && (
+        <div>
+          {/* Category chips */}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 14 }}>
+            {cats.map(c => (
+              <button key={c.id} onClick={() => { setSelCat(c); setPostText(c.default_text || ""); setShowAdd(true); }}
+                style={{ border: `1.5px solid ${c.color}`, color: c.color, background: POA.btnBg, borderRadius: 999, padding: "5px 12px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 5 }}>
+                <Plus size={12} /> {c.label}
+              </button>
+            ))}
+            <button onClick={() => setShowAddCat(!showAddCat)}
+              style={{ border: `1.5px solid ${POA.hairline}`, color: POA.textMuted, background: POA.btnBg, borderRadius: 999, padding: "5px 12px", fontSize: 11.5, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 5 }}>
+              <Plus size={12} /> New category
+            </button>
+          </div>
+
+          {/* Add category form */}
+          {showAddCat && (
+            <Card style={{ marginBottom: 14 }}>
+              <SectionTitle>New category</SectionTitle>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+                <div>
+                  <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Label</div>
+                  <input value={newCat.label} onChange={e => setNewCat({ ...newCat, label: e.target.value })} style={PS.input} placeholder="e.g. PAC Update" />
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Color</div>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {COLORS.map(c => (
+                      <button key={c} onClick={() => setNewCat({ ...newCat, color: c })}
+                        style={{ width: 24, height: 24, borderRadius: "50%", background: c, border: newCat.color === c ? "2px solid #fff" : "none", cursor: "pointer" }} />
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div style={{ marginBottom: 10 }}>
+                <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Default caption text (optional)</div>
+                <input value={newCat.default_text} onChange={e => setNewCat({ ...newCat, default_text: e.target.value })} style={PS.input} placeholder="Pre-filled text when adding a post" />
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button style={PS.btnPrimary} disabled={busy} onClick={doAddCat}>Save category</button>
+                <button style={PS.btn} onClick={() => setShowAddCat(false)}>Cancel</button>
+              </div>
+            </Card>
+          )}
+
+          {/* Add post form */}
+          {showAdd && selCat && (
+            <Card style={{ marginBottom: 14, borderColor: selCat.color }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                <div style={{ width: 10, height: 10, borderRadius: "50%", background: selCat.color }} />
+                <div style={{ fontWeight: 700, fontSize: 13.5, color: POA.textPrimary }}>{selCat.label}</div>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 10, marginBottom: 10 }}>
+                <div>
+                  <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Day of month</div>
+                  <input type="number" min={1} max={dim} value={postDay} onChange={e => setPostDay(e.target.value)} style={PS.input} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Caption / note</div>
+                  <input value={postText} onChange={e => setPostText(e.target.value)} style={PS.input} placeholder={selCat.default_text || "What's the post about?"} />
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button style={PS.btnPrimary} disabled={busy} onClick={doAddPost}>Add to calendar</button>
+                <button style={PS.btn} onClick={() => setShowAdd(false)}>Cancel</button>
+              </div>
+            </Card>
+          )}
+
+          {/* Month nav */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+            <div style={{ fontFamily: "inherit", fontWeight: 700, fontSize: 17, color: POA.textPrimary }}>{MONTHS[cur.m]} {cur.y}</div>
+            <div style={{ display: "flex", gap: 6 }}>
+              <button style={PS.btn} onClick={() => setCur(c => c.m === 0 ? { y: c.y - 1, m: 11 } : { ...c, m: c.m - 1 })}>‹</button>
+              <button style={PS.btn} onClick={() => setCur({ y: today.getFullYear(), m: today.getMonth() })}>Today</button>
+              <button style={PS.btn} onClick={() => setCur(c => c.m === 11 ? { y: c.y + 1, m: 0 } : { ...c, m: c.m + 1 })}>›</button>
+            </div>
+          </div>
+
+          {/* Calendar grid */}
+          <Card>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 2, marginBottom: 8 }}>
+              {DOW.map(d => <div key={d} style={{ fontSize: 10, fontWeight: 700, textAlign: "center", color: POA.textMuted, textTransform: "uppercase", letterSpacing: ".06em", padding: "4px 0" }}>{d}</div>)}
+            </div>
+            {Array.from({ length: cells.length / 7 }, (_, w) => (
+              <div key={w} style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 2, marginBottom: 2 }}>
+                {cells.slice(w * 7, w * 7 + 7).map((d, i) => (
+                  <div key={i} style={{ minHeight: 64, background: isToday(d) ? "rgba(155,107,230,.12)" : "transparent", border: `0.5px solid ${isToday(d) ? POA.accent : POA.hairline}`, borderRadius: 7, padding: "4px 5px" }}>
+                    {d && (
+                      <>
+                        <div style={{ fontSize: 11, fontWeight: isToday(d) ? 700 : 400, color: isToday(d) ? POA.accent : POA.textMuted, marginBottom: 3 }}>{d}</div>
+                        {(byDay[d] || []).map(p => (
+                          <button key={p.id} onClick={() => doRemovePost(p.id)}
+                            style={{ display: "block", width: "100%", textAlign: "left", background: p.color || POA.accent, border: "none", borderRadius: 4, padding: "2px 5px", fontSize: 10, fontWeight: 600, color: "#fff", marginBottom: 2, cursor: "pointer", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {p.theme}
+                          </button>
+                        ))}
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ))}
+          </Card>
+          <div style={{ fontSize: 11.5, color: POA.textMuted, marginTop: 8 }}>
+            {posts.length} post{posts.length !== 1 ? "s" : ""} scheduled in {MONTHS[cur.m]} · tap a colored post to remove it
+          </div>
+        </div>
+      )}
+
+      {/* AI CAPTION HELPER */}
+      {tab === "caption" && (
+        <div>
+          <Card style={{ borderLeft: `3px solid ${POA.accent}`, borderRadius: "0 14px 14px 0" }}>
+            <SectionTitle>AI Caption Helper</SectionTitle>
+            <div style={{ fontFamily: "inherit", fontWeight: 700, fontSize: 20, color: POA.textPrimary, marginBottom: 4 }}>Write a post for your association</div>
+            <div style={{ fontSize: 13.5, color: POA.textMuted, marginBottom: 14 }}>What's the post about?</div>
+            <input value={captionTopic} onChange={e => setCaptionTopic(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && !captionBusy && doCaptionDraft()}
+              placeholder="e.g. Our members volunteered at the District 4 food drive" style={{ ...PS.input, marginBottom: 12 }} />
+            <button style={PS.btnPrimary} disabled={captionBusy || !captionTopic.trim()} onClick={doCaptionDraft}>
+              <Sparkles size={14} /> {captionBusy ? "Writing…" : "Draft a caption"}
+            </button>
+          </Card>
+          {captionOut && (
+            <Card style={{ marginTop: 14 }}>
+              <SectionTitle>Your caption</SectionTitle>
+              <div style={{ fontSize: 14.5, color: POA.textPrimary, lineHeight: 1.7, whiteSpace: "pre-wrap", marginBottom: 12 }}>{captionOut}</div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button style={PS.btn} onClick={() => navigator.clipboard.writeText(captionOut)}>Copy</button>
+                <button style={PS.btn} onClick={() => { setCaptionOut(""); setCaptionTopic(""); }}>Clear</button>
+              </div>
+              <div style={{ fontSize: 11.5, color: POA.textMuted, marginTop: 8, fontStyle: "italic" }}>Review before posting — AI drafts, you publish.</div>
+            </Card>
+          )}
+          <div style={{ marginTop: 20 }}>
+            <SectionTitle>Ideas for things to post</SectionTitle>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              {[
+                { title: "Member spotlight", desc: "Highlight a member's service or milestone." },
+                { title: "Community impact", desc: "Show what the association did for the community." },
+                { title: "Association win", desc: "CBA progress, legal victory, or member benefit." },
+                { title: "Safety tip", desc: "Public safety awareness from your members." },
+                { title: "Event reminder", desc: "Upcoming meeting, vote, or community event." },
+                { title: "The ask", desc: "Recruit, donate, show up, get involved." },
+              ].map(i => (
+                <div key={i.title} style={{ ...PS.card, padding: "13px 14px" }}>
+                  <div style={{ fontWeight: 700, fontSize: 13.5, color: POA.textPrimary, marginBottom: 4 }}>{i.title}</div>
+                  <div style={{ fontSize: 12, color: POA.textMuted, lineHeight: 1.45, marginBottom: 10 }}>{i.desc}</div>
+                  <button style={{ ...PS.btn, width: "100%", justifyContent: "center" }}
+                    onClick={() => { setCaptionTopic(i.title); setTab("caption"); }}>
+                    <Sparkles size={12} /> Draft this
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* VIDEO LIBRARY */}
+      {tab === "videos" && (
+        <div>
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 16 }}>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 17, color: POA.textPrimary }}>Video Library</div>
+              <div style={{ fontSize: 13, color: POA.textMuted, marginTop: 2 }}>Internal comms, training series, and association updates.</div>
+            </div>
+            <button style={PS.btn} onClick={() => setShowAddVid(!showAddVid)}><Plus size={13} /> Add video</button>
+          </div>
+
+          {showAddVid && (
+            <Card style={{ marginBottom: 16 }}>
+              <SectionTitle>Add video</SectionTitle>
+              <div style={{ marginBottom: 10 }}>
+                <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Title</div>
+                <input value={newVid.title} onChange={e => setNewVid({ ...newVid, title: e.target.value })} style={PS.input} placeholder="e.g. Q2 Internal Comms — July Update" />
+              </div>
+              <div style={{ marginBottom: 10 }}>
+                <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Vimeo URL</div>
+                <input value={newVid.vimeo_url} onChange={e => setNewVid({ ...newVid, vimeo_url: e.target.value })} style={PS.input} placeholder="https://vimeo.com/123456789" />
+              </div>
+              <div style={{ marginBottom: 10 }}>
+                <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Series name (optional)</div>
+                <input value={newVid.series_name} onChange={e => setNewVid({ ...newVid, series_name: e.target.value })} style={PS.input} placeholder="e.g. Internal Comms Series" />
+              </div>
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Description (optional)</div>
+                <textarea value={newVid.description} onChange={e => setNewVid({ ...newVid, description: e.target.value })} style={{ ...PS.textarea, minHeight: 70 }} placeholder="What's this video about?" />
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button style={PS.btnPrimary} disabled={busy} onClick={doAddVideo}>Save video</button>
+                <button style={PS.btn} onClick={() => setShowAddVid(false)}>Cancel</button>
+              </div>
+            </Card>
+          )}
+
+          {videos.length === 0 && !showAddVid && (
+            <Card><div style={{ color: POA.textMuted, fontSize: 13.5 }}>No videos posted yet. Add your first video above.</div></Card>
+          )}
+          {videos.map(v => {
+            const embedUrl = vimeoEmbedUrl(v.vimeo_url);
+            return (
+              <Card key={v.id} style={{ marginBottom: 14 }}>
+                {v.series_name && <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".12em", textTransform: "uppercase", color: POA.accent, marginBottom: 6 }}>{v.series_name}</div>}
+                <div style={{ fontWeight: 700, fontSize: 15, color: POA.textPrimary, marginBottom: 4 }}>{v.title}</div>
+                {v.description && <div style={{ fontSize: 13, color: POA.textMuted, lineHeight: 1.55, marginBottom: 10 }}>{v.description}</div>}
+                {embedUrl && (
+                  <div style={{ position: "relative", paddingBottom: "56.25%", height: 0, overflow: "hidden", borderRadius: 10, marginBottom: 10 }}>
+                    <iframe src={embedUrl} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", border: "none", borderRadius: 10 }}
+                      allow="autoplay; fullscreen; picture-in-picture" allowFullScreen title={v.title} />
+                  </div>
+                )}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <div style={{ fontSize: 11.5, color: POA.textMuted }}>{fmtDate(v.created_at)}</div>
+                  <button style={{ ...PS.btn, color: POA.red, fontSize: 12 }} onClick={async () => { if (confirm("Remove this video?")) { await removeVideo(v.id); await loadAll(); } }}>Remove</button>
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ================================================================
    SCREEN ROUTER
    ================================================================ */
@@ -2559,7 +3025,7 @@ function renderScreen(view, { me, org, setView }) {
     case "b_attendance":    return <MeetingAttendance me={me} />;
     case "b_stipend":       return <ComingSoon label="Stipend Log" />;
     case "b_fundraising":   return <ComingSoon label="Fundraising" />;
-    case "b_social":        return <ComingSoon label="Social & Media" />;
+    case "b_social":        return <SocialMedia me={me} org={org} />;
     case "b_building":      return <POABuilding me={me} />;
     case "b_continuity":    return <BoardContinuity me={me} />;
     case "b_correspondence":return <BoardCorrespondence me={me} />;
