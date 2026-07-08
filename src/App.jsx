@@ -5060,11 +5060,7 @@ function BoardDocuments({ me }) {
           fetch('/api/extract-document', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              text, documentId: data.id,
-              supabaseUrl: import.meta.env.VITE_SUPABASE_URL,
-              supabaseKey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-            }),
+            body: JSON.stringify({ text, documentId: data.id }),
           }).catch(() => null); // fire and forget
         }
       }
