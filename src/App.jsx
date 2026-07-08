@@ -4070,9 +4070,94 @@ const ALL_TAGS = [
 
 const ALL_CATS = [...new Set(POA_IDEA_BANK.map(i => i.cat))];
 
-const BRAINSTORM_SYS = `You help a police officers' association brainstorm fundraisers. Given their goal, effort level, and cause, propose EXACTLY 6 ideas that are creative, specific, and varied — spanning ~2 proven/reliable, ~2 fresh twists, ~2 bold/unexpected. You will be given inspiration ideas as a springboard — do NOT repeat them verbatim, use them only as creative fuel to invent something original for THIS association's specific situation. AVOID anything listed as recently run. Return ONLY a valid JSON array of 6 objects: {"name": string, "pitch": "one punchy sentence"}. No text outside the JSON.`;
+const BRAINSTORM_SYS = `You are a creative fundraising strategist for police officers' associations. Your job is to propose 6 fundraiser ideas that are SPECIFIC, VARIED, and perfectly matched to the effort level chosen.
 
-const PLAN_SYS_POA = `You help a police officers' association plan a fundraiser. Given their event idea, return a practical plain-text plan the board can actually run: a one-line goal, a simple timeline/checklist, roles needed, promotion steps, and a realistic money target. Then the most important part — an in-depth Sponsorship Packages section: three or four headline tiers (Title/Presenting, Gold, Silver, Bronze) each with a suggested dollar amount and exactly what that sponsor gets. An a-la-carte list of individual items with suggested prices. One short ready-to-send outreach line for a local business. Keep amounts realistic. Use clear short headings and dash bullets. 450-650 words.`;
+EFFORT LEVEL DEFINITIONS — match these exactly:
+
+QUICK & EASY:
+- Planning time: 1-3 weeks
+- Volunteers needed: 2-8 people
+- Launch cost: under $500
+- Format: single evening, weekend morning, or recurring monthly
+- Examples: trivia night at a bar, coffee with cops pop-up, push-up challenge with pledge donations, donut crawl to 5 bakeries, axe throwing tournament at existing venue, cornhole tournament at a park, breakfast with officers at a diner
+
+MEDIUM:
+- Planning time: 4-10 weeks
+- Volunteers needed: 10-25 people
+- Launch cost: $500-$2,500
+- Format: single day event, half-day event, or weekend event
+- Examples: 5K fun run, escape room weekend, poker run, BBQ cook-off, police vs fire softball game, K9 meet & greet day, citizens police challenge, scavenger hunt across businesses
+- NEVER suggest: golf scramble (always big event), galas, multi-day festivals, anything requiring 2+ months of planning
+
+BIG EVENT:
+- Planning time: 2-6 months
+- Volunteers needed: 30+ people or major venue coordination
+- Launch cost: $2,000+ investment, large sponsor ask
+- Format: major signature event, gala, multi-sponsor production
+- Examples: golf scramble, honor guard gala, heroes gala under the stars, annual awards banquet, 24-hour relay broadcast, battle of the chiefs spectacular, secret dinner experience
+
+VARIETY RULES — your 6 ideas MUST:
+1. Come from at least 4 different categories (food/drink, fitness, competition, community experience, behind-the-scenes, educational, creative/unique, premium experience)
+2. Include at least 1 idea that is genuinely unexpected or creative — something a typical POA hasn't done before
+3. Include at least 1 that heavily involves community participation (not just officer-run)
+4. NOT be 6 variations of the same theme
+5. Be specific — "Badges & Brews Trivia Night at O'Malley's" not just "Trivia Night"
+
+Return ONLY a valid JSON array of 6 objects: {"name": string, "pitch": "one punchy sentence, max 20 words, make it compelling"}. No text outside the JSON.`;
+
+const PLAN_SYS_POA = `You are a fundraising event planner for a police officers' association. Generate a COMPLETE, DETAILED event plan the board can actually execute. This must be thorough and specific — not a summary.
+
+Your response MUST include ALL of these sections in order, using ## for section headers:
+
+## EVENT OVERVIEW
+One paragraph describing the event concept, why it works for a POA, and what makes it special.
+
+## GOAL
+Specific fundraising goal and how it will be achieved (ticket sales + sponsorships + donations breakdown).
+
+## RECOMMENDED DATE & VENUE
+Specific day of week, time of year recommendation, and venue type suggestions with notes on what to look for.
+
+## TIMELINE & CHECKLIST
+Week-by-week checklist from today to event day. Be specific — name real tasks, not vague steps. Include:
+- 60+ days out tasks
+- 30 days out tasks
+- 2 weeks out tasks
+- Event week tasks
+- Day-of tasks
+- Post-event tasks (within 48 hours)
+
+## ROLES NEEDED
+List every volunteer role needed with the number of people and what they do.
+
+## PROMOTION STEPS
+At least 6 specific promotion steps with timing (social posts, press release, email blast, etc).
+
+## REALISTIC MONEY TARGET
+Break down expected revenue by source: tickets, sponsorships, donations, merchandise, etc. Give realistic numbers for a mid-size POA.
+
+## SPONSORSHIP PACKAGES
+This is critical — be specific and compelling:
+
+Title/Presenting Sponsor — $[amount]
+- [3-4 specific benefits]
+
+Gold Sponsor — $[amount]
+- [3 specific benefits]
+
+Silver Sponsor — $[amount]
+- [2-3 specific benefits]
+
+Bronze Sponsor — $[amount]
+- [2 specific benefits]
+
+## A LA CARTE SPONSORSHIPS
+List 8-12 individual sponsorship items specific to THIS event with prices and benefits. Be creative — think naming rights for specific elements of the event.
+
+## READY-TO-SEND OUTREACH LINE
+One specific, compelling text/email a board member can send to a local business right now. Include the event name, date range, lowest entry price point, and a clear ask.
+
+Be specific to THIS event and THIS association. Do not write generic advice — write an actual plan.`;
 
 const EXTRACT_SYS = `You convert a police officers' association fundraiser plan into trackable work. Respond with ONLY one valid JSON object, no markdown, no code fences. Schema: {"action_items":[{"task":string,"suggested_owner":string|null,"suggested_due_date":"YYYY-MM-DD"|null}],"calendar_events":[{"title":string,"date":"YYYY-MM-DD"}]}. DATES: resolve every relative timing into a real YYYY-MM-DD between today and the target date. calendar_events must be ONLY the 3-5 most important dates. NEVER invent an owner — leave null for a human to fill in. Return ONLY the JSON object.`;
 
