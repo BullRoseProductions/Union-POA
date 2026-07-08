@@ -2671,7 +2671,7 @@ function SocialMedia({ me, org }) {
   const [posts, setPosts]       = useState([]);
   const [cats, setCats]         = useState([]);
   const [videos, setVideos]     = useState([]);
-  const [tab, setTab]           = useState("calendar");
+  const [showVideos, setShowVideos] = useState(false);
   const [showAdd, setShowAdd]   = useState(false);
   const [showAddCat, setShowAddCat] = useState(false);
   const [showAddVid, setShowAddVid] = useState(false);
@@ -2787,24 +2787,19 @@ function SocialMedia({ me, org }) {
   });
   const isToday = d => d && cur.y === today.getFullYear() && cur.m === today.getMonth() && d === today.getDate();
 
-  const TABS = [{ id: "calendar", label: "Content Calendar" }, { id: "caption", label: "AI Caption Helper" }, { id: "videos", label: "Videos" }];
-
   return (
     <div>
-      <PageTitle sub="Content calendar, AI captions, and your video library">Social & Media</PageTitle>
-      <div style={{ display: "flex", gap: 6, marginBottom: 20 }}>
-        {TABS.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)}
-            style={{ ...PS.btn, background: tab === t.id ? POA.accent : POA.btnBg, color: tab === t.id ? "#fff" : POA.btnText, border: tab === t.id ? "none" : `0.5px solid ${POA.btnBorder}` }}>
-            {t.label}
-          </button>
-        ))}
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
+        <PageTitle sub="Content calendar, AI captions, and your video library">Social & Media</PageTitle>
+        <button onClick={() => setShowVideos(v => !v)}
+          style={{ ...PS.btn, flexShrink: 0, background: showVideos ? POA.accent : POA.btnBg, color: showVideos ? "#fff" : POA.btnText, border: showVideos ? "none" : `0.5px solid ${POA.btnBorder}` }}>
+          Videos
+        </button>
       </div>
       <ErrBox msg={err} />
 
       {/* CONTENT CALENDAR */}
-      {tab === "calendar" && (
-        <div>
+      <div>
           {/* Category chips */}
           <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 14 }}>
             {cats.map(c => (
@@ -2912,11 +2907,9 @@ function SocialMedia({ me, org }) {
             {posts.length} post{posts.length !== 1 ? "s" : ""} scheduled in {MONTHS[cur.m]} · tap a colored post to remove it
           </div>
         </div>
-      )}
 
       {/* AI CAPTION HELPER */}
-      {tab === "caption" && (
-        <div>
+      <div>
           <Card style={{ borderLeft: `3px solid ${POA.accent}`, borderRadius: "0 14px 14px 0" }}>
             <SectionTitle>AI Caption Helper</SectionTitle>
             <div style={{ fontFamily: "inherit", fontWeight: 700, fontSize: 20, color: POA.textPrimary, marginBottom: 4 }}>Write a post for your association</div>
@@ -2954,7 +2947,7 @@ function SocialMedia({ me, org }) {
                   <div style={{ fontWeight: 700, fontSize: 13.5, color: POA.textPrimary, marginBottom: 4 }}>{i.title}</div>
                   <div style={{ fontSize: 12, color: POA.textMuted, lineHeight: 1.45, marginBottom: 10 }}>{i.desc}</div>
                   <button style={{ ...PS.btn, width: "100%", justifyContent: "center" }}
-                    onClick={() => { setCaptionTopic(i.title); setTab("caption"); }}>
+                    onClick={() => setCaptionTopic(i.title)}>
                     <Sparkles size={12} /> Draft this
                   </button>
                 </div>
@@ -2962,10 +2955,9 @@ function SocialMedia({ me, org }) {
             </div>
           </div>
         </div>
-      )}
 
       {/* VIDEO LIBRARY */}
-      {tab === "videos" && (
+      {showVideos && (
         <div>
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 16 }}>
             <div>
