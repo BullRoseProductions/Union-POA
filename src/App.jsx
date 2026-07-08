@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Phone, MessageSquare, Handshake, TrendingUp, Shield,
   Calendar, CreditCard, Vote, ShoppingBag, AlertTriangle, Bell,
   CalendarCheck, ClipboardList, DollarSign, Heart, Megaphone,
-  BookOpen, Mail, Users, BarChart3, LogOut, Menu, X, ChevronRight,
+  BookOpen, Mail, Users, BarChart3, LogOut, Menu, X, ChevronRight, ChevronDown, ChevronUp,
   Sparkles, CheckCircle2, Clock, Loader2, Send, Building2,
   Plus, Pencil, Trash2, ArrowLeft, RefreshCw, FileText, QrCode, Settings,
 } from "lucide-react";
@@ -2672,6 +2672,7 @@ function SocialMedia({ me, org }) {
   const [cats, setCats]         = useState([]);
   const [videos, setVideos]     = useState([]);
   const [showVideos, setShowVideos] = useState(false);
+  const [showIdeas, setShowIdeas]   = useState(false);
   const [showAdd, setShowAdd]   = useState(false);
   const [showAddCat, setShowAddCat] = useState(false);
   const [showAddVid, setShowAddVid] = useState(false);
@@ -2789,13 +2790,7 @@ function SocialMedia({ me, org }) {
 
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
-        <PageTitle sub="Content calendar, AI captions, and your video library">Social & Media</PageTitle>
-        <button onClick={() => setShowVideos(v => !v)}
-          style={{ ...PS.btn, flexShrink: 0, background: showVideos ? POA.accent : POA.btnBg, color: showVideos ? "#fff" : POA.btnText, border: showVideos ? "none" : `0.5px solid ${POA.btnBorder}` }}>
-          Videos
-        </button>
-      </div>
+      <PageTitle sub="Content calendar, AI captions, and your video library">Social & Media</PageTitle>
       <ErrBox msg={err} />
 
       {/* CONTENT CALENDAR */}
@@ -2933,8 +2928,12 @@ function SocialMedia({ me, org }) {
             </Card>
           )}
           <div style={{ marginTop: 20 }}>
-            <SectionTitle>Ideas for things to post</SectionTitle>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <div onClick={() => setShowIdeas(v => !v)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}>
+              <SectionTitle>Ideas for things to post</SectionTitle>
+              {showIdeas ? <ChevronUp size={16} color={POA.textMuted} /> : <ChevronDown size={16} color={POA.textMuted} />}
+            </div>
+            {showIdeas && (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 }}>
               {[
                 { title: "Member spotlight", desc: "Highlight a member's service or milestone." },
                 { title: "Community impact", desc: "Show what the association did for the community." },
@@ -2953,17 +2952,20 @@ function SocialMedia({ me, org }) {
                 </div>
               ))}
             </div>
+            )}
           </div>
         </div>
 
       {/* VIDEO LIBRARY */}
-      {showVideos && (
-        <div>
+      <div style={{ marginTop: 20 }}>
+        <div onClick={() => setShowVideos(v => !v)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}>
+          <SectionTitle>Video Library</SectionTitle>
+          {showVideos ? <ChevronUp size={16} color={POA.textMuted} /> : <ChevronDown size={16} color={POA.textMuted} />}
+        </div>
+        {showVideos && (
+        <div style={{ marginTop: 10 }}>
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 16 }}>
-            <div>
-              <div style={{ fontWeight: 700, fontSize: 17, color: POA.textPrimary }}>Video Library</div>
-              <div style={{ fontSize: 13, color: POA.textMuted, marginTop: 2 }}>Internal comms, training series, and association updates.</div>
-            </div>
+            <div style={{ fontSize: 13, color: POA.textMuted }}>Internal comms, training series, and association updates.</div>
             <button style={PS.btn} onClick={() => setShowAddVid(!showAddVid)}><Plus size={13} /> Add video</button>
           </div>
 
@@ -3018,6 +3020,7 @@ function SocialMedia({ me, org }) {
           })}
         </div>
       )}
+      </div>
     </div>
   );
 }
