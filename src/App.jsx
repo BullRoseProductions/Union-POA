@@ -6,6 +6,7 @@ import {
   BookOpen, Mail, Users, BarChart3, LogOut, Menu, X, ChevronRight, ChevronDown, ChevronUp,
   Sparkles, CheckCircle2, Clock, Loader2, Send, Building2,
   Plus, Pencil, Trash2, ArrowLeft, RefreshCw, FileText, QrCode, Settings, Upload,
+  KeyRound,
 } from "lucide-react";
 import { supabase } from "./lib/supabase";
 import { QRCodeCanvas } from "qrcode.react";
@@ -5348,6 +5349,16 @@ export default function App() {
   const [viewAs, setViewAs]     = useState(null); // 'board' | 'member' — board users can preview the member view; null = role default
   const [features, setFeatures] = useState({});
   const [orgSettings, setOrgSettings] = useState({});
+  const [showResetPw, setShowResetPw] = useState(
+    () => new URLSearchParams(window.location.search).get("setpassword") === "true"
+  );
+  const [showAccountPw, setShowAccountPw] = useState(false);
+
+  function clearSetPwParam() {
+    const u = new URL(window.location.href);
+    u.searchParams.delete("setpassword");
+    window.history.replaceState({}, "", u.pathname + u.search + u.hash);
+  }
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => { setSession(data.session); setReady(true); });
@@ -5390,6 +5401,23 @@ export default function App() {
 
   if (!ready) return <Loading />;
   if (!session) return <Login />;
+
+  // Returning from a "set password" email link — let them set a password before entering the app.
+  if (showResetPw) {
+    let pending = "";
+    try { pending = sessionStorage.getItem("b4c_pending_pw") || ""; } catch {}
+    return (
+      <PasswordSetModal
+        title="Set your password"
+        blurb="Choose a password for your account. You'll be able to sign in with it from now on."
+        initialPw={pending}
+        requireSet
+        onSaved={() => { try { sessionStorage.removeItem("b4c_pending_pw"); } catch {} }}
+        onClose={() => { setShowResetPw(false); clearSetPwParam(); }}
+      />
+    );
+  }
+
   if (me === undefined) return <Loading />;
   if (me === null) return <NotOnRoster session={session} />;
 
@@ -5473,6 +5501,10 @@ export default function App() {
         <div style={{ padding: "12px 16px", borderTop: `0.5px solid ${POA.hairline}` }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: POA.textPrimary, marginBottom: 2 }}>{me.full_name}</div>
           <div style={{ fontSize: 11.5, color: POA.textMuted, marginBottom: 10 }}>{(me.access || []).filter(r => r !== "Member").join(", ") || "Member"}</div>
+          <button onClick={() => setShowAccountPw(true)}
+            style={{ ...PS.btn, width: "100%", justifyContent: "center", marginBottom: 8 }}>
+            <KeyRound size={13} /> Change password
+          </button>
           <button onClick={() => supabase.auth.signOut()}
             style={{ ...PS.btn, width: "100%", justifyContent: "center" }}>
             <LogOut size={13} /> Sign out
@@ -5488,6 +5520,15 @@ export default function App() {
           </div>
         ))}
       </main>
+
+      {showAccountPw && (
+        <PasswordSetModal
+          title="Change password"
+          blurb="Set a new password for your account."
+          onClose={() => setShowAccountPw(false)}
+          onSaved={() => {}}
+        />
+      )}
     </div>
   );
 }
@@ -5496,12 +5537,20 @@ export default function App() {
    LOGIN
    ================================================================ */
 function Login() {
+  const [mode, setMode]   = useState("magic"); // magic | password | set
   const [email, setEmail] = useState("");
+  const [pw, setPw]       = useState("");
+  const [pw2, setPw2]     = useState("");
   const [sent, setSent]   = useState(false);
   const [err, setErr]     = useState("");
   const [busy, setBusy]   = useState(false);
 
-  async function send() {
+  function switchMode(m) {
+    setMode(m); setErr(""); setSent(false); setPw(""); setPw2("");
+  }
+
+  // ---- Magic link ----
+  async function sendMagic() {
     setErr(""); setBusy(true);
     const { error } = await supabase.auth.signInWithOtp({
       email: email.trim(),
@@ -5511,28 +5560,175 @@ function Login() {
     if (error) setErr(error.message); else setSent(true);
   }
 
+  // ---- Password sign-in ----
+  async function signInPassword() {
+    setErr(""); setBusy(true);
+    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password: pw });
+    setBusy(false);
+    if (error) setErr(error.message);
+    // success → App's onAuthStateChange picks up the session
+  }
+
+  // ---- Set password (sends a reset email that lets them set one without being signed in) ----
+  async function sendReset() {
+    setErr("");
+    if (pw.length < 8) { setErr("Password must be at least 8 characters."); return; }
+    if (pw !== pw2)    { setErr("Passwords don't match."); return; }
+    setBusy(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: window.location.origin + "?setpassword=true",
+    });
+    setBusy(false);
+    if (error) { setErr(error.message); return; }
+    // stash the chosen password so the return modal can pre-fill it
+    try { sessionStorage.setItem("b4c_pending_pw", pw); } catch {}
+    setSent(true);
+  }
+
+  const TABS = [
+    { key: "magic",    label: "Magic link" },
+    { key: "password", label: "Password" },
+    { key: "set",      label: "Set password" },
+  ];
+
+  const sentMsg =
+    mode === "set"
+      ? <>Check your email — click the link, and you'll be prompted to set your password on return. Sent to <strong>{email}</strong>.</>
+      : <>Check your email — login link sent to <strong>{email}</strong>. Open it on this device.</>;
+
   return (
     <div style={{ minHeight: "100vh", background: POA.pageBg, display: "grid", placeItems: "center", padding: 20, fontFamily: "'Inter', system-ui, sans-serif" }}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap'); * { box-sizing: border-box; } body { margin: 0; }`}</style>
       <div style={{ background: POA.card, border: `0.5px solid ${POA.hairline}`, borderRadius: 18, padding: "36px 32px", width: "100%", maxWidth: 400, boxShadow: "0 24px 60px rgba(0,0,0,.5)" }}>
         <div style={{ fontSize: 10, letterSpacing: ".2em", textTransform: "uppercase", color: POA.accent, fontWeight: 700, marginBottom: 10 }}>Before the Call · POA</div>
         <h1 style={{ fontFamily: "inherit", fontSize: 26, fontWeight: 700, color: POA.textPrimary, margin: "0 0 8px" }}>Your association, in one place.</h1>
-        <p style={{ fontSize: 13.5, color: POA.textMuted, lineHeight: 1.6, margin: "0 0 22px" }}>Sign in with your association email — no password needed. We'll send you a one-tap login link.</p>
+        <p style={{ fontSize: 13.5, color: POA.textMuted, lineHeight: 1.6, margin: "0 0 20px" }}>Sign in with your association email — magic link, password, or set one for the first time.</p>
+
+        {/* Tabs */}
+        <div style={{ display: "flex", gap: 6, marginBottom: 18 }}>
+          {TABS.map(t => {
+            const on = mode === t.key;
+            return (
+              <button key={t.key} onClick={() => switchMode(t.key)}
+                style={{ flex: 1, padding: "7px 0", fontSize: 12, fontWeight: 700, fontFamily: "inherit", cursor: "pointer", borderRadius: 8, border: `0.5px solid ${on ? POA.accent : POA.btnBorder}`, background: on ? POA.accent : "transparent", color: on ? POA.white : POA.navLabel }}>
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
+
         {err && <ErrBox msg={err} />}
+
         {sent ? (
           <div style={{ background: "rgba(70,199,147,.1)", border: "0.5px solid rgba(70,199,147,.3)", borderRadius: 11, padding: "14px 16px", fontSize: 13.5, color: POA.greenText, lineHeight: 1.55 }}>
-            Check your email — login link sent to <strong>{email}</strong>. Open it on this device.
+            {sentMsg}
           </div>
         ) : (
           <>
             <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 6 }}>Association email</div>
             <input type="email" value={email} placeholder="you@department.org" style={{ ...PS.input, marginBottom: 12 }}
-              onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === "Enter" && email && send()} />
-            <button style={{ ...PS.btnPrimary, width: "100%" }} disabled={!email || busy} onClick={send}>
-              {busy ? "Sending…" : "Send login link"}
-            </button>
+              onChange={e => setEmail(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && mode === "magic" && email && sendMagic()} />
+
+            {mode === "password" && (
+              <>
+                <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 6 }}>Password</div>
+                <input type="password" value={pw} placeholder="Your password" style={{ ...PS.input, marginBottom: 12 }}
+                  onChange={e => setPw(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && email && pw && signInPassword()} />
+              </>
+            )}
+
+            {mode === "set" && (
+              <>
+                <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 6 }}>New password (min 8 characters)</div>
+                <input type="password" value={pw} placeholder="Choose a password" style={{ ...PS.input, marginBottom: 12 }}
+                  onChange={e => setPw(e.target.value)} />
+                <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 6 }}>Confirm password</div>
+                <input type="password" value={pw2} placeholder="Re-enter password" style={{ ...PS.input, marginBottom: 12 }}
+                  onChange={e => setPw2(e.target.value)} />
+              </>
+            )}
+
+            {mode === "magic" && (
+              <button style={{ ...PS.btnPrimary, width: "100%" }} disabled={!email || busy} onClick={sendMagic}>
+                {busy ? "Sending…" : "Send login link"}
+              </button>
+            )}
+            {mode === "password" && (
+              <button style={{ ...PS.btnPrimary, width: "100%" }} disabled={!email || !pw || busy} onClick={signInPassword}>
+                {busy ? "Signing in…" : "Sign in"}
+              </button>
+            )}
+            {mode === "set" && (
+              <button style={{ ...PS.btnPrimary, width: "100%" }} disabled={!email || !pw || !pw2 || busy} onClick={sendReset}>
+                {busy ? "Sending…" : "Email me a set-password link"}
+              </button>
+            )}
+
             <div style={{ fontSize: 11.5, color: POA.textMuted, textAlign: "center", marginTop: 12, lineHeight: 1.5 }}>
               Only emails on your association's roster can sign in.
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* Shared password modal — used for the reset-return flow and the sidebar "Change password" action.
+   Supabase's updateUser({ password }) sets the password for the current session's user. */
+function PasswordSetModal({ title, blurb, initialPw = "", requireSet = false, onClose, onSaved }) {
+  const [pw, setPw]     = useState(initialPw);
+  const [pw2, setPw2]   = useState(initialPw);
+  const [err, setErr]   = useState("");
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
+
+  async function save() {
+    setErr("");
+    if (pw.length < 8) { setErr("Password must be at least 8 characters."); return; }
+    if (pw !== pw2)    { setErr("Passwords don't match."); return; }
+    setBusy(true);
+    const { error } = await supabase.auth.updateUser({ password: pw });
+    setBusy(false);
+    if (error) { setErr(error.message); return; }
+    setDone(true);
+    onSaved && onSaved();
+  }
+
+  return (
+    <div onClick={requireSet ? undefined : onClose}
+      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.6)", display: "grid", placeItems: "center", padding: 20, zIndex: 200, fontFamily: "'Inter', system-ui, sans-serif" }}>
+      <div onClick={e => e.stopPropagation()}
+        style={{ background: POA.card, border: `0.5px solid ${POA.hairline}`, borderRadius: 16, padding: "28px 26px", width: "100%", maxWidth: 400, boxShadow: "0 24px 60px rgba(0,0,0,.5)" }}>
+        <h2 style={{ fontFamily: "inherit", fontSize: 20, fontWeight: 700, color: POA.textPrimary, margin: "0 0 6px" }}>{title}</h2>
+        {blurb && <p style={{ fontSize: 13, color: POA.textMuted, lineHeight: 1.55, margin: "0 0 18px" }}>{blurb}</p>}
+
+        {done ? (
+          <>
+            <div style={{ background: "rgba(70,199,147,.1)", border: "0.5px solid rgba(70,199,147,.3)", borderRadius: 11, padding: "14px 16px", fontSize: 13.5, color: POA.greenText, lineHeight: 1.55, marginBottom: 16 }}>
+              Password updated. You can sign in with it from now on.
+            </div>
+            <button style={{ ...PS.btnPrimary, width: "100%" }} onClick={onClose}>Done</button>
+          </>
+        ) : (
+          <>
+            {err && <ErrBox msg={err} />}
+            <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 6 }}>New password (min 8 characters)</div>
+            <input type="password" value={pw} placeholder="Choose a password" style={{ ...PS.input, marginBottom: 12 }}
+              onChange={e => setPw(e.target.value)} />
+            <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 6 }}>Confirm password</div>
+            <input type="password" value={pw2} placeholder="Re-enter password" style={{ ...PS.input, marginBottom: 16 }}
+              onChange={e => setPw2(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && pw && pw2 && save()} />
+            <div style={{ display: "flex", gap: 8 }}>
+              {!requireSet && (
+                <button style={{ ...PS.btn, flex: 1, justifyContent: "center" }} onClick={onClose}>Cancel</button>
+              )}
+              <button style={{ ...PS.btnPrimary, flex: 1 }} disabled={!pw || !pw2 || busy} onClick={save}>
+                {busy ? "Saving…" : "Save password"}
+              </button>
             </div>
           </>
         )}
