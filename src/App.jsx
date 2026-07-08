@@ -281,10 +281,12 @@ function MemberDash({ me, org, setView }) {
   const [attendance, setAttendance] = useState([]);
   const [openActions, setOpenActions] = useState(0);
   const [videos, setVideos] = useState([]);
+  const [onCall, setOnCall_state] = useState([]);
 
   useEffect(() => {
     listMeetings().then(ms => setNextMeeting(ms.find(m => m.status === "open") || null));
     getActiveAlert().then(setActiveAlert).catch(() => null);
+    getOnCall().then(setOnCall_state).catch(() => null);
     listVideos().then(v => setVideos(v.slice(0, 2))).catch(() => null);
     myActionItems(me.id).then(items => setOpenActions(items.filter(i => i.status === "open").length));
     // attendance this quarter
@@ -317,32 +319,50 @@ function MemberDash({ me, org, setView }) {
         <div style={{ fontSize: 26, fontWeight: 700, color: "#fff", lineHeight: 1.2 }}>Need help?<br />We've got you.</div>
       </div>
 
-      <button onClick={() => setView("m_call")}
+      <button onClick={() => { if (onCall[0]?.phone) window.location.href = `tel:${onCall[0].phone.replace(/\D/g, '')}`; else setView('m_call'); }}
         style={{ width: 150, height: 150, borderRadius: "50%", background: "#c0392b", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, animation: "pulse-emerg 2s infinite" }}>
         <Phone size={44} color="#fff" />
         <div style={{ fontSize: 14, fontWeight: 700, color: "#fff", letterSpacing: ".04em" }}>Call now</div>
       </button>
       <style>{`@keyframes pulse-emerg{0%,100%{box-shadow:0 0 0 0 rgba(192,57,43,.5)}50%{box-shadow:0 0 0 20px rgba(192,57,43,0)}}`}</style>
 
-      <div style={{ width: "100%", maxWidth: 380, display: "flex", flexDirection: "column", gap: 8 }}>
-        {[
-          { role: "Association President", desc: "General emergencies + member support" },
-          { role: "Legal Defense Rep", desc: "Officer in need of counsel" },
-          { role: "Member Welfare Chair", desc: "Personal crisis + family support" },
-        ].map(c => (
-          <div key={c.role} style={{ background: "rgba(255,255,255,.08)", border: "0.5px solid rgba(255,255,255,.12)", borderRadius: 10, padding: "12px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: "#fff" }}>{c.role}</div>
-              <div style={{ fontSize: 11, color: "rgba(255,255,255,.5)", marginTop: 2 }}>{c.desc}</div>
+      {/* Primary on-call */}
+      {onCall.length > 0 ? (
+        <div style={{ width: "100%", maxWidth: 380, display: "flex", flexDirection: "column", gap: 8 }}>
+          {onCall.map((oc, idx) => (
+            <div key={oc.id}>
+              {idx === 1 && (
+                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "rgba(255,255,255,.35)", textAlign: "center", margin: "4px 0 8px" }}>
+                  If no answer →
+                </div>
+              )}
+              <div style={{ background: idx === 0 ? "rgba(255,255,255,.12)" : "rgba(255,255,255,.06)", border: `0.5px solid ${idx === 0 ? "rgba(255,255,255,.2)" : "rgba(255,255,255,.08)"}`, borderRadius: 12, padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "rgba(255,255,255,.4)", marginBottom: 3 }}>
+                    {idx === 0 ? "Primary on-call" : "Backup on-call"}
+                  </div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: "#fff" }}>{oc.name}</div>
+                  {oc.notes && <div style={{ fontSize: 11, color: "rgba(255,255,255,.5)", marginTop: 2 }}>{oc.notes}</div>}
+                </div>
+                <a href={`tel:${oc.phone.replace(/\D/g, "")}`}
+                  style={{ background: idx === 0 ? "#c0392b" : "rgba(255,255,255,.1)", border: "none", borderRadius: 8, padding: "8px 14px", fontSize: 12, fontWeight: 700, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, textDecoration: "none", flexShrink: 0 }}>
+                  <Phone size={14} /> Call
+                </a>
+              </div>
             </div>
-            <button onClick={() => setView("m_call")}
-              style={{ background: "rgba(255,255,255,.1)", border: "none", borderRadius: 7, padding: "6px 12px", fontSize: 11, color: "rgba(255,255,255,.8)", cursor: "pointer", display: "flex", alignItems: "center", gap: 5, flexShrink: 0 }}>
-              <Phone size={12} /> Call
+          ))}
+        </div>
+      ) : (
+        <div style={{ width: "100%", maxWidth: 380 }}>
+          <div style={{ background: "rgba(255,255,255,.06)", border: "0.5px solid rgba(255,255,255,.1)", borderRadius: 12, padding: "14px 16px", textAlign: "center" }}>
+            <div style={{ fontSize: 13, color: "rgba(255,255,255,.5)", marginBottom: 10 }}>No on-call officer set.</div>
+            <button onClick={() => { setEmergency(false); setView("m_call"); }}
+              style={{ background: "rgba(255,255,255,.1)", border: "none", borderRadius: 8, padding: "8px 14px", fontSize: 12, color: "rgba(255,255,255,.8)", cursor: "pointer" }}>
+              View Who to Call →
             </button>
           </div>
-        ))}
-      </div>
-      <div style={{ fontSize: 11, color: "rgba(255,255,255,.3)", textAlign: "center" }}>Tap a contact to call. Tap Back to return to your dashboard.</div>
+        </div>
+      )}
     </div>
   );
 
@@ -1072,12 +1092,134 @@ function CausesBoard({ me }) {
 function MembersBoard({ me }) {
   const [members, setMembers] = useState(null);
   const [q, setQ]             = useState("");
+  const [onCallData, setOnCallData]   = useState([]);
+  const [showOnCall, setShowOnCall]   = useState(false);
+  const [ocForm, setOcForm]           = useState([
+    { priority: 1, name: "", phone: "", member_id: "", notes: "", active_until: "" },
+    { priority: 2, name: "", phone: "", member_id: "", notes: "", active_until: "" },
+  ]);
+  const [ocBusy, setOcBusy]           = useState(false);
+  const [ocErr, setOcErr]             = useState("");
+
   useEffect(() => { listMembers().then(setMembers); }, []);
+
+  useEffect(() => {
+    getOnCall().then(d => {
+      setOnCallData(d);
+      setOcForm(prev => prev.map(f => {
+        const existing = d.find(x => x.priority === f.priority);
+        return existing ? {
+          priority: f.priority,
+          name: existing.name,
+          phone: existing.phone,
+          member_id: existing.member_id || "",
+          notes: existing.notes || "",
+          active_until: existing.active_until ? existing.active_until.split("T")[0] : "",
+        } : f;
+      }));
+    }).catch(() => null);
+  }, []);
+
+  async function saveOnCall() {
+    setOcBusy(true); setOcErr("");
+    try {
+      for (const f of ocForm) {
+        if (f.name.trim() && f.phone.trim()) {
+          await setOnCall(me.department_id, f.priority, f.name.trim(), f.phone.trim(),
+            f.member_id || null, f.notes.trim() || null,
+            f.active_until ? new Date(f.active_until + "T23:59:59").toISOString() : null,
+            me.id);
+        } else {
+          await clearOnCall(me.department_id, f.priority).catch(() => null);
+        }
+      }
+      const updated = await getOnCall();
+      setOnCallData(updated);
+      setShowOnCall(false);
+    } catch(e) { setOcErr(e.message); }
+    finally { setOcBusy(false); }
+  }
+
   if (!members) return <Spinner />;
   const filtered = members.filter(m => !q || m.full_name?.toLowerCase().includes(q.toLowerCase()) || m.email?.toLowerCase().includes(q.toLowerCase()));
   return (
     <div>
       <PageTitle sub={isDeptAdmin(me.access) ? "Full roster — you can add and edit members" : "Your association's full roster"}>Members</PageTitle>
+
+      {/* On-call management card */}
+      <Card style={{ marginBottom: 18, borderLeft: `3px solid ${POA.red}`, borderRadius: "0 14px 14px 0" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: onCallData.length > 0 ? 10 : 0 }}>
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".14em", textTransform: "uppercase", color: POA.red, marginBottom: 2 }}>On-Call Officer</div>
+            {onCallData.length === 0
+              ? <div style={{ fontSize: 13, color: POA.textMuted }}>No one set — members' SOS button will show Who to Call.</div>
+              : onCallData.map((oc, i) => (
+                <div key={oc.id} style={{ fontSize: 13, color: POA.textPrimary, marginBottom: 2 }}>
+                  <span style={{ fontSize: 10, color: POA.textMuted, marginRight: 6 }}>{i === 0 ? "PRIMARY" : "BACKUP"}</span>
+                  <strong>{oc.name}</strong> · {oc.phone}
+                  {oc.notes && <span style={{ color: POA.textMuted }}> · {oc.notes}</span>}
+                </div>
+              ))
+            }
+          </div>
+          {canManage(me.access) && (
+            <button style={PS.btn} onClick={() => setShowOnCall(v => !v)}>
+              {showOnCall ? "Cancel" : onCallData.length > 0 ? "Update" : "Set on-call"}
+            </button>
+          )}
+        </div>
+        {showOnCall && (
+          <div style={{ borderTop: `0.5px solid ${POA.hairline}`, paddingTop: 14, marginTop: 4 }}>
+            {ocForm.map((f, idx) => (
+              <div key={f.priority} style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: idx === 0 ? POA.red : POA.textMuted, marginBottom: 8, textTransform: "uppercase", letterSpacing: ".1em" }}>
+                  {idx === 0 ? "Primary on-call" : "Backup on-call"}
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+                  <div>
+                    <div style={{ fontSize: 11, color: POA.textMuted, marginBottom: 4 }}>Name</div>
+                    <input value={f.name} onChange={e => setOcForm(prev => prev.map((x, i) => i === idx ? { ...x, name: e.target.value } : x))}
+                      style={PS.input} placeholder="Officer name" />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, color: POA.textMuted, marginBottom: 4 }}>Phone</div>
+                    <input value={f.phone} onChange={e => setOcForm(prev => prev.map((x, i) => i === idx ? { ...x, phone: e.target.value } : x))}
+                      style={PS.input} placeholder="(817) 555-0100" type="tel" />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, color: POA.textMuted, marginBottom: 4 }}>Or pick from roster</div>
+                    <select value={f.member_id} onChange={e => {
+                      const m = members.find(x => x.id === e.target.value);
+                      setOcForm(prev => prev.map((x, i) => i === idx ? { ...x, member_id: e.target.value, name: m ? m.full_name : x.name } : x));
+                    }} style={PS.input}>
+                      <option value="">— Type name above —</option>
+                      {members.map(m => <option key={m.id} value={m.id}>{m.full_name}{m.badge ? ` · ${m.badge}` : ""}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, color: POA.textMuted, marginBottom: 4 }}>On-call until (optional)</div>
+                    <input type="date" value={f.active_until} onChange={e => setOcForm(prev => prev.map((x, i) => i === idx ? { ...x, active_until: e.target.value } : x))}
+                      style={PS.input} />
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, color: POA.textMuted, marginBottom: 4 }}>Notes (role, shift, etc.)</div>
+                  <input value={f.notes} onChange={e => setOcForm(prev => prev.map((x, i) => i === idx ? { ...x, notes: e.target.value } : x))}
+                    style={PS.input} placeholder="e.g. District 4 rep, available after 6pm" />
+                </div>
+              </div>
+            ))}
+            {ocErr && <div style={{ fontSize: 12, color: POA.red, marginBottom: 8 }}>{ocErr}</div>}
+            <button style={{ ...PS.btnPrimary, width: "100%" }} disabled={ocBusy} onClick={saveOnCall}>
+              {ocBusy ? "Saving…" : "Save on-call officers"}
+            </button>
+            <div style={{ fontSize: 11, color: POA.textMuted, marginTop: 8, fontStyle: "italic" }}>
+              Primary is who members call first. Backup shows if primary doesn't answer. SOS button dials primary directly.
+            </div>
+          </div>
+        )}
+      </Card>
+
       <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search name or email…" style={{ ...PS.input, marginBottom: 14 }} />
       {filtered.map(m => (
         <Card key={m.id}>
@@ -2234,6 +2376,40 @@ async function getActiveAlert() {
     .limit(1);
   if (error) throw error;
   return data?.[0] || null;
+}
+async function getOnCall() {
+  const { data, error } = await supabase
+    .from("on_call")
+    .select("*, members(full_name, badge)")
+    .order("priority", { ascending: true });
+  if (error) throw error;
+  return data || [];
+}
+async function setOnCall(deptId, priority, name, phone, memberId, notes, activeUntil, setById) {
+  const { data, error } = await supabase
+    .from("on_call")
+    .upsert({
+      department_id: deptId,
+      priority,
+      name,
+      phone,
+      member_id: memberId || null,
+      notes: notes || null,
+      active_from: new Date().toISOString(),
+      active_until: activeUntil || null,
+      set_by: setById,
+    }, { onConflict: "department_id,priority" })
+    .select().single();
+  if (error) throw error;
+  return data;
+}
+async function clearOnCall(deptId, priority) {
+  const { error } = await supabase
+    .from("on_call")
+    .delete()
+    .eq("department_id", deptId)
+    .eq("priority", priority);
+  if (error) throw error;
 }
 async function listAnnouncements() {
   const { data, error } = await supabase
