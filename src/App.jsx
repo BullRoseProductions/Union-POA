@@ -6,7 +6,7 @@ import {
   BookOpen, Mail, Users, BarChart3, LogOut, Menu, X, ChevronRight, ChevronDown, ChevronUp,
   Sparkles, CheckCircle2, Clock, Loader2, Send, Building2,
   Plus, Pencil, Trash2, ArrowLeft, RefreshCw, FileText, QrCode, Settings, Upload,
-  KeyRound,
+  KeyRound, Play,
 } from "lucide-react";
 import { supabase } from "./lib/supabase";
 import { QRCodeCanvas } from "qrcode.react";
@@ -273,69 +273,235 @@ function RecentVideos({ deptId }) {
 }
 
 function MemberDash({ me, org, setView }) {
-  const [next, setNext] = useState(null);
-  const [openCount, setOpenCount] = useState(null);
+  const today = new Date();
+  const [emergency, setEmergency] = useState(false);
+  const [nextMeeting, setNextMeeting] = useState(null);
   const [activeAlert, setActiveAlert] = useState(null);
-  useEffect(() => {
-    listMeetings().then(ms => setNext(ms.filter(m => m.status === "open")[0] || null));
-    myActionItems(me.id).then(items => setOpenCount(items.filter(i => i.status === "open").length));
-  }, [me.id]);
-  useEffect(() => { getActiveAlert().then(setActiveAlert).catch(() => null); }, []);
+  const [attendance, setAttendance] = useState([]);
+  const [openActions, setOpenActions] = useState(0);
+  const [videos, setVideos] = useState([]);
 
-  const first = me.full_name?.split(" ").slice(-1)[0] || me.full_name;
+  useEffect(() => {
+    listMeetings().then(ms => setNextMeeting(ms.find(m => m.status === "open") || null));
+    getActiveAlert().then(setActiveAlert).catch(() => null);
+    listVideos().then(v => setVideos(v.slice(0, 2))).catch(() => null);
+    myActionItems(me.id).then(items => setOpenActions(items.filter(i => i.status === "open").length));
+    // attendance this quarter
+    const qStart = new Date(today.getFullYear(), Math.floor(today.getMonth() / 3) * 3, 1);
+    supabase.from("event_attendance")
+      .select("event_id, events(event_date, title)")
+      .eq("member_id", me.id)
+      .gte("events.event_date", qStart.toISOString().split("T")[0])
+      .then(({ data }) => setAttendance(data || []));
+  }, [me.id]);
+
+  const orgInitials = (org?.name || "POA").split(" ").map(w => w[0]).slice(0, 3).join("").toUpperCase();
+  const firstName = me.full_name?.split(" ")[0] || "there";
+  const hour = today.getHours();
+  const timeGreet = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+  const attCount = attendance.length;
+  const attGoal = 4;
+  const attPct = Math.min(100, Math.round((attCount / attGoal) * 100));
+
+  // ── EMERGENCY SCREEN ──
+  if (emergency) return (
+    <div style={{ minHeight: "calc(100vh - 80px)", background: "#2d0a0a", borderRadius: 14, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "32px 24px", gap: 20, position: "relative" }}>
+      <button onClick={() => setEmergency(false)}
+        style={{ position: "absolute", top: 16, left: 16, background: "rgba(255,255,255,.1)", border: "none", borderRadius: 8, padding: "6px 12px", fontSize: 12, color: "rgba(255,255,255,.7)", cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+        <ArrowLeft size={13} /> Back
+      </button>
+
+      <div style={{ textAlign: "center" }}>
+        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".16em", textTransform: "uppercase", color: "rgba(255,255,255,.4)", marginBottom: 6 }}>{org?.name || "Your Association"}</div>
+        <div style={{ fontSize: 26, fontWeight: 700, color: "#fff", lineHeight: 1.2 }}>Need help?<br />We've got you.</div>
+      </div>
+
+      <button onClick={() => window.location.href = "tel:"}
+        style={{ width: 150, height: 150, borderRadius: "50%", background: "#c0392b", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, animation: "pulse-emerg 2s infinite" }}>
+        <Phone size={44} color="#fff" />
+        <div style={{ fontSize: 14, fontWeight: 700, color: "#fff", letterSpacing: ".04em" }}>Call now</div>
+      </button>
+      <style>{`@keyframes pulse-emerg{0%,100%{box-shadow:0 0 0 0 rgba(192,57,43,.5)}50%{box-shadow:0 0 0 20px rgba(192,57,43,0)}}`}</style>
+
+      <div style={{ width: "100%", maxWidth: 380, display: "flex", flexDirection: "column", gap: 8 }}>
+        {[
+          { role: "Association President", desc: "General emergencies + member support" },
+          { role: "Legal Defense Rep", desc: "Officer in need of counsel" },
+          { role: "Member Welfare Chair", desc: "Personal crisis + family support" },
+        ].map(c => (
+          <div key={c.role} style={{ background: "rgba(255,255,255,.08)", border: "0.5px solid rgba(255,255,255,.12)", borderRadius: 10, padding: "12px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "#fff" }}>{c.role}</div>
+              <div style={{ fontSize: 11, color: "rgba(255,255,255,.5)", marginTop: 2 }}>{c.desc}</div>
+            </div>
+            <button onClick={() => setView("m_call")}
+              style={{ background: "rgba(255,255,255,.1)", border: "none", borderRadius: 7, padding: "6px 12px", fontSize: 11, color: "rgba(255,255,255,.8)", cursor: "pointer", display: "flex", alignItems: "center", gap: 5, flexShrink: 0 }}>
+              <Phone size={12} /> Call
+            </button>
+          </div>
+        ))}
+      </div>
+      <div style={{ fontSize: 11, color: "rgba(255,255,255,.3)", textAlign: "center" }}>Tap a contact to call. Tap Back to return to your dashboard.</div>
+    </div>
+  );
+
+  // ── NORMAL DASHBOARD ──
   return (
     <div>
+      {/* Active alert banner */}
       {activeAlert && (
-        <div style={{ background: "rgba(239,106,100,.1)", border: "1px solid rgba(239,106,100,.4)", borderRadius: 12, padding: "14px 16px", marginBottom: 18, display: "flex", alignItems: "flex-start", gap: 12 }}>
-          <AlertTriangle size={18} color={POA.red} style={{ flexShrink: 0, marginTop: 2 }} />
-          <div>
-            <div style={{ fontWeight: 700, color: POA.red, fontSize: 13, marginBottom: 3 }}>CRITICAL ALERT</div>
-            <div style={{ fontWeight: 700, color: POA.textPrimary, marginBottom: 3 }}>{activeAlert.subject}</div>
-            <div style={{ fontSize: 13, color: POA.textSecondary, lineHeight: 1.55 }}>{activeAlert.body}</div>
+        <div style={{ background: "rgba(239,106,100,.1)", border: "1px solid rgba(239,106,100,.4)", borderRadius: 12, padding: "12px 16px", marginBottom: 14, display: "flex", alignItems: "flex-start", gap: 10 }}>
+          <AlertTriangle size={16} color={POA.red} style={{ flexShrink: 0, marginTop: 2 }} />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 700, color: POA.red, fontSize: 13, marginBottom: 2 }}>CRITICAL ALERT</div>
+            <div style={{ fontWeight: 700, color: POA.textPrimary, marginBottom: 2 }}>{activeAlert.subject}</div>
+            <div style={{ fontSize: 12, color: POA.textSecondary }}>{activeAlert.body}</div>
           </div>
         </div>
       )}
-      <PageTitle sub={`${org?.name || "Your Association"} · Member Hub`}>Good day, {first}.</PageTitle>
 
-      <StatRow stats={[
-        { n: openCount, label: "Your open actions", color: POA.accent },
-        { n: me.standing || "Good", label: "Standing", color: POA.green },
-        { n: me.badge || "—", label: "Badge" },
-      ]} />
+      {/* Header + SOS */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ width: 44, height: 44, borderRadius: 10, background: POA.accentSoft, border: `1px solid ${POA.accentDim}`, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 13, color: POA.accent, flexShrink: 0 }}>
+            {orgInitials}
+          </div>
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".14em", textTransform: "uppercase", color: POA.accent }}>{org?.name || "Your Association"}</div>
+            <div style={{ fontSize: 20, fontWeight: 700, color: POA.textPrimary, lineHeight: 1.2 }}>{timeGreet}, {firstName}.</div>
+            <div style={{ fontSize: 12, color: POA.textMuted }}>Badge {me.badge || "—"} · District {me.district || "—"} · {me.standing || "Good"} standing</div>
+          </div>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+          <button onClick={() => setEmergency(true)}
+            style={{ width: 48, height: 48, borderRadius: 12, background: POA.red, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", animation: "sos-pulse 3s infinite" }}>
+            <Phone size={22} color="#fff" />
+          </button>
+          <div style={{ fontSize: 9, fontWeight: 700, color: POA.red, letterSpacing: ".1em" }}>SOS</div>
+          <style>{`@keyframes sos-pulse{0%,100%{box-shadow:0 0 0 0 rgba(239,106,100,.5)}60%{box-shadow:0 0 0 8px rgba(239,106,100,0)}}`}</style>
+        </div>
+      </div>
 
-      {next && (
-        <div>
-          <SectionTitle>Next meeting</SectionTitle>
-          <Card style={{ cursor: "pointer", borderColor: POA.accentDim }} onClick={() => setView("m_events")}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 700, fontSize: 15, color: POA.textPrimary }}>{next.title}</div>
-                <div style={{ fontSize: 12.5, color: POA.textMuted, marginTop: 3 }}>{fmtDate(next.scheduled_at)}{next.location ? ` · ${next.location}` : ""}</div>
-              </div>
-              <ChevronRight size={16} color={POA.textMuted} />
-            </div>
-          </Card>
+      {/* Next meeting */}
+      {nextMeeting && (
+        <div style={{ background: POA.accentSoft, border: `1px solid ${POA.accentDim}`, borderRadius: 12, padding: "14px 16px", marginBottom: 14, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, cursor: "pointer" }}
+          onClick={() => setView("m_events")}>
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".12em", textTransform: "uppercase", color: POA.accent, marginBottom: 4 }}>Next meeting</div>
+            <div style={{ fontWeight: 700, fontSize: 15, color: POA.textPrimary }}>{nextMeeting.title}</div>
+            <div style={{ fontSize: 12, color: POA.textMuted, marginTop: 2 }}>{fmtDate(nextMeeting.scheduled_at)}{nextMeeting.location ? ` · ${nextMeeting.location}` : ""}</div>
+          </div>
+          <button style={{ ...PS.btn, fontSize: 12, flexShrink: 0 }}>View agenda</button>
         </div>
       )}
 
-      <SectionTitle>Quick access</SectionTitle>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 9 }}>
+      {/* Three benefit tiles */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, marginBottom: 14 }}>
         {[
-          { id: "m_call", label: "Who to Call", Icon: Phone },
-          { id: "m_ask",  label: "Ask B4C",     Icon: MessageSquare },
-          { id: "m_card", label: "My Card",      Icon: CreditCard },
-          { id: "m_benefits", label: "Benefits", Icon: Shield },
-        ].map(({ id, label, Icon }) => (
+          { id: "m_call",     label: "Who to Call",   Icon: Phone,         sub: "Contacts + legal rep" },
+          { id: "m_ask",      label: "Ask the POA",   Icon: MessageSquare, sub: "AI from your CBA" },
+          { id: "m_benefits", label: "Benefits",      Icon: Shield,        sub: "Your coverage" },
+        ].map(({ id, label, Icon, sub }) => (
           <button key={id} onClick={() => setView(id)}
-            style={{ ...PS.card, padding: "14px 15px", border: `0.5px solid ${POA.hairline}`, cursor: "pointer", textAlign: "left", display: "flex", alignItems: "center", gap: 10 }}>
-            <Icon size={18} color={POA.accent} />
-            <span style={{ fontSize: 13.5, fontWeight: 600, color: POA.textPrimary }}>{label}</span>
+            style={{ ...PS.card, padding: "14px 12px", textAlign: "center", cursor: "pointer", border: `0.5px solid ${POA.hairline}` }}>
+            <Icon size={22} color={POA.accent} style={{ marginBottom: 6 }} />
+            <div style={{ fontWeight: 700, fontSize: 13, color: POA.textPrimary, marginBottom: 2 }}>{label}</div>
+            <div style={{ fontSize: 11, color: POA.textMuted }}>{sub}</div>
           </button>
         ))}
       </div>
 
-      {/* Recent videos from the association */}
-      <RecentVideos deptId={me.department_id} />
+      {/* Calendar + Attendance side by side */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
+        {/* Mini calendar */}
+        <Card>
+          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: POA.accent, marginBottom: 10 }}>Upcoming events</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 1, marginBottom: 4 }}>
+            {DOW.map(d => <div key={d} style={{ fontSize: 8, textAlign: "center", color: POA.textMuted, fontWeight: 700, padding: "2px 0" }}>{d}</div>)}
+          </div>
+          {(() => {
+            const dim = new Date(today.getFullYear(), today.getMonth()+1, 0).getDate();
+            const startDow = new Date(today.getFullYear(), today.getMonth(), 1).getDay();
+            const cells = [];
+            for (let i = 0; i < startDow; i++) cells.push(null);
+            for (let d = 1; d <= dim; d++) cells.push(d);
+            while (cells.length % 7) cells.push(null);
+            return Array.from({ length: cells.length / 7 }, (_, w) => (
+              <div key={w} style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 1, marginBottom: 1 }}>
+                {cells.slice(w*7, w*7+7).map((d, i) => (
+                  <div key={i} style={{ height: 20, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 4, background: d === today.getDate() ? POA.accentSoft : "transparent", fontSize: 9, color: d === today.getDate() ? POA.accent : POA.textMuted, fontWeight: d === today.getDate() ? 700 : 400 }}>
+                    {d || ""}
+                  </div>
+                ))}
+              </div>
+            ));
+          })()}
+        </Card>
+
+        {/* Attendance tracker */}
+        <Card>
+          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: POA.accent, marginBottom: 8 }}>Attendance — Q{Math.ceil((today.getMonth()+1)/3)}</div>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+            <div style={{ fontSize: 12, color: POA.textMuted }}>{attCount} of {attGoal} meetings</div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: POA.accent }}>{attPct}%</div>
+          </div>
+          <div style={{ height: 7, background: POA.track, borderRadius: 4, overflow: "hidden", marginBottom: 8 }}>
+            <div style={{ height: "100%", width: `${attPct}%`, background: POA.accent, borderRadius: 4 }} />
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 4, marginBottom: 8 }}>
+            {Array.from({ length: attGoal }, (_, i) => {
+              const done = i < attCount;
+              return (
+                <div key={i} style={{ background: done ? POA.accent : POA.accentSoft, borderRadius: 6, padding: "6px 4px", textAlign: "center" }}>
+                  <CheckCircle2 size={14} color={done ? "#fff" : POA.accentDim} />
+                  <div style={{ fontSize: 8, color: done ? "#fff" : POA.textMuted, marginTop: 2 }}>Mtg {i+1}</div>
+                </div>
+              );
+            })}
+          </div>
+          {attCount >= attGoal ? (
+            <div style={{ fontSize: 11, color: POA.green, fontWeight: 700 }}>🎉 Quarter complete — raffle entry earned!</div>
+          ) : (
+            <div style={{ fontSize: 10, color: POA.textMuted }}>Attend {attGoal - attCount} more to earn a raffle entry.</div>
+          )}
+        </Card>
+      </div>
+
+      {/* Videos */}
+      {videos.length > 0 && (
+        <Card style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: POA.accent, marginBottom: 10 }}>From your association</div>
+          {videos.map(v => (
+            <div key={v.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: `0.5px solid ${POA.hairline}` }}>
+              <div style={{ width: 44, height: 32, borderRadius: 6, background: POA.accentSoft, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <Play size={16} color={POA.accent} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: POA.textPrimary }}>{v.title}</div>
+                {v.series_name && <div style={{ fontSize: 11, color: POA.textMuted }}>{v.series_name}</div>}
+              </div>
+              <button style={{ ...PS.btn, fontSize: 12, flexShrink: 0 }} onClick={() => window.open(v.vimeo_url, "_blank")}>Watch ↗</button>
+            </div>
+          ))}
+        </Card>
+      )}
+
+      {/* Quick actions */}
+      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: POA.textMuted, marginBottom: 8 }}>Quick actions</div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8 }}>
+        {[
+          { id: "m_documents",      label: "Documents",    Icon: FileText },
+          { id: "m_correspondence", label: "Messages",     Icon: Mail },
+          { id: "m_causes",         label: "Causes",       Icon: Heart },
+          { id: "m_card",           label: "My card",      Icon: CreditCard },
+        ].map(({ id, label, Icon }) => (
+          <button key={id} onClick={() => setView(id)}
+            style={{ ...PS.card, padding: "12px 8px", textAlign: "center", cursor: "pointer", border: `0.5px solid ${POA.hairline}` }}>
+            <Icon size={18} color={POA.textMuted} style={{ marginBottom: 4 }} />
+            <div style={{ fontSize: 10, color: POA.textMuted }}>{label}</div>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
