@@ -4070,7 +4070,7 @@ const ALL_TAGS = [
 
 const ALL_CATS = [...new Set(POA_IDEA_BANK.map(i => i.cat))];
 
-const BRAINSTORM_SYS = `You help a police officers' association brainstorm fundraisers. Given their goal, effort level, and what they're raising for, propose EXACTLY 6 ideas spanning a range: ~2 proven/reliable, ~2 fresh, ~2 bold/creative. Return ONLY a valid JSON array of 6 objects: {"name": string, "pitch": "one punchy sentence"}. No text outside the JSON.`;
+const BRAINSTORM_SYS = `You help a police officers' association brainstorm fundraisers. Given their goal, effort level, and cause, propose EXACTLY 6 ideas that are creative, specific, and varied — spanning ~2 proven/reliable, ~2 fresh twists, ~2 bold/unexpected. You will be given inspiration ideas as a springboard — do NOT repeat them verbatim, use them only as creative fuel to invent something original for THIS association's specific situation. AVOID anything listed as recently run. Return ONLY a valid JSON array of 6 objects: {"name": string, "pitch": "one punchy sentence"}. No text outside the JSON.`;
 
 const PLAN_SYS_POA = `You help a police officers' association plan a fundraiser. Given their event idea, return a practical plain-text plan the board can actually run: a one-line goal, a simple timeline/checklist, roles needed, promotion steps, and a realistic money target. Then the most important part — an in-depth Sponsorship Packages section: three or four headline tiers (Title/Presenting, Gold, Silver, Bronze) each with a suggested dollar amount and exactly what that sponsor gets. An a-la-carte list of individual items with suggested prices. One short ready-to-send outreach line for a local business. Keep amounts realistic. Use clear short headings and dash bullets. 450-650 words.`;
 
@@ -4158,8 +4158,11 @@ function Fundraising({ me, org }) {
   async function brainstorm() {
     if (!detail.trim()) { setErr("Tell us what you're raising for first."); return; }
     setLoading(true); setLoadingLabel("Brainstorming ideas…"); setErr(""); setIdeas([]); setOut("");
+    // shuffle and sample 12 random ideas as inspiration — different each call
+    const shuffled = [...POA_IDEA_BANK].sort(() => Math.random() - 0.5).slice(0, 12);
+    const sampleIdeas = shuffled.map(i => `${i.title}: ${i.pitch}`).join("\n");
     const recent = log.slice(0, 8).map(e => `${e.name}${e.event_when ? ` (${e.event_when})` : ""}`).join("; ") || "none yet";
-    const user = `Association: ${org?.name || "POA"}\nGoal: ${goalAmt || "not specified"}\nEffort level: ${effortLevel}\nTarget date: ${targetDate || "flexible"}\nWhat they're raising for: ${detail}\nRecently run (avoid repeating): ${recent}`;
+    const user = `Association: ${org?.name || "POA"}\nGoal: ${goalAmt || "not specified"}\nEffort level: ${effortLevel}\nTarget date: ${targetDate || "flexible"}\nWhat they're raising for: ${detail}\nRecently run — do NOT suggest these again: ${recent}\nIdea inspiration (use as creative springboard, do NOT copy verbatim — invent fresh variations): \n${sampleIdeas}`;
     try {
       const raw = await callClaudeAI(BRAINSTORM_SYS, user);
       const clean = raw.replace(/```json|```/g, "").trim();
