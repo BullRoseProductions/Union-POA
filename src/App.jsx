@@ -1538,33 +1538,145 @@ function TrustedPartners() {
 }
 
 function MyValue({ me }) {
-  const items = [
-    { label: "Legal defense cases supported", n: 0, unit: "cases", color: POA.accent },
-    { label: "Legal defense fund used", n: "$0", unit: "", color: POA.accent },
-    { label: "Negotiated raise (CBA)", n: "+$1,850", unit: "/yr", color: POA.green },
-    { label: "Meetings attended this year", n: 0, unit: "of 4", color: POA.amber },
-    { label: "Benefits accessed", n: 2, unit: "programs", color: POA.green },
-  ];
+  const [items, setItems]       = useState(null);
+  const [adding, setAdding]     = useState(false);
+  const [editing, setEditing]   = useState(null);
+  const [err, setErr]           = useState("");
+  const [busy, setBusy]         = useState(false);
+  const [f, setF]               = useState({ label: "", value: "", icon: "" });
+  const manage                  = canManage(me.access);
+
+  async function load() {
+    try { setItems(await listValueItems()); }
+    catch(e) { setErr(e.message); }
+  }
+  useEffect(() => { load(); }, []);
+
+  function startEdit(item) {
+    setF({ label: item.label, value: item.value, icon: item.icon || "" });
+    setEditing(item); setAdding(false); setErr("");
+  }
+  function resetForm() {
+    setEditing(null); setAdding(false); setErr("");
+    setF({ label: "", value: "", icon: "" });
+  }
+
+  async function doSave() {
+    if (!f.label.trim() || !f.value.trim()) { setErr("Label and value are required."); return; }
+    setBusy(true); setErr("");
+    try {
+      const row = {
+        department_id: me.department_id,
+        label: f.label.trim(),
+        value: f.value.trim(),
+        icon: f.icon.trim() || null,
+        sort: editing ? editing.sort : (items?.length || 0) + 1,
+      };
+      if (editing) await updateValueItem(editing.id, row);
+      else await createValueItem(row);
+      resetForm(); await load();
+    } catch(e) { setErr(e.message); }
+    finally { setBusy(false); }
+  }
+
+  async function doRemove(id) {
+    if (!confirm("Remove this value item?")) return;
+    try { await deactivateValueItem(id); await load(); }
+    catch(e) { setErr(e.message); }
+  }
+
   return (
     <div>
-      <PageTitle sub="Your dues at work — countable and honest">My Value</PageTitle>
-      <div style={{ fontSize: 13, color: POA.textMuted, marginBottom: 18, lineHeight: 1.6 }}>
-        What your membership has delivered. These numbers come from your association's own records — never fabricated.
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 18 }}>
-        {items.map(item => (
-          <div key={item.label} style={{ ...PS.card, padding: "14px 16px" }}>
-            <div style={{ fontFamily: "inherit", fontWeight: 700, fontSize: 22, color: item.color, lineHeight: 1 }}>{item.n}<span style={{ fontSize: 13, fontWeight: 400, color: POA.textMuted }}>{item.unit}</span></div>
-            <div style={{ fontSize: 11, color: POA.textMuted, marginTop: 6, lineHeight: 1.4 }}>{item.label}</div>
-          </div>
-        ))}
-      </div>
-      <Card>
-        <div style={{ fontSize: 13, color: POA.textSecondary, lineHeight: 1.65 }}>
-          Your association negotiates your contract, defends your rights, and fights for your family.
-          This screen will populate as your board records activity. <span style={{ color: POA.accent, fontWeight: 600 }}>Proof, not promises.</span>
+      <PageTitle sub="Your dues at work — defined by your board, honest and countable">My Value</PageTitle>
+      <Card style={{ marginBottom: 18, borderColor: POA.accentDim }}>
+        <div style={{ fontSize: 13.5, color: POA.textSecondary, lineHeight: 1.65 }}>
+          What your membership delivers. These numbers come from your association's own records and are set by your board — never fabricated.
         </div>
       </Card>
+      <ErrBox msg={err} />
+
+      {!items ? <Spinner /> : (
+        <>
+          {items.length === 0 && !adding && (
+            <Card>
+              <div style={{ color: POA.textMuted, fontSize: 13.5 }}>
+                {manage
+                  ? "No value items yet. Add what this association delivers for members."
+                  : "Your board hasn't added value items yet. Check back soon."}
+              </div>
+            </Card>
+          )}
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
+            {items.map(item => (
+              <div key={item.id} style={{ ...PS.card, padding: "16px 16px", position: "relative" }}>
+                {item.icon && (
+                  <div style={{ fontSize: 24, marginBottom: 8 }}>{item.icon}</div>
+                )}
+                <div style={{ fontFamily: "inherit", fontWeight: 700, fontSize: 20, color: POA.accent, lineHeight: 1.1, marginBottom: 6 }}>
+                  {item.value}
+                </div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: POA.textPrimary, marginBottom: 2 }}>
+                  {item.label}
+                </div>
+                {manage && (
+                  <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
+                    <button style={{ ...PS.btn, padding: "4px 8px", fontSize: 11 }}
+                      onClick={() => startEdit(item)}>
+                      <Pencil size={10} /> Edit
+                    </button>
+                    <button style={{ ...PS.btn, padding: "4px 8px", fontSize: 11, color: POA.red }}
+                      onClick={() => doRemove(item.id)}>
+                      Remove
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {(adding || editing) && (
+            <Card style={{ marginBottom: 14 }}>
+              <SectionTitle>{editing ? "Edit item" : "New value item"}</SectionTitle>
+              <div style={{ marginBottom: 10 }}>
+                <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Icon (emoji, optional)</div>
+                <input value={f.icon} onChange={e => setF({ ...f, icon: e.target.value })}
+                  style={{ ...PS.input, maxWidth: 80 }} placeholder="⚖️" />
+              </div>
+              <div style={{ marginBottom: 10 }}>
+                <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>
+                  Value — the number or stat
+                </div>
+                <input value={f.value} onChange={e => setF({ ...f, value: e.target.value })}
+                  style={PS.input} placeholder="e.g. $500K · 3 cases · +$1,850/yr" />
+              </div>
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>
+                  Label — what it means
+                </div>
+                <input value={f.label} onChange={e => setF({ ...f, label: e.target.value })}
+                  style={PS.input} placeholder="e.g. Legal defense coverage" />
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button style={PS.btnPrimary} disabled={busy} onClick={doSave}>
+                  {busy ? "Saving…" : editing ? "Save changes" : "Add item"}
+                </button>
+                <button style={PS.btn} onClick={resetForm}>Cancel</button>
+              </div>
+              <div style={{ fontSize: 11.5, color: POA.textMuted, marginTop: 8, fontStyle: "italic" }}>
+                Only put what's true and verifiable. Proof, not promises.
+              </div>
+            </Card>
+          )}
+
+          {manage && !adding && !editing && (
+            <button style={{ ...PS.btn, width: "100%", justifyContent: "center" }}
+              onClick={() => { setAdding(true); setEditing(null); }}>
+              <Plus size={13} /> Add value item
+            </button>
+          )}
+        </>
+      )}
     </div>
   );
 }
@@ -2119,6 +2231,58 @@ async function archiveBoardPosition(id) {
   const { error } = await supabase
     .from("board_positions").update({ status: "archived" }).eq("id", id);
   if (error) throw error;
+}
+async function listValueItems() {
+  const { data, error } = await supabase
+    .from("value_items")
+    .select("*")
+    .eq("active", true)
+    .order("sort")
+    .order("created_at");
+  if (error) throw error;
+  return data || [];
+}
+async function createValueItem(row) {
+  const { data, error } = await supabase
+    .from("value_items").insert(row).select().single();
+  if (error) throw error;
+  return data;
+}
+async function updateValueItem(id, patch) {
+  const { data, error } = await supabase
+    .from("value_items").update(patch).eq("id", id).select().single();
+  if (error) throw error;
+  return data;
+}
+async function deactivateValueItem(id) {
+  const { error } = await supabase
+    .from("value_items").update({ active: false }).eq("id", id);
+  if (error) throw error;
+}
+async function getLedgerNarrative(start, end) {
+  const { data, error } = await supabase
+    .from("ledger_narratives")
+    .select("*")
+    .eq("period_start", start)
+    .eq("period_end", end)
+    .single();
+  if (error && error.code !== "PGRST116") throw error;
+  return data || null;
+}
+async function saveLedgerNarrative(deptId, start, end, narrative, memberId) {
+  const { data, error } = await supabase
+    .from("ledger_narratives")
+    .upsert({
+      department_id: deptId,
+      period_start: start,
+      period_end: end,
+      narrative,
+      filed_by: memberId,
+      filed_at: new Date().toISOString(),
+    }, { onConflict: "department_id,period_start,period_end" })
+    .select().single();
+  if (error) throw error;
+  return data;
 }
 async function listVideos() {
   const { data, error } = await supabase.from("association_videos")
@@ -3162,8 +3326,9 @@ function ValueLedger({ me }) {
   const [custom, setCustom]     = useState({ start: "", end: "" });
   const [showCustom, setShowCustom] = useState(false);
   const [data, setData]         = useState(null);
-  const [narrative, setNarrative] = useState("");
+  const [narrative, setNarrative]       = useState("");
   const [savedNarrative, setSavedNarrative] = useState("");
+  const [narrativeRecord, setNarrativeRecord] = useState(null);
   const [editingNarrative, setEditingNarrative] = useState(false);
   const [aiBusy, setAiBusy]     = useState(false);
   const [busy, setBusy]         = useState(false);
@@ -3199,21 +3364,22 @@ function ValueLedger({ me }) {
 
   async function saveNarrative() {
     setBusy(true);
-    // For now save to localStorage — will move to DB in next iteration
-    const key = `narrative_${activeStart}_${activeEnd}`;
-    localStorage.setItem(key, narrative);
-    setSavedNarrative(narrative);
-    setEditingNarrative(false);
-    setBusy(false);
+    try {
+      const rec = await saveLedgerNarrative(
+        me.department_id, activeStart, activeEnd, narrative, me.id
+      );
+      setSavedNarrative(narrative); setNarrativeRecord(rec); setEditingNarrative(false);
+    } catch(e) { setErr(e.message); }
+    finally { setBusy(false); }
   }
 
   // Load saved narrative when period changes
   useEffect(() => {
-    const key = `narrative_${activeStart}_${activeEnd}`;
-    const saved = localStorage.getItem(key) || "";
-    setSavedNarrative(saved);
-    setNarrative(saved);
-    setEditingNarrative(false);
+    setSavedNarrative(""); setNarrative(""); setNarrativeRecord(null); setEditingNarrative(false);
+    getLedgerNarrative(activeStart, activeEnd)
+      .then(rec => {
+        if (rec) { setSavedNarrative(rec.narrative); setNarrative(rec.narrative); setNarrativeRecord(rec); }
+      }).catch(() => null);
   }, [activeStart, activeEnd]);
 
   const n = (val) => val != null ? val : "—";
