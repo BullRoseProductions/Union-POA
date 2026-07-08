@@ -1,3 +1,4 @@
+// build-kick
 import React, { useState, useEffect, useRef } from "react";
 import {
   LayoutDashboard, Phone, MessageSquare, Handshake, TrendingUp, Shield,
