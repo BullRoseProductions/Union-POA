@@ -4076,6 +4076,39 @@ const PLAN_SYS_POA = `You help a police officers' association plan a fundraiser.
 
 const EXTRACT_SYS = `You convert a police officers' association fundraiser plan into trackable work. Respond with ONLY one valid JSON object, no markdown, no code fences. Schema: {"action_items":[{"task":string,"suggested_owner":string|null,"suggested_due_date":"YYYY-MM-DD"|null}],"calendar_events":[{"title":string,"date":"YYYY-MM-DD"}]}. DATES: resolve every relative timing into a real YYYY-MM-DD between today and the target date. calendar_events must be ONLY the 3-5 most important dates. NEVER invent an owner — leave null for a human to fill in. Return ONLY the JSON object.`;
 
+function FundraisingPlanDisplay({ text }) {
+  if (!text) return null;
+  const lines = text.split("\n");
+  return (
+    <div style={{ fontSize: 13.5, color: POA.textSecondary, lineHeight: 1.8 }}>
+      {lines.map((line, i) => {
+        const trimmed = line.trim();
+        if (!trimmed) return <div key={i} style={{ height: 10 }} />;
+        // Main headers (all caps or ends with colon and short)
+        if (/^[A-Z][A-Z\s&\/\-]+:?\s*$/.test(trimmed) || (trimmed.endsWith(":") && trimmed.length < 50 && !trimmed.startsWith("-"))) {
+          return <div key={i} style={{ fontFamily: "inherit", fontWeight: 700, fontSize: 14, color: POA.textPrimary, marginTop: 16, marginBottom: 4, borderBottom: `0.5px solid ${POA.hairline}`, paddingBottom: 4 }}>{trimmed}</div>;
+        }
+        // Bullet points
+        if (trimmed.startsWith("- ") || trimmed.startsWith("• ")) {
+          return <div key={i} style={{ display: "flex", gap: 8, marginBottom: 3, paddingLeft: 8 }}>
+            <span style={{ color: POA.accent, flexShrink: 0, marginTop: 1 }}>·</span>
+            <span>{trimmed.slice(2)}</span>
+          </div>;
+        }
+        // Tier headers (Title, Gold, Silver, Bronze, Presenting)
+        if (/^(title|gold|silver|bronze|presenting|platinum|diamond)/i.test(trimmed)) {
+          return <div key={i} style={{ fontWeight: 700, fontSize: 13.5, color: POA.accentBright, marginTop: 10, marginBottom: 2 }}>{trimmed}</div>;
+        }
+        // Dollar amounts on their own line
+        if (/^\$[\d,]+/.test(trimmed)) {
+          return <div key={i} style={{ fontWeight: 700, color: POA.green, fontSize: 14, marginBottom: 4 }}>{trimmed}</div>;
+        }
+        return <div key={i} style={{ marginBottom: 2 }}>{trimmed}</div>;
+      })}
+    </div>
+  );
+}
+
 function Fundraising({ me, org }) {
   const today = new Date();
 
@@ -4365,25 +4398,34 @@ function Fundraising({ me, org }) {
             </div>
             {out && (
               <>
-                <div style={{ background: POA.sidebar, border: `0.5px solid ${POA.hairline}`, borderRadius: 10, padding: "14px 16px", fontSize: 13.5, color: POA.textSecondary, lineHeight: 1.75, whiteSpace: "pre-wrap", maxHeight: 420, overflowY: "auto", marginBottom: 14 }}>
-                  {out}
+                <div style={{ background: POA.sidebar, border: `0.5px solid ${POA.hairline}`, borderRadius: 12, padding: "18px 20px", marginBottom: 14, maxHeight: 520, overflowY: "auto" }}>
+                  <FundraisingPlanDisplay text={out} />
                 </div>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
                   <div style={{ flex: 1, minWidth: 180 }}>
-                    <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Save as</div>
+                    <div style={{ fontSize: 11, color: POA.textMuted, marginBottom: 4 }}>Save as</div>
                     <input value={saveTitle} onChange={e => setSaveTitle(e.target.value)} style={PS.input} placeholder="Draft title" />
                   </div>
                   <button style={{ ...PS.btn, alignSelf: "flex-end" }} disabled={saving || !saveTitle.trim()} onClick={doSaveDraft}>
                     <FileText size={13} /> {saving ? "Saving…" : "Save draft"}
                   </button>
                 </div>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <button style={{ ...PS.btnPrimary, opacity: operationalizing ? 0.7 : 1 }}
+
+                {/* Prominent operationalize button */}
+                <div style={{ background: "rgba(155,107,230,.08)", border: `1px solid ${POA.accentDim}`, borderRadius: 12, padding: "14px 16px", marginBottom: 12 }}>
+                  <div style={{ fontWeight: 700, fontSize: 14, color: POA.textPrimary, marginBottom: 4 }}>Ready to turn this into real work?</div>
+                  <div style={{ fontSize: 13, color: POA.textMuted, marginBottom: 12, lineHeight: 1.55 }}>
+                    Extract action items with owners and due dates, plus calendar milestones — review them before anything gets added to the app.
+                  </div>
+                  <button style={{ ...PS.btnPrimary, width: "100%" }}
                     disabled={operationalizing} onClick={extractPlanWork}>
                     {operationalizing
-                      ? <><Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> Turning plan into tasks…</>
-                      : <><ClipboardList size={14} /> Create action items + calendar</>}
+                      ? <><Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> Extracting tasks and milestones…</>
+                      : <><ClipboardList size={14} /> Extract action items + calendar milestones</>}
                   </button>
+                </div>
+
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <button style={PS.btn} onClick={() => setPhase("ideas")}><ArrowLeft size={13} /> Back to ideas</button>
                   <button style={PS.btn} onClick={startOver}>Start over</button>
                 </div>
