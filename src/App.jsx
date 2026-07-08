@@ -5046,7 +5046,7 @@ function BoardDocuments({ me }) {
           notes: f.notes.trim() || null,
         });
       } else {
-        await uploadDocument(f.file, {
+        const data = await uploadDocument(f.file, {
           department_id: me.department_id,
           name: f.name.trim(),
           category: f.category,
@@ -5054,6 +5054,19 @@ function BoardDocuments({ me }) {
           notes: f.notes.trim() || null,
           uploaded_by: me.id,
         });
+        // for text files, extract content immediately
+        if (f.file && (f.file.type === 'text/plain' || f.file.name.endsWith('.md') || f.file.name.endsWith('.txt'))) {
+          const text = await f.file.text();
+          fetch('/api/extract-document', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              text, documentId: data.id,
+              supabaseUrl: import.meta.env.VITE_SUPABASE_URL,
+              supabaseKey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+            }),
+          }).catch(() => null); // fire and forget
+        }
       }
       resetForm(); await load();
     } catch(e) { setErr(e.message); }
