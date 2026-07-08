@@ -3333,6 +3333,7 @@ function ValueLedger({ me }) {
   const [aiBusy, setAiBusy]     = useState(false);
   const [busy, setBusy]         = useState(false);
   const [err, setErr]           = useState("");
+  const [ledgerTab, setLedgerTab] = useState("ledger");
 
   const activeStart = showCustom && custom.start ? custom.start : fmt(PERIODS[period].start);
   const activeEnd   = showCustom && custom.end   ? custom.end   : fmt(PERIODS[period].end);
@@ -3413,6 +3414,16 @@ function ValueLedger({ me }) {
     <div>
       <PageTitle sub="What the association delivered — countable and honest">Value Ledger</PageTitle>
 
+      <div style={{ display: "flex", gap: 6, marginBottom: 20 }}>
+        {[["ledger","Ledger"],["items","Value Items"]].map(([id, label]) => (
+          <button key={id} onClick={() => setLedgerTab(id)}
+            style={{ ...PS.btn, background: ledgerTab === id ? POA.accent : POA.btnBg, color: ledgerTab === id ? "#fff" : POA.btnText, border: ledgerTab === id ? "none" : `0.5px solid ${POA.btnBorder}` }}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {ledgerTab === "ledger" && (<div>
       {/* Period selector */}
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 20 }}>
         {PERIODS.map((p, i) => (
@@ -3514,6 +3525,9 @@ function ValueLedger({ me }) {
           </div>
         </>
       )}
+      </div>)}
+
+      {ledgerTab === "items" && <MyValue me={me} />}
     </div>
   );
 }
