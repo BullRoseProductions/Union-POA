@@ -1716,18 +1716,6 @@ function BoardContinuity({ me }) {
   );
 }
 
-async function listStoreItems() {
-  const { data, error } = await supabase.from("store_items")
-    .select("*").order("sort").order("created_at");
-  if (error) throw error;
-  return data || [];
-}
-async function listSpaceBookings() {
-  const { data, error } = await supabase.from("space_bookings")
-    .select("*, members(full_name)").order("booking_date").order("start_time");
-  if (error) throw error;
-  return data || [];
-}
 async function getOrgFeatures() {
   const { data, error } = await supabase.from("org_features").select("*");
   if (error) throw error;
@@ -1926,9 +1914,506 @@ async function removeVideo(id) {
   const { error } = await supabase.from("association_videos").delete().eq("id", id);
   if (error) throw error;
 }
+async function listStoreItems() {
+  const { data, error } = await supabase.from("store_items")
+    .select("*").eq("status", "active")
+    .order("sort").order("created_at", { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+async function createStoreItem(row) {
+  const { data, error } = await supabase.from("store_items")
+    .insert(row).select().single();
+  if (error) throw error;
+  return data;
+}
+async function updateStoreItem(id, patch) {
+  const { data, error } = await supabase.from("store_items")
+    .update(patch).eq("id", id).select().single();
+  if (error) throw error;
+  return data;
+}
+async function archiveStoreItem(id) {
+  const { error } = await supabase.from("store_items")
+    .update({ status: "archived" }).eq("id", id);
+  if (error) throw error;
+}
+async function listSpaceBookings() {
+  const { data, error } = await supabase.from("space_bookings")
+    .select("*, members(full_name, email)")
+    .order("booking_date", { ascending: true })
+    .order("start_time", { ascending: true });
+  if (error) throw error;
+  return data || [];
+}
+async function createSpaceBooking(row) {
+  const { data, error } = await supabase.from("space_bookings")
+    .insert(row).select().single();
+  if (error) throw error;
+  return data;
+}
+async function updateBookingStatus(id, status) {
+  const { data, error } = await supabase.rpc("update_booking_status", {
+    p_booking: id, p_status: status,
+  });
+  if (error) throw error;
+  return data;
+}
+async function uploadStoreImage(file, itemName) {
+  const ext = file.name.split(".").pop();
+  const path = `${Date.now()}-${itemName.replace(/\s+/g, "-").toLowerCase()}.${ext}`;
+  const { data, error } = await supabase.storage
+    .from("store-images").upload(path, file, { upsert: true });
+  if (error) throw error;
+  const { data: pub } = supabase.storage.from("store-images").getPublicUrl(path);
+  return pub.publicUrl;
+}
 
-function POABuilding({ me }) {
-  return <ComingSoon label="POA Building — Store & Space" />;
+function POABuilding({ me, org }) {
+  const [tab, setTab]           = useState("store");
+  const [items, setItems]       = useState(null);
+  const [bookings, setBookings] = useState(null);
+  const [orgSettings, setOrgSettings] = useState({});
+  const [err, setErr]           = useState("");
+  const [busy, setBusy]         = useState(false);
+
+  // store state
+  const [showAdd, setShowAdd]   = useState(false);
+  const [editing, setEditing]   = useState(null);
+  const [uploadBusy, setUploadBusy] = useState(false);
+  const [f, setF] = useState({
+    name: "", description: "", price: "", category: "",
+    order_url: "", image_url: "", image_file: null, image_mode: "url",
+  });
+
+  // booking state
+  const [showBook, setShowBook] = useState(false);
+  const [bf, setBf] = useState({
+    title: "", booking_date: "", start_time: "", end_time: "", notes: "",
+  });
+
+  const spaceName = orgSettings.event_space_name || "Event Space";
+  const manage = canManage(me.access);
+
+  async function load() {
+    const [its, bks, sets] = await Promise.all([
+      listStoreItems(),
+      listSpaceBookings(),
+      supabase.from("org_settings").select("*")
+        .eq("department_id", me.department_id)
+        .then(({ data }) => {
+          const m = {};
+          (data || []).forEach(r => { m[r.key] = r.value; });
+          return m;
+        }),
+    ]);
+    setItems(its); setBookings(bks); setOrgSettings(sets);
+  }
+  useEffect(() => { load(); }, []);
+
+  function resetForm() {
+    setF({ name: "", description: "", price: "", category: "", order_url: "", image_url: "", image_file: null, image_mode: "url" });
+    setEditing(null); setShowAdd(false); setErr("");
+  }
+
+  async function doSaveItem() {
+    if (!f.name.trim()) { setErr("Name is required."); return; }
+    setBusy(true); setErr("");
+    try {
+      let imageUrl = f.image_url.trim() || null;
+      if (f.image_mode === "upload" && f.image_file) {
+        setUploadBusy(true);
+        imageUrl = await uploadStoreImage(f.image_file, f.name);
+        setUploadBusy(false);
+      }
+      const row = {
+        department_id: me.department_id,
+        name: f.name.trim(),
+        description: f.description.trim() || null,
+        price: f.price.trim() || null,
+        category: f.category.trim() || null,
+        order_url: f.order_url.trim() || null,
+        image_url: imageUrl,
+      };
+      if (editing) {
+        await updateStoreItem(editing.id, row);
+      } else {
+        await createStoreItem(row);
+      }
+      resetForm();
+      await load();
+    } catch(e) { setErr(e.message); setUploadBusy(false); }
+    finally { setBusy(false); }
+  }
+
+  async function doArchive(id) {
+    if (!confirm("Remove this item from the store?")) return;
+    try { await archiveStoreItem(id); await load(); }
+    catch(e) { setErr(e.message); }
+  }
+
+  function startEdit(item) {
+    setF({
+      name: item.name, description: item.description || "",
+      price: item.price || "", category: item.category || "",
+      order_url: item.order_url || "", image_url: item.image_url || "",
+      image_file: null, image_mode: "url",
+    });
+    setEditing(item); setShowAdd(true);
+  }
+
+  async function doBook() {
+    if (!bf.title.trim() || !bf.booking_date) { setErr("Title and date are required."); return; }
+    setBusy(true); setErr("");
+    try {
+      await createSpaceBooking({
+        department_id: me.department_id,
+        title: bf.title.trim(),
+        booked_by: me.id,
+        booking_date: bf.booking_date,
+        start_time: bf.start_time || null,
+        end_time: bf.end_time || null,
+        notes: bf.notes.trim() || null,
+        status: manage ? "confirmed" : "pending",
+      });
+      setBf({ title: "", booking_date: "", start_time: "", end_time: "", notes: "" });
+      setShowBook(false);
+      await load();
+    } catch(e) { setErr(e.message); }
+    finally { setBusy(false); }
+  }
+
+  async function doUpdateStatus(id, status) {
+    try { await updateBookingStatus(id, status); await load(); }
+    catch(e) { setErr(e.message); }
+  }
+
+  const today = new Date().toISOString().split("T")[0];
+  const upcoming = (bookings || []).filter(b => b.booking_date >= today && b.status !== "cancelled");
+  const past     = (bookings || []).filter(b => b.booking_date < today || b.status === "cancelled");
+
+  const statusColor = { confirmed: POA.green, pending: POA.amber, cancelled: POA.red };
+  const statusBg    = { confirmed: "rgba(70,199,147,.14)", pending: "rgba(240,180,74,.14)", cancelled: "rgba(239,106,100,.14)" };
+
+  const TABS = [
+    { id: "store", label: "Store" },
+    { id: "space", label: spaceName },
+  ];
+
+  // group store items by category
+  const grouped = {};
+  (items || []).forEach(item => {
+    const cat = item.category || "General";
+    (grouped[cat] = grouped[cat] || []).push(item);
+  });
+
+  return (
+    <div>
+      <PageTitle sub={`Association store and ${spaceName.toLowerCase()} management`}>
+        POA Building
+      </PageTitle>
+
+      <div style={{ display: "flex", gap: 6, marginBottom: 20 }}>
+        {TABS.map(t => (
+          <button key={t.id} onClick={() => { setTab(t.id); setErr(""); }}
+            style={{ ...PS.btn, background: tab === t.id ? POA.accent : POA.btnBg, color: tab === t.id ? "#fff" : POA.btnText, border: tab === t.id ? "none" : `0.5px solid ${POA.btnBorder}` }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+      <ErrBox msg={err} />
+
+      {/* ── STORE TAB ── */}
+      {tab === "store" && (
+        <div>
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 16 }}>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 16, color: POA.textPrimary }}>Association Store</div>
+              <div style={{ fontSize: 13, color: POA.textMuted, marginTop: 2 }}>
+                Browse what's available. Orders go through the association — B4C shows it, you handle it.
+              </div>
+            </div>
+            {manage && (
+              <button style={PS.btn} onClick={() => { setShowAdd(!showAdd); setEditing(null); setErr(""); }}>
+                <Plus size={13} /> Add item
+              </button>
+            )}
+          </div>
+
+          {/* Add / Edit form */}
+          {showAdd && (
+            <Card style={{ marginBottom: 18 }}>
+              <SectionTitle>{editing ? "Edit item" : "New item"}</SectionTitle>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Item name</div>
+                  <input value={f.name} onChange={e => setF({ ...f, name: e.target.value })}
+                    style={PS.input} placeholder="e.g. Association Polo" />
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Price</div>
+                  <input value={f.price} onChange={e => setF({ ...f, price: e.target.value })}
+                    style={PS.input} placeholder="$42" />
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Category</div>
+                  <input value={f.category} onChange={e => setF({ ...f, category: e.target.value })}
+                    style={PS.input} placeholder="e.g. Apparel" />
+                </div>
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Description</div>
+                  <textarea value={f.description} onChange={e => setF({ ...f, description: e.target.value })}
+                    style={{ ...PS.textarea, minHeight: 70 }} placeholder="Sizes, material, details…" />
+                </div>
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Order link (optional)</div>
+                  <input value={f.order_url} onChange={e => setF({ ...f, order_url: e.target.value })}
+                    style={PS.input} placeholder="https://… (links out to your store)" />
+                </div>
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 8 }}>Item image</div>
+                  <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+                    {["url", "upload"].map(mode => (
+                      <button key={mode} onClick={() => setF({ ...f, image_mode: mode, image_url: "", image_file: null })}
+                        style={{ ...PS.btn, background: f.image_mode === mode ? POA.accent : POA.btnBg, color: f.image_mode === mode ? "#fff" : POA.btnText, border: f.image_mode === mode ? "none" : `0.5px solid ${POA.btnBorder}` }}>
+                        {mode === "url" ? "Paste a link" : "Upload a photo"}
+                      </button>
+                    ))}
+                  </div>
+                  {f.image_mode === "url" ? (
+                    <input value={f.image_url} onChange={e => setF({ ...f, image_url: e.target.value })}
+                      style={PS.input} placeholder="https://… (Google Photos, Dropbox, your website)" />
+                  ) : (
+                    <div>
+                      <input type="file" accept="image/*"
+                        onChange={e => setF({ ...f, image_file: e.target.files[0] || null })}
+                        style={{ ...PS.input, padding: "8px 12px", cursor: "pointer" }} />
+                      {f.image_file && (
+                        <div style={{ fontSize: 12, color: POA.green, marginTop: 6 }}>
+                          ✓ {f.image_file.name} ready to upload
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {(f.image_url || f.image_file) && f.image_mode === "url" && f.image_url && (
+                    <img src={f.image_url} alt="preview"
+                      style={{ marginTop: 10, height: 80, borderRadius: 8, objectFit: "cover" }}
+                      onError={e => { e.target.style.display = "none"; }} />
+                  )}
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button style={PS.btnPrimary} disabled={busy || uploadBusy} onClick={doSaveItem}>
+                  {uploadBusy ? "Uploading…" : busy ? "Saving…" : editing ? "Save changes" : "Add to store"}
+                </button>
+                <button style={PS.btn} onClick={resetForm}>Cancel</button>
+                {editing && (
+                  <button style={{ ...PS.btn, color: POA.red, marginLeft: "auto" }} onClick={() => doArchive(editing.id)}>
+                    Remove from store
+                  </button>
+                )}
+              </div>
+              <div style={{ fontSize: 11.5, color: POA.textMuted, marginTop: 8, fontStyle: "italic" }}>
+                Items are data — every association adds their own. Nothing is hardcoded.
+              </div>
+            </Card>
+          )}
+
+          {!items ? <Spinner /> : items.length === 0 && !showAdd ? (
+            <Card>
+              <div style={{ color: POA.textMuted, fontSize: 13.5 }}>
+                No items in the store yet.
+                {manage ? " Add your first item above." : " Check back soon."}
+              </div>
+            </Card>
+          ) : (
+            Object.entries(grouped).map(([cat, catItems]) => (
+              <div key={cat}>
+                <SectionTitle>{cat}</SectionTitle>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 6 }}>
+                  {catItems.map(item => (
+                    <div key={item.id} style={{ ...PS.card, padding: "14px 15px", display: "flex", flexDirection: "column" }}>
+                      {item.image_url && (
+                        <img src={item.image_url} alt={item.name}
+                          style={{ width: "100%", height: 120, objectFit: "cover", borderRadius: 9, marginBottom: 10 }}
+                          onError={e => { e.target.style.display = "none"; }} />
+                      )}
+                      {item.category && (
+                        <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: POA.accent, marginBottom: 5 }}>
+                          {item.category}
+                        </div>
+                      )}
+                      <div style={{ fontWeight: 700, fontSize: 14, color: POA.textPrimary, marginBottom: 4 }}>{item.name}</div>
+                      {item.description && (
+                        <div style={{ fontSize: 12, color: POA.textMuted, lineHeight: 1.45, marginBottom: 8, flex: 1 }}>{item.description}</div>
+                      )}
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "auto" }}>
+                        {item.price && <div style={{ fontWeight: 700, color: POA.accent, fontSize: 16 }}>{item.price}</div>}
+                        <div style={{ display: "flex", gap: 6, marginLeft: "auto" }}>
+                          {item.order_url && (
+                            <a href={item.order_url} target="_blank" rel="noreferrer"
+                              style={{ ...PS.btn, textDecoration: "none", fontSize: 12 }}>
+                              Order ↗
+                            </a>
+                          )}
+                          {manage && (
+                            <button style={{ ...PS.btn, fontSize: 12 }} onClick={() => startEdit(item)}>
+                              <Pencil size={11} />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      {!item.order_url && (
+                        <div style={{ fontSize: 11, color: POA.textMuted, marginTop: 6, fontStyle: "italic" }}>
+                          Available in store
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {/* ── EVENT SPACE TAB ── */}
+      {tab === "space" && (
+        <div>
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 16 }}>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 16, color: POA.textPrimary }}>{spaceName}</div>
+              <div style={{ fontSize: 13, color: POA.textMuted, marginTop: 2 }}>
+                Book the space for meetings, events, or association use.
+                {!manage ? " Your request goes to the board for confirmation." : ""}
+              </div>
+            </div>
+            <button style={PS.btnPrimary} onClick={() => { setShowBook(!showBook); setErr(""); }}>
+              <Plus size={13} /> Book the space
+            </button>
+          </div>
+
+          {/* Booking form */}
+          {showBook && (
+            <Card style={{ marginBottom: 18 }}>
+              <SectionTitle>New booking request</SectionTitle>
+              <div style={{ marginBottom: 10 }}>
+                <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>What's it for?</div>
+                <input value={bf.title} onChange={e => setBf({ ...bf, title: e.target.value })}
+                  style={PS.input} placeholder="e.g. District 4 meeting, training session, social event" />
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 10 }}>
+                <div>
+                  <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Date</div>
+                  <input type="date" value={bf.booking_date} min={today}
+                    onChange={e => setBf({ ...bf, booking_date: e.target.value })} style={PS.input} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Start time</div>
+                  <input type="time" value={bf.start_time}
+                    onChange={e => setBf({ ...bf, start_time: e.target.value })} style={PS.input} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>End time</div>
+                  <input type="time" value={bf.end_time}
+                    onChange={e => setBf({ ...bf, end_time: e.target.value })} style={PS.input} />
+                </div>
+              </div>
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Notes (optional)</div>
+                <textarea value={bf.notes} onChange={e => setBf({ ...bf, notes: e.target.value })}
+                  style={{ ...PS.textarea, minHeight: 70 }} placeholder="Setup needs, number of people, equipment…" />
+              </div>
+              {!manage && (
+                <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 12, fontStyle: "italic" }}>
+                  Your request will be reviewed by the board. You'll see the status update here.
+                </div>
+              )}
+              <div style={{ display: "flex", gap: 8 }}>
+                <button style={PS.btnPrimary} disabled={busy} onClick={doBook}>
+                  {busy ? "Submitting…" : manage ? "Confirm booking" : "Submit request"}
+                </button>
+                <button style={PS.btn} onClick={() => { setShowBook(false); setErr(""); }}>Cancel</button>
+              </div>
+            </Card>
+          )}
+
+          {/* Upcoming bookings */}
+          <SectionTitle>Upcoming</SectionTitle>
+          {!bookings ? <Spinner /> : upcoming.length === 0 ? (
+            <Card><div style={{ color: POA.textMuted, fontSize: 13.5 }}>No upcoming bookings. The space is open.</div></Card>
+          ) : upcoming.map(b => (
+            <Card key={b.id} style={{ marginBottom: 10, borderLeft: `3px solid ${statusColor[b.status] || POA.accent}`, borderRadius: "0 14px 14px 0" }}>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 700, fontSize: 14.5, color: POA.textPrimary, marginBottom: 3 }}>{b.title}</div>
+                  <div style={{ fontSize: 12.5, color: POA.textMuted }}>
+                    {fmtDate(b.booking_date)}
+                    {b.start_time ? ` · ${b.start_time.slice(0,5)}` : ""}
+                    {b.end_time ? ` – ${b.end_time.slice(0,5)}` : ""}
+                  </div>
+                  <div style={{ fontSize: 12, color: POA.textMuted, marginTop: 2 }}>
+                    Requested by {b.members?.full_name || "Member"}
+                  </div>
+                  {b.notes && <div style={{ fontSize: 12, color: POA.textMuted, marginTop: 4, fontStyle: "italic" }}>{b.notes}</div>}
+                </div>
+                <span style={{ fontSize: 10, fontWeight: 700, padding: "3px 9px", borderRadius: 999, background: statusBg[b.status], color: statusColor[b.status], flexShrink: 0, textTransform: "uppercase" }}>
+                  {b.status}
+                </span>
+              </div>
+              {manage && b.status === "pending" && (
+                <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                  <button style={{ ...PS.btnPrimary, flex: 1, fontSize: 13 }} onClick={() => doUpdateStatus(b.id, "confirmed")}>
+                    <CheckCircle2 size={14} /> Confirm
+                  </button>
+                  <button style={{ ...PS.btn, color: POA.red }} onClick={() => doUpdateStatus(b.id, "cancelled")}>
+                    Decline
+                  </button>
+                </div>
+              )}
+              {manage && b.status === "confirmed" && (
+                <button style={{ ...PS.btn, marginTop: 10, color: POA.red, fontSize: 12 }}
+                  onClick={() => doUpdateStatus(b.id, "cancelled")}>
+                  Cancel booking
+                </button>
+              )}
+            </Card>
+          ))}
+
+          {/* Past bookings — collapsible */}
+          {past.length > 0 && (
+            <CollapsiblePast bookings={past} statusColor={statusColor} statusBg={statusBg} />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CollapsiblePast({ bookings, statusColor, statusBg }) {
+  const [show, setShow] = useState(false);
+  return (
+    <div style={{ marginTop: 18 }}>
+      <div onClick={() => setShow(s => !s)}
+        style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", marginBottom: show ? 10 : 0 }}>
+        <p style={{ ...PS.kicker, margin: 0 }}>Past bookings ({bookings.length})</p>
+        {show ? <ChevronUp size={16} color={POA.textMuted} /> : <ChevronDown size={16} color={POA.textMuted} />}
+      </div>
+      {show && bookings.map(b => (
+        <Card key={b.id} style={{ marginBottom: 8, opacity: 0.7 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 600, fontSize: 13.5, color: POA.textPrimary }}>{b.title}</div>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginTop: 2 }}>{fmtDate(b.booking_date)} · {b.members?.full_name || "Member"}</div>
+            </div>
+            <span style={{ fontSize: 10, fontWeight: 700, padding: "3px 9px", borderRadius: 999, background: statusBg[b.status], color: statusColor[b.status], textTransform: "uppercase" }}>
+              {b.status}
+            </span>
+          </div>
+        </Card>
+      ))}
+    </div>
+  );
 }
 
 function PADash() {
@@ -3333,7 +3818,7 @@ function renderScreen(view, { me, org, setView }) {
     case "b_stipend":       return <ComingSoon label="Stipend Log" />;
     case "b_fundraising":   return <Fundraising me={me} org={org} />;
     case "b_social":        return <SocialMedia me={me} org={org} />;
-    case "b_building":      return <POABuilding me={me} />;
+    case "b_building":      return <POABuilding me={me} org={org} />;
     case "b_continuity":    return <BoardContinuity me={me} />;
     case "b_correspondence":return <BoardCorrespondence me={me} />;
     case "b_ledger":        return <ValueLedger me={me} />;
