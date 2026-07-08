@@ -1804,6 +1804,14 @@ async function replyToMessage(threadId, body) {
   if (error) throw error;
   return data;
 }
+async function getValueLedger(start, end) {
+  const { data, error } = await supabase.rpc("get_value_ledger", {
+    p_start: start,
+    p_end: end,
+  });
+  if (error) throw error;
+  return data;
+}
 
 function POABuilding({ me }) {
   return <ComingSoon label="POA Building — Store & Space" />;
@@ -2317,6 +2325,212 @@ function MemberCorrespondence({ me }) {
   );
 }
 
+function ValueLedger({ me }) {
+  const today = new Date();
+  const qStart = new Date(today.getFullYear(), Math.floor(today.getMonth() / 3) * 3, 1);
+  const fmt = d => d.toISOString().split("T")[0];
+
+  const PERIODS = [
+    { label: "This Month", start: new Date(today.getFullYear(), today.getMonth(), 1), end: today },
+    { label: "This Quarter", start: qStart, end: today },
+    { label: "This Year", start: new Date(today.getFullYear(), 0, 1), end: today },
+    { label: "Last Year", start: new Date(today.getFullYear() - 1, 0, 1), end: new Date(today.getFullYear() - 1, 11, 31) },
+  ];
+
+  const [period, setPeriod]     = useState(1); // default: This Quarter
+  const [custom, setCustom]     = useState({ start: "", end: "" });
+  const [showCustom, setShowCustom] = useState(false);
+  const [data, setData]         = useState(null);
+  const [narrative, setNarrative] = useState("");
+  const [savedNarrative, setSavedNarrative] = useState("");
+  const [editingNarrative, setEditingNarrative] = useState(false);
+  const [aiBusy, setAiBusy]     = useState(false);
+  const [busy, setBusy]         = useState(false);
+  const [err, setErr]           = useState("");
+
+  const activeStart = showCustom && custom.start ? custom.start : fmt(PERIODS[period].start);
+  const activeEnd   = showCustom && custom.end   ? custom.end   : fmt(PERIODS[period].end);
+
+  async function load() {
+    setData(null); setErr("");
+    try {
+      const d = await getValueLedger(activeStart, activeEnd);
+      setData(d);
+    } catch(e) { setErr(e.message); }
+  }
+  useEffect(() => { load(); }, [activeStart, activeEnd]);
+
+  async function draftNarrative() {
+    if (!data) return;
+    setAiBusy(true); setErr("");
+    try {
+      const res = await fetch("/api/draft-narrative", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ data, period: showCustom ? `${activeStart} to ${activeEnd}` : PERIODS[period].label }),
+      });
+      const json = await res.json().catch(() => ({}));
+      setNarrative(json.narrative || "AI drafting isn't configured yet — add ANTHROPIC_API_KEY in Vercel.");
+      setEditingNarrative(true);
+    } catch(e) { setErr("AI endpoint not available."); }
+    finally { setAiBusy(false); }
+  }
+
+  async function saveNarrative() {
+    setBusy(true);
+    // For now save to localStorage — will move to DB in next iteration
+    const key = `narrative_${activeStart}_${activeEnd}`;
+    localStorage.setItem(key, narrative);
+    setSavedNarrative(narrative);
+    setEditingNarrative(false);
+    setBusy(false);
+  }
+
+  // Load saved narrative when period changes
+  useEffect(() => {
+    const key = `narrative_${activeStart}_${activeEnd}`;
+    const saved = localStorage.getItem(key) || "";
+    setSavedNarrative(saved);
+    setNarrative(saved);
+    setEditingNarrative(false);
+  }, [activeStart, activeEnd]);
+
+  const n = (val) => val != null ? val : "—";
+  const money = (val) => val != null && val > 0 ? "$" + Number(val).toLocaleString() : val === 0 ? "$0" : "—";
+
+  const STATS = data ? [
+    { group: "Meetings", items: [
+      { label: "Meetings held", value: n(data.meetings_held), sub: "completed events" },
+      { label: "Total check-ins", value: n(data.total_checkins), sub: "across all events" },
+      { label: "Minutes filed", value: n(data.minutes_filed), sub: "of record" },
+    ]},
+    { group: "Membership", items: [
+      { label: "Active members", value: n(data.active_members), sub: "on roster" },
+      { label: "In good standing", value: n(data.good_standing), sub: "current" },
+    ]},
+    { group: "Action Items", items: [
+      { label: "Completed", value: n(data.actions_completed), sub: "this period" },
+      { label: "Still open", value: n(data.actions_open), sub: "in progress" },
+    ]},
+    { group: "Causes", items: [
+      { label: "Active causes", value: n(data.causes_active), sub: "running" },
+      { label: "Contributions tracked", value: money(data.contributions_tracked), sub: "recorded in app" },
+    ]},
+    { group: "Communication", items: [
+      { label: "Announcements sent", value: n(data.announcements_sent), sub: "to members" },
+      { label: "Member messages", value: n(data.messages_resolved), sub: "received" },
+    ]},
+  ] : [];
+
+  return (
+    <div>
+      <PageTitle sub="What the association delivered — countable and honest">Value Ledger</PageTitle>
+
+      {/* Period selector */}
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 20 }}>
+        {PERIODS.map((p, i) => (
+          <button key={p.label} onClick={() => { setPeriod(i); setShowCustom(false); }}
+            style={{ ...PS.btn, background: !showCustom && period === i ? POA.accent : POA.btnBg, color: !showCustom && period === i ? "#fff" : POA.btnText, border: !showCustom && period === i ? "none" : `0.5px solid ${POA.btnBorder}` }}>
+            {p.label}
+          </button>
+        ))}
+        <button onClick={() => setShowCustom(true)}
+          style={{ ...PS.btn, background: showCustom ? POA.accent : POA.btnBg, color: showCustom ? "#fff" : POA.btnText, border: showCustom ? "none" : `0.5px solid ${POA.btnBorder}` }}>
+          Custom
+        </button>
+      </div>
+
+      {showCustom && (
+        <Card style={{ marginBottom: 16 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <div>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>From</div>
+              <input type="date" value={custom.start} onChange={e => setCustom(c => ({ ...c, start: e.target.value }))} style={PS.input} />
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>To</div>
+              <input type="date" value={custom.end} onChange={e => setCustom(c => ({ ...c, end: e.target.value }))} style={PS.input} />
+            </div>
+          </div>
+        </Card>
+      )}
+
+      <ErrBox msg={err} />
+
+      {/* Stats */}
+      {!data ? <Spinner /> : (
+        <>
+          {STATS.map(group => (
+            <div key={group.group} style={{ marginBottom: 18 }}>
+              <SectionTitle>{group.group}</SectionTitle>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 10 }}>
+                {group.items.map(item => (
+                  <div key={item.label} style={{ ...PS.card, padding: "14px 16px" }}>
+                    <div style={{ fontFamily: "inherit", fontWeight: 700, fontSize: 28, color: POA.accent, lineHeight: 1 }}>{item.value}</div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: POA.textPrimary, marginTop: 6 }}>{item.label}</div>
+                    <div style={{ fontSize: 11, color: POA.textMuted, marginTop: 2 }}>{item.sub}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+
+          {/* Narrative */}
+          <SectionTitle>Board narrative</SectionTitle>
+          <Card>
+            {editingNarrative ? (
+              <>
+                <textarea value={narrative} onChange={e => setNarrative(e.target.value)}
+                  placeholder="Write 2-3 sentences about what this period meant for the association. AI can draft; you file."
+                  style={{ ...PS.textarea, minHeight: 120 }} />
+                <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                  <button style={PS.btnPrimary} disabled={busy} onClick={saveNarrative}>
+                    {busy ? "Saving…" : "File narrative"}
+                  </button>
+                  <button style={{ ...PS.btn }} disabled={aiBusy} onClick={draftNarrative}>
+                    <Sparkles size={13} /> {aiBusy ? "Drafting…" : "Draft with AI"}
+                  </button>
+                  <button style={PS.btn} onClick={() => { setEditingNarrative(false); setNarrative(savedNarrative); }}>
+                    Cancel
+                  </button>
+                </div>
+                <div style={{ fontSize: 11.5, color: POA.textMuted, marginTop: 8, fontStyle: "italic" }}>
+                  AI drafts from real data only — never fabricates numbers. A board member files it.
+                </div>
+              </>
+            ) : savedNarrative ? (
+              <>
+                <div style={{ fontSize: 14, color: POA.textSecondary, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{savedNarrative}</div>
+                <button style={{ ...PS.btn, marginTop: 12 }} onClick={() => setEditingNarrative(true)}>
+                  <Pencil size={12} /> Edit narrative
+                </button>
+              </>
+            ) : (
+              <>
+                <div style={{ fontSize: 13.5, color: POA.textMuted, lineHeight: 1.6, marginBottom: 14 }}>
+                  No narrative filed yet. Write a 2-3 sentence summary of what this period meant — or let AI draft from the numbers above.
+                </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button style={PS.btnPrimary} onClick={() => setEditingNarrative(true)}>
+                    <FileText size={14} /> Write narrative
+                  </button>
+                  <button style={PS.btn} disabled={aiBusy} onClick={draftNarrative}>
+                    <Sparkles size={13} /> {aiBusy ? "Drafting…" : "Draft with AI"}
+                  </button>
+                </div>
+              </>
+            )}
+          </Card>
+
+          <div style={{ fontSize: 11.5, color: POA.textMuted, marginTop: 16, lineHeight: 1.6, fontStyle: "italic" }}>
+            All numbers pull from your association's live records — meetings, attendance, causes, correspondence. Nothing is fabricated. If data isn't recorded, it shows as —.
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 /* ================================================================
    SCREEN ROUTER
    ================================================================ */
@@ -2349,7 +2563,7 @@ function renderScreen(view, { me, org, setView }) {
     case "b_building":      return <POABuilding me={me} />;
     case "b_continuity":    return <BoardContinuity me={me} />;
     case "b_correspondence":return <BoardCorrespondence me={me} />;
-    case "b_ledger":        return <ComingSoon label="Value Ledger" />;
+    case "b_ledger":        return <ValueLedger me={me} />;
     case "pa_dash":         return <PADash />;
     case "pa_orgs":         return <PADash />;
     case "pa_config":       return <PAOrgConfig />;
