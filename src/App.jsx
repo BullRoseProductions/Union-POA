@@ -4099,6 +4099,8 @@ function Fundraising({ me, org }) {
 
   // collapsible sections
   const [ideasOpen, setIdeasOpen]   = useState(false);
+  const [ideaCat, setIdeaCat]   = useState("All");
+  const [ideaTags, setIdeaTags] = useState([]);
   const [calOpen, setCalOpen]       = useState(true);
   const [logOpen, setLogOpen]       = useState(false);
   const [draftsOpen, setDraftsOpen] = useState(false);
@@ -4466,21 +4468,80 @@ function Fundraising({ me, org }) {
       </div>
       {ideasOpen && (
         <>
-          <div style={{ fontSize: 13, color: POA.textMuted, marginBottom: 12 }}>
-            Tap "Plan this" to load an idea into the planner above.
+          <div style={{ fontSize: 13, color: POA.textMuted, marginBottom: 14 }}>
+            {POA_IDEA_BANK.length} ideas across {ALL_CATS.length} categories. Tap "Plan this" to load into the planner above.
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(190px,1fr))", gap: 8, marginBottom: 18 }}>
-            {POA_IDEA_BANK.map(idea => (
-              <div key={idea.key} style={{ ...PS.card, padding: "12px 13px" }}>
-                <div style={{ fontWeight: 700, fontSize: 13.5, color: POA.textPrimary, marginBottom: 4 }}>{idea.title}</div>
-                <div style={{ fontSize: 12, color: POA.textMuted, lineHeight: 1.4, marginBottom: 10 }}>{idea.pitch}</div>
-                <button style={{ ...PS.btn, width: "100%", justifyContent: "center", fontSize: 12 }}
-                  onClick={() => { setDetail(`A ${idea.title.toLowerCase()} to raise money for the association.`); setPhase("input"); window.scrollTo({ top: 0, behavior: "smooth" }); }}>
-                  <Sparkles size={12} /> Plan this
+
+          {/* Category tabs */}
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+            <button onClick={() => { setIdeaCat("All"); setIdeaTags([]); }}
+              style={{ ...PS.btn, background: ideaCat === "All" ? POA.accent : POA.btnBg, color: ideaCat === "All" ? "#fff" : POA.btnText, border: ideaCat === "All" ? "none" : `0.5px solid ${POA.btnBorder}`, fontSize: 12 }}>
+              All ({POA_IDEA_BANK.length})
+            </button>
+            {ALL_CATS.map(cat => {
+              const count = POA_IDEA_BANK.filter(i => i.cat === cat).length;
+              return (
+                <button key={cat} onClick={() => { setIdeaCat(cat); setIdeaTags([]); }}
+                  style={{ ...PS.btn, background: ideaCat === cat ? POA.accent : POA.btnBg, color: ideaCat === cat ? "#fff" : POA.btnText, border: ideaCat === cat ? "none" : `0.5px solid ${POA.btnBorder}`, fontSize: 12 }}>
+                  {cat} ({count})
                 </button>
-              </div>
-            ))}
+              );
+            })}
           </div>
+
+          {/* Tag filters */}
+          <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 14 }}>
+            {ALL_TAGS.map(tag => {
+              const on = ideaTags.includes(tag);
+              return (
+                <button key={tag} onClick={() => setIdeaTags(t => on ? t.filter(x => x !== tag) : [...t, tag])}
+                  style={{ fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 999, border: `1px solid ${on ? POA.accent : POA.hairline}`, background: on ? POA.accentSoft : "transparent", color: on ? POA.accent : POA.textMuted, cursor: "pointer" }}>
+                  {tag}
+                </button>
+              );
+            })}
+            {ideaTags.length > 0 && (
+              <button onClick={() => setIdeaTags([])}
+                style={{ fontSize: 11, padding: "3px 9px", borderRadius: 999, border: `1px solid ${POA.hairline}`, background: "transparent", color: POA.red, cursor: "pointer" }}>
+                Clear filters
+              </button>
+            )}
+          </div>
+
+          {/* Filtered ideas grid */}
+          {(() => {
+            const filtered = POA_IDEA_BANK
+              .filter(i => ideaCat === "All" || i.cat === ideaCat)
+              .filter(i => ideaTags.length === 0 || ideaTags.every(t => i.tags.includes(t)));
+            return (
+              <>
+                <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 10 }}>
+                  {filtered.length} idea{filtered.length !== 1 ? "s" : ""} {ideaTags.length > 0 ? "matching your filters" : ""}
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px,1fr))", gap: 8, marginBottom: 18 }}>
+                  {filtered.map(idea => (
+                    <div key={idea.key} style={{ ...PS.card, padding: "12px 13px", display: "flex", flexDirection: "column" }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: POA.accent, marginBottom: 5 }}>{idea.cat}</div>
+                      <div style={{ fontWeight: 700, fontSize: 13.5, color: POA.textPrimary, marginBottom: 4 }}>{idea.title}</div>
+                      <div style={{ fontSize: 12, color: POA.textMuted, lineHeight: 1.4, flex: 1, marginBottom: 8 }}>{idea.pitch}</div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 10 }}>
+                        {idea.tags.slice(0,2).map(tag => (
+                          <span key={tag} style={{ fontSize: 9.5, fontWeight: 700, padding: "2px 7px", borderRadius: 999, background: POA.accentSoft, color: POA.accent }}>{tag}</span>
+                        ))}
+                      </div>
+                      <button style={{ ...PS.btnPrimary, fontSize: 12, padding: "8px 10px", width: "100%", justifyContent: "center" }}
+                        onClick={() => { setDetail(`A ${idea.title.toLowerCase()} to raise money for the association.`); setPhase("input"); window.scrollTo({ top: 0, behavior: "smooth" }); }}>
+                        <Sparkles size={12} /> Plan this
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                {filtered.length === 0 && (
+                  <Card><div style={{ color: POA.textMuted, fontSize: 13.5 }}>No ideas match your filters. Try removing a filter or two.</div></Card>
+                )}
+              </>
+            );
+          })()}
         </>
       )}
 
