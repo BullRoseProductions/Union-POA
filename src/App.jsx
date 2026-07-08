@@ -4286,7 +4286,7 @@ function FundraisingPlanDisplay({ text }) {
   return <div style={{ padding: "2px 0" }}>{els}</div>;
 }
 
-function Fundraising({ me, org, savedState, onSaveState }) {
+function Fundraising({ me, org }) {
   const today = new Date();
 
   // planner state
@@ -4351,27 +4351,6 @@ function Fundraising({ me, org, savedState, onSaveState }) {
   useEffect(() => {
     listFundingEvents(calCur.y, calCur.m).then(setCalEvents).catch(() => null);
   }, [calCur.y, calCur.m, calReloadKey]);
-
-  // restore saved state on mount
-  useEffect(() => {
-    if (savedState) {
-      if (savedState.phase) setPhase(savedState.phase);
-      if (savedState.detail) setDetail(savedState.detail);
-      if (savedState.goalAmt) setGoalAmt(savedState.goalAmt);
-      if (savedState.effortLevel) setEffortLevel(savedState.effortLevel);
-      if (savedState.targetDate) setTargetDate(savedState.targetDate);
-      if (savedState.ideas) setIdeas(savedState.ideas);
-      if (savedState.chosenIdea) setChosenIdea(savedState.chosenIdea);
-      if (savedState.out) setOut(savedState.out);
-      if (savedState.saveTitle) setSaveTitle(savedState.saveTitle);
-      if (savedState.planReview) setPlanReview(savedState.planReview);
-    }
-  }, []);
-
-  // save state whenever key values change
-  useEffect(() => {
-    onSaveState?.({ phase, detail, goalAmt, effortLevel, targetDate, ideas, chosenIdea, out, saveTitle, planReview });
-  }, [phase, detail, goalAmt, effortLevel, targetDate, ideas, chosenIdea, out, saveTitle, planReview]);
 
   // --- owner matching (same pattern as fire) ---
   function matchOwnerId(name) {
@@ -4968,10 +4947,22 @@ function Fundraising({ me, org, savedState, onSaveState }) {
   );
 }
 
+const ALL_VIEWS = [
+  // member views
+  'm_dash','m_call','m_ask','m_partners','m_value',
+  'm_benefits','m_events','m_card','m_vote','m_store','m_correspondence',
+  // board views
+  'b_dash','b_attendance','b_meetings','b_stipend','b_causes',
+  'b_fundraising','b_social','b_building','b_continuity',
+  'b_correspondence','b_members','b_ledger',
+  // pa views
+  'pa_dash','pa_orgs','pa_config','pa_add',
+];
+
 /* ================================================================
    SCREEN ROUTER
    ================================================================ */
-function renderScreen(view, { me, org, setView, savedPlannerState, setSavedPlannerState }) {
+function renderScreen(view, { me, org, setView }) {
   if (view.startsWith("m_")) {
     switch (view) {
       case "m_dash":     return <MemberDash me={me} org={org} setView={setView} />;
@@ -4995,7 +4986,7 @@ function renderScreen(view, { me, org, setView, savedPlannerState, setSavedPlann
     case "b_members":       return <MembersBoard me={me} />;
     case "b_attendance":    return <MeetingAttendance me={me} />;
     case "b_stipend":       return <ComingSoon label="Stipend Log" />;
-    case "b_fundraising":   return <Fundraising me={me} org={org} savedState={savedPlannerState} onSaveState={setSavedPlannerState} />;
+    case "b_fundraising":   return <Fundraising me={me} org={org} />;
     case "b_social":        return <SocialMedia me={me} org={org} />;
     case "b_building":      return <POABuilding me={me} org={org} />;
     case "b_continuity":    return <BoardContinuity me={me} />;
@@ -5022,7 +5013,6 @@ export default function App() {
   const [viewAs, setViewAs]     = useState(null); // 'board' | 'member' — board users can preview the member view; null = role default
   const [features, setFeatures] = useState({});
   const [orgSettings, setOrgSettings] = useState({});
-  const [savedPlannerState, setSavedPlannerState] = useState(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => { setSession(data.session); setReady(true); });
@@ -5148,7 +5138,11 @@ export default function App() {
 
       {/* ---- Main content ---- */}
       <main style={{ flex: 1, overflowY: "auto", padding: "32px 36px", maxWidth: 860 }}>
-        {renderScreen(activeView, { me, org, setView, savedPlannerState, setSavedPlannerState })}
+        {ALL_VIEWS.map(viewId => (
+          <div key={viewId} style={{ display: activeView === viewId ? "block" : "none" }}>
+            {renderScreen(viewId, { me, org, setView })}
+          </div>
+        ))}
       </main>
     </div>
   );
