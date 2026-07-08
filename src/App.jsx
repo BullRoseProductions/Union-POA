@@ -5,7 +5,7 @@ import {
   CalendarCheck, ClipboardList, DollarSign, Heart, Megaphone,
   BookOpen, Mail, Users, BarChart3, LogOut, Menu, X, ChevronRight, ChevronDown, ChevronUp,
   Sparkles, CheckCircle2, Clock, Loader2, Send, Building2,
-  Plus, Pencil, Trash2, ArrowLeft, RefreshCw, FileText, QrCode, Settings,
+  Plus, Pencil, Trash2, ArrowLeft, RefreshCw, FileText, QrCode, Settings, Upload,
 } from "lucide-react";
 import { supabase } from "./lib/supabase";
 import { QRCodeCanvas } from "qrcode.react";
@@ -107,6 +107,7 @@ const MEMBER_NAV = [
   { id: "m_vote",     label: "VoteLink",         Icon: Vote },
   { id: "m_store",    label: "Store",            Icon: ShoppingBag },
   { id: "m_correspondence", label: "Correspondence", Icon: Mail },
+  { id: "m_documents", label: "Documents", Icon: FileText },
 ];
 
 const BOARD_NAV = [
@@ -121,6 +122,7 @@ const BOARD_NAV = [
   { id: "b_continuity",   label: "Board Continuity",  Icon: BookOpen },
   { id: "b_correspondence",label: "Correspondence",   Icon: Mail },
   { id: "b_members",      label: "Members",           Icon: Users },
+  { id: "b_documents",    label: "Documents",         Icon: FileText },
   { id: "b_ledger",       label: "Value Ledger",      Icon: TrendingUp },
 ];
 
@@ -379,18 +381,22 @@ function AskB4C({ me, org }) {
     setMsgs(m => [...m, { role: "user", text: question }]);
     setBusy(true);
     try {
+      // fetch member-visible docs for grounding
+      const docs = await getDocsForAI();
+      const docContext = docs.length > 0
+        ? `\n\nASSOCIATION DOCUMENTS (answer from these — cite the document name):\n${docs.map(d => `[${d.name} — ${d.category}]\n${d.extracted_text || "(no text extracted yet)"}`).join("\n\n")}`
+        : "";
+      const sys = `You are Ask B4C, an AI assistant for the ${org?.name || "police officers' association"}. Answer member questions using ONLY the association's own documents provided below. If the answer isn't in the documents, say so clearly — never make up information or cite things not in the documents. Always cite which document your answer comes from.${docContext}`;
       const res = await fetch("/api/ask-b4c", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question, org: org?.name }),
+        body: JSON.stringify({ question, system: sys }),
       });
       const data = await res.json().catch(() => ({}));
       setMsgs(m => [...m, { role: "assistant", text: data.answer || "AI isn't configured yet — add ANTHROPIC_API_KEY in Vercel to enable grounded Q&A." }]);
     } catch {
       setMsgs(m => [...m, { role: "assistant", text: "Couldn't reach the AI endpoint. Check that ANTHROPIC_API_KEY is set in Vercel." }]);
-    } finally {
-      setBusy(false);
-    }
+    } finally { setBusy(false); }
   }
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs]);
@@ -2302,6 +2308,63 @@ async function saveLedgerNarrative(deptId, start, end, narrative, memberId) {
     .select().single();
   if (error) throw error;
   return data;
+}
+async function listDocuments() {
+  const { data, error } = await supabase
+    .from("documents")
+    .select("*, members(full_name)")
+    .eq("status", "active")
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+async function uploadDocument(file, meta) {
+  const ext = file.name.split(".").pop();
+  const path = `${meta.department_id}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, "_")}`;
+  const { error: upErr } = await supabase.storage
+    .from("org-documents").upload(path, file, { upsert: false });
+  if (upErr) throw upErr;
+  const { data, error } = await supabase.from("documents").insert({
+    department_id: meta.department_id,
+    name: meta.name,
+    category: meta.category,
+    storage_path: path,
+    file_name: file.name,
+    file_size: file.size,
+    mime_type: file.type,
+    visibility: meta.visibility,
+    notes: meta.notes || null,
+    uploaded_by: meta.uploaded_by,
+  }).select().single();
+  if (error) throw error;
+  return data;
+}
+async function updateDocument(id, patch) {
+  const { data, error } = await supabase
+    .from("documents").update({ ...patch, updated_at: new Date().toISOString() })
+    .eq("id", id).select().single();
+  if (error) throw error;
+  return data;
+}
+async function archiveDocument(id) {
+  const { error } = await supabase
+    .from("documents").update({ status: "archived" }).eq("id", id);
+  if (error) throw error;
+}
+async function getDocumentUrl(path) {
+  const { data, error } = await supabase.storage
+    .from("org-documents").createSignedUrl(path, 3600);
+  if (error) throw error;
+  return data.signedUrl;
+}
+async function getDocsForAI() {
+  const { data, error } = await supabase
+    .from("documents")
+    .select("name, category, extracted_text")
+    .eq("status", "active")
+    .not("extracted_text", "is", null);
+  if (error) throw error;
+  return data || [];
 }
 async function listVideos() {
   const { data, error } = await supabase.from("association_videos")
@@ -4947,14 +5010,264 @@ function Fundraising({ me, org }) {
   );
 }
 
+function BoardDocuments({ me }) {
+  const [docs, setDocs]       = useState(null);
+  const [adding, setAdding]   = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [err, setErr]         = useState("");
+  const [busy, setBusy]       = useState(false);
+  const isAdmin               = canAdmin(me.access);
+  const [f, setF] = useState({
+    name: "", category: "General", visibility: "board_only",
+    notes: "", file: null,
+  });
+
+  async function load() {
+    try { setDocs(await listDocuments()); }
+    catch(e) { setErr(e.message); }
+  }
+  useEffect(() => { load(); }, []);
+
+  function resetForm() {
+    setF({ name: "", category: "General", visibility: "board_only", notes: "", file: null });
+    setAdding(false); setEditing(null); setErr("");
+  }
+
+  async function doUpload() {
+    if (!f.file && !editing) { setErr("Please select a file."); return; }
+    if (!f.name.trim()) { setErr("Document name is required."); return; }
+    setBusy(true); setErr("");
+    try {
+      if (editing) {
+        await updateDocument(editing.id, {
+          name: f.name.trim(),
+          category: f.category,
+          visibility: f.visibility,
+          notes: f.notes.trim() || null,
+        });
+      } else {
+        await uploadDocument(f.file, {
+          department_id: me.department_id,
+          name: f.name.trim(),
+          category: f.category,
+          visibility: f.visibility,
+          notes: f.notes.trim() || null,
+          uploaded_by: me.id,
+        });
+      }
+      resetForm(); await load();
+    } catch(e) { setErr(e.message); }
+    finally { setBusy(false); }
+  }
+
+  async function doArchive(id) {
+    if (!confirm("Archive this document? It will no longer be visible to anyone.")) return;
+    try { await archiveDocument(id); await load(); }
+    catch(e) { setErr(e.message); }
+  }
+
+  async function doOpen(doc) {
+    try {
+      const url = await getDocumentUrl(doc.storage_path);
+      window.open(url, "_blank");
+    } catch(e) { setErr("Couldn't open document: " + e.message); }
+  }
+
+  const CATEGORIES = ["CBA","Bylaws","Policies","Member Handbook","Benefits","Meeting Minutes","General","Other"];
+  const grouped = {};
+  (docs || []).forEach(d => { (grouped[d.category] = grouped[d.category] || []).push(d); });
+
+  const visIcon = v => v === "all_members" ? "👥" : "🔒";
+  const visLabel = v => v === "all_members" ? "All members" : "Board only";
+  const sizeLabel = b => !b ? "" : b < 1024 ? `${b}B` : b < 1048576 ? `${Math.round(b/1024)}KB` : `${(b/1048576).toFixed(1)}MB`;
+
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 18 }}>
+        <PageTitle sub="Association documents — CBA, bylaws, policies, and member resources" />
+        {isAdmin && (
+          <button style={PS.btn} onClick={() => { setAdding(!adding); setEditing(null); }}>
+            <Plus size={13} /> Upload
+          </button>
+        )}
+      </div>
+      <ErrBox msg={err} />
+
+      {/* Upload / Edit form */}
+      {(adding || editing) && isAdmin && (
+        <Card style={{ marginBottom: 18 }}>
+          <SectionTitle>{editing ? "Edit document" : "Upload document"}</SectionTitle>
+          {!editing && (
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>File</div>
+              <input type="file" accept=".pdf,.doc,.docx,.txt,.md"
+                onChange={e => {
+                  const file = e.target.files[0];
+                  if (file && !f.name) setF(prev => ({ ...prev, file, name: file.name.replace(/\.[^.]+$/, "") }));
+                  else if (file) setF(prev => ({ ...prev, file }));
+                }}
+                style={{ ...PS.input, padding: "8px 12px", cursor: "pointer" }} />
+              {f.file && <div style={{ fontSize: 12, color: POA.green, marginTop: 5 }}>✓ {f.file.name} ({sizeLabel(f.file.size)})</div>}
+            </div>
+          )}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Document name</div>
+              <input value={f.name} onChange={e => setF({ ...f, name: e.target.value })}
+                style={PS.input} placeholder="e.g. 2024-2026 Collective Bargaining Agreement" />
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Category</div>
+              <select value={f.category} onChange={e => setF({ ...f, category: e.target.value })} style={PS.input}>
+                {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Who can see this</div>
+              <select value={f.visibility} onChange={e => setF({ ...f, visibility: e.target.value })} style={PS.input}>
+                <option value="board_only">🔒 Board only</option>
+                <option value="all_members">👥 All members</option>
+              </select>
+            </div>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Notes (optional)</div>
+              <input value={f.notes} onChange={e => setF({ ...f, notes: e.target.value })}
+                style={PS.input} placeholder="e.g. Ratified June 2024, expires 2026" />
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button style={PS.btnPrimary} disabled={busy} onClick={doUpload}>
+              {busy ? "Saving…" : editing ? "Save changes" : "Upload document"}
+            </button>
+            <button style={PS.btn} onClick={resetForm}>Cancel</button>
+            {editing && (
+              <button style={{ ...PS.btn, color: POA.red, marginLeft: "auto" }}
+                onClick={() => { doArchive(editing.id); resetForm(); }}>
+                Archive
+              </button>
+            )}
+          </div>
+          {!editing && (
+            <div style={{ fontSize: 11.5, color: POA.textMuted, marginTop: 8, fontStyle: "italic" }}>
+              Supported: PDF, Word (.doc/.docx), text files. Documents marked "All members" appear in the member Documents screen and power Ask B4C answers.
+            </div>
+          )}
+        </Card>
+      )}
+
+      {!docs ? <Spinner /> : docs.length === 0 && !adding ? (
+        <Card>
+          <div style={{ color: POA.textMuted, fontSize: 13.5 }}>
+            No documents uploaded yet. {isAdmin ? "Upload your CBA, bylaws, and member handbook to power Ask B4C." : "Check back when your admin has uploaded documents."}
+          </div>
+        </Card>
+      ) : (
+        Object.entries(grouped).map(([cat, catDocs]) => (
+          <div key={cat} style={{ marginBottom: 8 }}>
+            <SectionTitle>{cat}</SectionTitle>
+            {catDocs.map(doc => (
+              <Card key={doc.id} style={{ marginBottom: 8 }}>
+                <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 700, fontSize: 14.5, color: POA.textPrimary, marginBottom: 3 }}>{doc.name}</div>
+                    <div style={{ fontSize: 12, color: POA.textMuted, display: "flex", gap: 10, flexWrap: "wrap" }}>
+                      <span>{visIcon(doc.visibility)} {visLabel(doc.visibility)}</span>
+                      {doc.file_name && <span>· {doc.file_name}</span>}
+                      {doc.file_size && <span>· {sizeLabel(doc.file_size)}</span>}
+                      {doc.members?.full_name && <span>· Uploaded by {doc.members.full_name}</span>}
+                    </div>
+                    {doc.notes && <div style={{ fontSize: 12, color: POA.textMuted, marginTop: 4, fontStyle: "italic" }}>{doc.notes}</div>}
+                  </div>
+                  <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                    {doc.storage_path && (
+                      <button style={{ ...PS.btn, fontSize: 12 }} onClick={() => doOpen(doc)}>
+                        Open ↗
+                      </button>
+                    )}
+                    {isAdmin && (
+                      <button style={{ ...PS.btn, fontSize: 12 }}
+                        onClick={() => {
+                          setEditing(doc);
+                          setF({ name: doc.name, category: doc.category, visibility: doc.visibility, notes: doc.notes || "", file: null });
+                          setAdding(false);
+                        }}>
+                        <Pencil size={11} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
+function MemberDocuments() {
+  const [docs, setDocs] = useState(null);
+  const [err, setErr]   = useState("");
+
+  useEffect(() => {
+    listDocuments().then(setDocs).catch(e => setErr(e.message));
+  }, []);
+
+  async function doOpen(doc) {
+    try {
+      const url = await getDocumentUrl(doc.storage_path);
+      window.open(url, "_blank");
+    } catch(e) { setErr("Couldn't open document: " + e.message); }
+  }
+
+  const grouped = {};
+  (docs || []).forEach(d => { (grouped[d.category] = grouped[d.category] || []).push(d); });
+
+  return (
+    <div>
+      <PageTitle sub="Association documents available to members">Documents</PageTitle>
+      <Card style={{ marginBottom: 18, borderColor: POA.accentDim }}>
+        <div style={{ fontSize: 13.5, color: POA.textSecondary, lineHeight: 1.65 }}>
+          Your association's official documents — CBA, bylaws, benefits, and more. These documents also power <b style={{ color: POA.accent }}>Ask B4C</b> so you can ask questions and get answers straight from the source.
+        </div>
+      </Card>
+      <ErrBox msg={err} />
+      {!docs ? <Spinner /> : docs.length === 0 ? (
+        <Card><div style={{ color: POA.textMuted, fontSize: 13.5 }}>No documents have been shared with members yet. Check back soon.</div></Card>
+      ) : (
+        Object.entries(grouped).map(([cat, catDocs]) => (
+          <div key={cat} style={{ marginBottom: 8 }}>
+            <SectionTitle>{cat}</SectionTitle>
+            {catDocs.map(doc => (
+              <Card key={doc.id} style={{ marginBottom: 8 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 700, fontSize: 14.5, color: POA.textPrimary, marginBottom: 3 }}>{doc.name}</div>
+                    {doc.notes && <div style={{ fontSize: 12, color: POA.textMuted, fontStyle: "italic" }}>{doc.notes}</div>}
+                  </div>
+                  {doc.storage_path && (
+                    <button style={{ ...PS.btnPrimary, fontSize: 13, padding: "8px 14px", flexShrink: 0 }} onClick={() => doOpen(doc)}>
+                      Open ↗
+                    </button>
+                  )}
+                </div>
+              </Card>
+            ))}
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
 const ALL_VIEWS = [
   // member views
   'm_dash','m_call','m_ask','m_partners','m_value',
-  'm_benefits','m_events','m_card','m_vote','m_store','m_correspondence',
+  'm_benefits','m_events','m_card','m_vote','m_store','m_correspondence','m_documents',
   // board views
   'b_dash','b_attendance','b_meetings','b_stipend','b_causes',
   'b_fundraising','b_social','b_building','b_continuity',
-  'b_correspondence','b_members','b_ledger',
+  'b_correspondence','b_members','b_ledger','b_documents',
   // pa views
   'pa_dash','pa_orgs','pa_config','pa_add',
 ];
@@ -4976,6 +5289,7 @@ function renderScreen(view, { me, org, setView }) {
       case "m_vote":     return <VoteLink />;
       case "m_store":    return <Store />;
       case "m_correspondence": return <MemberCorrespondence me={me} />;
+      case "m_documents": return <MemberDocuments />;
       default:           return <ComingSoon label={view} />;
     }
   }
@@ -4984,6 +5298,7 @@ function renderScreen(view, { me, org, setView }) {
     case "b_meetings":      return <AgendaMinutes me={me} />;
     case "b_causes":        return <CausesBoard me={me} />;
     case "b_members":       return <MembersBoard me={me} />;
+    case "b_documents":     return <BoardDocuments me={me} />;
     case "b_attendance":    return <MeetingAttendance me={me} />;
     case "b_stipend":       return <ComingSoon label="Stipend Log" />;
     case "b_fundraising":   return <Fundraising me={me} org={org} />;
