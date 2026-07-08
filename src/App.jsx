@@ -4078,35 +4078,127 @@ const EXTRACT_SYS = `You convert a police officers' association fundraiser plan 
 
 function FundraisingPlanDisplay({ text }) {
   if (!text) return null;
+
+  function renderInline(str) {
+    // render **bold** inline
+    const parts = str.split(/\*\*([^*]+)\*\*/g);
+    return parts.map((p, i) =>
+      i % 2 === 1
+        ? <strong key={i} style={{ color: POA.textPrimary, fontWeight: 700 }}>{p}</strong>
+        : p
+    );
+  }
+
   const lines = text.split("\n");
-  return (
-    <div style={{ fontSize: 13.5, color: POA.textSecondary, lineHeight: 1.8 }}>
-      {lines.map((line, i) => {
-        const trimmed = line.trim();
-        if (!trimmed) return <div key={i} style={{ height: 10 }} />;
-        // Main headers (all caps or ends with colon and short)
-        if (/^[A-Z][A-Z\s&\/\-]+:?\s*$/.test(trimmed) || (trimmed.endsWith(":") && trimmed.length < 50 && !trimmed.startsWith("-"))) {
-          return <div key={i} style={{ fontFamily: "inherit", fontWeight: 700, fontSize: 14, color: POA.textPrimary, marginTop: 16, marginBottom: 4, borderBottom: `0.5px solid ${POA.hairline}`, paddingBottom: 4 }}>{trimmed}</div>;
-        }
-        // Bullet points
-        if (trimmed.startsWith("- ") || trimmed.startsWith("• ")) {
-          return <div key={i} style={{ display: "flex", gap: 8, marginBottom: 3, paddingLeft: 8 }}>
-            <span style={{ color: POA.accent, flexShrink: 0, marginTop: 1 }}>·</span>
-            <span>{trimmed.slice(2)}</span>
-          </div>;
-        }
-        // Tier headers (Title, Gold, Silver, Bronze, Presenting)
-        if (/^(title|gold|silver|bronze|presenting|platinum|diamond)/i.test(trimmed)) {
-          return <div key={i} style={{ fontWeight: 700, fontSize: 13.5, color: POA.accentBright, marginTop: 10, marginBottom: 2 }}>{trimmed}</div>;
-        }
-        // Dollar amounts on their own line
-        if (/^\$[\d,]+/.test(trimmed)) {
-          return <div key={i} style={{ fontWeight: 700, color: POA.green, fontSize: 14, marginBottom: 4 }}>{trimmed}</div>;
-        }
-        return <div key={i} style={{ marginBottom: 2 }}>{trimmed}</div>;
-      })}
-    </div>
-  );
+  const els = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const raw = lines[i];
+    const t = raw.trim();
+    i++;
+
+    if (!t) { els.push(<div key={i} style={{ height: 10 }} />); continue; }
+
+    // H1 — # Title
+    if (t.startsWith("# ")) {
+      els.push(<div key={i} style={{ fontWeight: 700, fontSize: 18, color: POA.textPrimary, marginTop: 4, marginBottom: 12 }}>{t.slice(2).replace(/\*\*/g,"")}</div>);
+      continue;
+    }
+
+    // H2 — ## Section
+    if (t.startsWith("## ")) {
+      els.push(
+        <div key={i} style={{ marginTop: 22, marginBottom: 8 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".16em", textTransform: "uppercase", color: POA.accent, marginBottom: 3 }}>
+            {t.slice(3).replace(/\*\*/g,"")}
+          </div>
+          <div style={{ height: 1, background: POA.hairline }} />
+        </div>
+      );
+      continue;
+    }
+
+    // H3 — ### Subsection
+    if (t.startsWith("### ")) {
+      els.push(<div key={i} style={{ fontWeight: 700, fontSize: 13.5, color: POA.textPrimary, marginTop: 14, marginBottom: 4 }}>{t.slice(4).replace(/\*\*/g,"")}</div>);
+      continue;
+    }
+
+    // Sponsorship tier headers (Title/Gold/Silver/Bronze/Presenting/A La Carte)
+    const tierMatch = t.replace(/\*\*/g,"").match(/^(title|gold|silver|bronze|presenting|platinum|a la carte|à la carte)(\s*sponsor)?[\s\-—]*/i);
+    if (tierMatch && t.length < 80) {
+      const tierColors = { title: "#F0B44A", gold: "#F0B44A", presenting: "#F0B44A", platinum: "#9B6BE6", silver: "#A0A0B0", bronze: "#CD7F32" };
+      const tierKey = tierMatch[1].toLowerCase();
+      const color = tierColors[tierKey] || POA.accentBright;
+      els.push(
+        <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 16, marginBottom: 4 }}>
+          <div style={{ width: 10, height: 10, borderRadius: "50%", background: color, flexShrink: 0 }} />
+          <div style={{ fontWeight: 700, fontSize: 14, color }}>{t.replace(/\*\*/g,"")}</div>
+        </div>
+      );
+      continue;
+    }
+
+    // A la carte section
+    if (/^a.la.carte/i.test(t.replace(/\*\*/g,""))) {
+      els.push(<div key={i} style={{ fontWeight: 700, fontSize: 14, color: POA.accentBright, marginTop: 16, marginBottom: 4 }}>{t.replace(/\*\*/g,"")}</div>);
+      continue;
+    }
+
+    // Dollar amount lines
+    if (/^\*?\*?\$[\d,]+/.test(t)) {
+      els.push(<div key={i} style={{ fontWeight: 700, color: POA.green, fontSize: 15, marginBottom: 2 }}>{t.replace(/\*\*/g,"")}</div>);
+      continue;
+    }
+
+    // Bullet points — - or •
+    if (t.startsWith("- ") || t.startsWith("• ") || t.startsWith("* ")) {
+      const content = t.slice(2);
+      els.push(
+        <div key={i} style={{ display: "flex", gap: 10, marginBottom: 5, alignItems: "flex-start", paddingLeft: 4 }}>
+          <div style={{ width: 5, height: 5, borderRadius: "50%", background: POA.accent, flexShrink: 0, marginTop: 8 }} />
+          <div style={{ fontSize: 13.5, color: POA.textSecondary, lineHeight: 1.65, flex: 1 }}>{renderInline(content)}</div>
+        </div>
+      );
+      continue;
+    }
+
+    // Numbered list — 1. 2. etc
+    if (/^\d+\.\s/.test(t)) {
+      const num = t.match(/^(\d+)\.\s(.*)/);
+      if (num) {
+        els.push(
+          <div key={i} style={{ display: "flex", gap: 10, marginBottom: 5, alignItems: "flex-start", paddingLeft: 4 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: POA.accent, flexShrink: 0, minWidth: 18, marginTop: 2 }}>{num[1]}.</div>
+            <div style={{ fontSize: 13.5, color: POA.textSecondary, lineHeight: 1.65, flex: 1 }}>{renderInline(num[2])}</div>
+          </div>
+        );
+        continue;
+      }
+    }
+
+    // Outreach line (quoted)
+    if (t.startsWith('"') || t.startsWith('"')) {
+      els.push(
+        <div key={i} style={{ background: POA.accentSoft, border: `0.5px solid ${POA.accentDim}`, borderLeft: `3px solid ${POA.accent}`, borderRadius: "0 8px 8px 0", padding: "10px 14px", margin: "10px 0", fontSize: 13, color: POA.textPrimary, lineHeight: 1.6, fontStyle: "italic" }}>
+          {renderInline(t)}
+        </div>
+      );
+      continue;
+    }
+
+    // Bold-only lines (entire line is **text**)
+    if (t.startsWith("**") && t.endsWith("**") && t.length > 4) {
+      els.push(<div key={i} style={{ fontWeight: 700, fontSize: 14, color: POA.textPrimary, marginTop: 12, marginBottom: 4 }}>{t.slice(2,-2)}</div>);
+      continue;
+    }
+
+    // Default paragraph
+    els.push(<div key={i} style={{ fontSize: 13.5, color: POA.textSecondary, lineHeight: 1.7, marginBottom: 4 }}>{renderInline(t)}</div>);
+  }
+
+  return <div style={{ padding: "2px 0" }}>{els}</div>;
 }
 
 function Fundraising({ me, org }) {
@@ -4224,29 +4316,43 @@ function Fundraising({ me, org }) {
     const user = `Today: ${today.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}. Target date: ${targetDate || "flexible"}.\n\nFundraiser plan:\n${out}`;
     try {
       const raw = await callClaudeAI(EXTRACT_SYS, user);
-      const clean = raw.replace(/```json|```/g, "").trim();
-      const parsed = JSON.parse(clean);
+      const jsonMatch = raw.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) throw new Error("no JSON found");
+      const parsed = JSON.parse(jsonMatch[0]);
       setPlanReview({
         sourceLabel: `Fundraiser: ${chosenIdea?.name || "plan"}`,
-        actionItems: (parsed.action_items || []).map((it, i) => ({
-          id: Date.now() + i, task: it.task,
+        actionItems: (parsed.action_items || []).map((it, idx) => ({
+          id: Date.now() + idx,
+          task: it.task || "",
           ownerId: matchOwnerId(it.suggested_owner),
-          due: normalizeDate(it.suggested_due_date), keep: true,
+          due: normalizeDate(it.suggested_due_date),
+          keep: true,
         })),
-        calendarEvents: (parsed.calendar_events || []).map((ev, i) => ({
-          id: Date.now() + 5000 + i, title: ev.title,
-          date: normalizeDate(ev.date), keep: true,
+        calendarEvents: (parsed.calendar_events || []).map((ev, idx) => ({
+          id: Date.now() + 5000 + idx,
+          title: ev.title || "",
+          date: normalizeDate(ev.date),
+          keep: true,
         })),
       });
       setPhase("operationalize");
     } catch {
-      setPlanReview({ sourceLabel: `Fundraiser: ${chosenIdea?.name || "plan"}`, actionItems: [], calendarEvents: [] });
-      setErr("Auto-extraction didn't work — add tasks and events manually below.");
+      setPlanReview({
+        sourceLabel: `Fundraiser: ${chosenIdea?.name || "plan"}`,
+        actionItems: [
+          { id: Date.now(),   task: "", ownerId: "", due: "", keep: true },
+          { id: Date.now()+1, task: "", ownerId: "", due: "", keep: true },
+          { id: Date.now()+2, task: "", ownerId: "", due: "", keep: true },
+        ],
+        calendarEvents: [
+          { id: Date.now()+10, title: "", date: "", keep: true },
+        ],
+      });
+      setErr("Auto-extraction had trouble — we opened a blank form below. Add tasks manually or try again.");
       setPhase("operationalize");
     } finally { setOperationalizing(false); }
   }
 
-  // --- add to app: write action items + funding events ---
   async function addToApp() {
     if (!planReview) return;
     const validDate = d => typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d);
