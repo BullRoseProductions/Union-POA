@@ -5044,6 +5044,15 @@ export default function App() {
   // PA gets the board nav here; the PA_NAV section is rendered separately below the divider
   const nav = !me ? [] : (isPA || curViewAs === "board") ? filteredBoardNav : filteredMemberNav;
 
+  // only mount screens the current user can actually reach (state-preserving keep-alive)
+  const mountedViews = ALL_VIEWS.filter(viewId => {
+    if (isPA) return true; // PA sees everything
+    if (viewId.startsWith('pa_')) return false; // non-PA never mounts PA screens
+    if (curViewAs === 'board') return !viewId.startsWith('m_'); // board view: board + no member
+    if (curViewAs === 'member') return !viewId.startsWith('b_'); // member view: member + no board
+    return true;
+  });
+
   if (!ready) return <Loading />;
   if (!session) return <Login />;
   if (me === undefined) return <Loading />;
@@ -5138,7 +5147,7 @@ export default function App() {
 
       {/* ---- Main content ---- */}
       <main style={{ flex: 1, overflowY: "auto", padding: "32px 36px", maxWidth: 860 }}>
-        {ALL_VIEWS.map(viewId => (
+        {mountedViews.map(viewId => (
           <div key={viewId} style={{ display: activeView === viewId ? "block" : "none" }}>
             {renderScreen(viewId, { me, org, setView })}
           </div>
