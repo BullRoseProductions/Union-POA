@@ -316,7 +316,7 @@ function MemberDash({ me, org, setView }) {
         <div style={{ fontSize: 26, fontWeight: 700, color: "#fff", lineHeight: 1.2 }}>Need help?<br />We've got you.</div>
       </div>
 
-      <button onClick={() => window.location.href = "tel:"}
+      <button onClick={() => setView("m_call")}
         style={{ width: 150, height: 150, borderRadius: "50%", background: "#c0392b", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, animation: "pulse-emerg 2s infinite" }}>
         <Phone size={44} color="#fff" />
         <div style={{ fontSize: 14, fontWeight: 700, color: "#fff", letterSpacing: ".04em" }}>Call now</div>
@@ -490,10 +490,10 @@ function MemberDash({ me, org, setView }) {
       <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: POA.textMuted, marginBottom: 8 }}>Quick actions</div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8 }}>
         {[
-          { id: "m_documents",      label: "Documents",    Icon: FileText },
-          { id: "m_correspondence", label: "Messages",     Icon: Mail },
-          { id: "m_causes",         label: "Causes",       Icon: Heart },
-          { id: "m_card",           label: "My card",      Icon: CreditCard },
+          { id: "m_documents",      label: "Documents",     Icon: FileText },
+          { id: "m_correspondence", label: "Correspondence", Icon: Mail },
+          { id: "m_vote",           label: "VoteLink",      Icon: Vote },
+          { id: "m_card",           label: "My card",       Icon: CreditCard },
         ].map(({ id, label, Icon }) => (
           <button key={id} onClick={() => setView(id)}
             style={{ ...PS.card, padding: "12px 8px", textAlign: "center", cursor: "pointer", border: `0.5px solid ${POA.hairline}` }}>
