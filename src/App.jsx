@@ -1664,54 +1664,249 @@ function Store() {
 }
 
 function BoardContinuity({ me }) {
-  const positions = [
-    { title: "President", holder: "Open", term: "2024–2026", status: "current" },
-    { title: "Vice President", holder: "Open", term: "2024–2026", status: "current" },
-    { title: "Secretary", holder: "Open", term: "2024–2026", status: "current" },
-    { title: "Treasurer", holder: "Open", term: "2024–2026", status: "current" },
-    { title: "Sergeant-at-Arms", holder: "Open", term: "2024–2026", status: "current" },
-    { title: "Trustee — District 1", holder: "Open", term: "2024–2026", status: "current" },
-    { title: "Trustee — District 2", holder: "Open", term: "2024–2026", status: "current" },
-  ];
-  const filled = positions.filter(p => p.holder !== "Open").length;
-  const vacant = positions.length - filled;
+  const [positions, setPositions] = useState(null);
+  const [members, setMembers]     = useState([]);
+  const [editing, setEditing]     = useState(null);
+  const [adding, setAdding]       = useState(false);
+  const [err, setErr]             = useState("");
+  const [busy, setBusy]           = useState(false);
+  const [expandedId, setExpandedId] = useState(null);
+
+  const blank = { title: "", holder_member_id: "", holder_name: "", term_start: "", term_end: "", status: "active", succession_notes: "", sort: 0 };
+  const [f, setF] = useState(blank);
+
+  const manage  = canManage(me.access);
+  const isAdmin = canAdmin(me.access);
+
+  async function load() {
+    const [pos, mem] = await Promise.all([listBoardPositions(), listMembers()]);
+    setPositions(pos); setMembers(mem);
+  }
+  useEffect(() => { load(); }, []);
+
+  function startEdit(p) {
+    setF({
+      title: p.title,
+      holder_member_id: p.holder_member_id || "",
+      holder_name: p.holder_name || "",
+      term_start: p.term_start || "",
+      term_end: p.term_end || "",
+      status: p.status,
+      succession_notes: p.succession_notes || "",
+      sort: p.sort || 0,
+    });
+    setEditing(p); setAdding(false); setErr("");
+  }
+
+  function startAdd() {
+    setF({ ...blank, sort: (positions?.length || 0) + 1 });
+    setAdding(true); setEditing(null); setErr("");
+  }
+
+  function resetForm() {
+    setEditing(null); setAdding(false); setErr(""); setF(blank);
+  }
+
+  async function doSave() {
+    if (!f.title.trim()) { setErr("Position title is required."); return; }
+    setBusy(true); setErr("");
+    try {
+      const row = {
+        department_id: me.department_id,
+        title: f.title.trim(),
+        holder_member_id: f.holder_member_id || null,
+        holder_name: f.holder_member_id ? null : (f.holder_name.trim() || null),
+        term_start: f.term_start || null,
+        term_end: f.term_end || null,
+        status: f.status,
+        succession_notes: f.succession_notes.trim() || null,
+        sort: Number(f.sort) || 0,
+      };
+      if (editing) {
+        await updateBoardPosition(editing.id, row);
+      } else {
+        await createBoardPosition(row);
+      }
+      resetForm(); await load();
+    } catch(e) { setErr(e.message); }
+    finally { setBusy(false); }
+  }
+
+  async function doArchive(id) {
+    if (!confirm("Archive this position? It won't show on the board roster but stays in history.")) return;
+    try { await archiveBoardPosition(id); await load(); }
+    catch(e) { setErr(e.message); }
+  }
+
+  const statusColor = { active: POA.accent, vacant: POA.amber, emeritus: POA.textMuted };
+  const statusBg    = { active: POA.accentSoft, vacant: "rgba(240,180,74,.14)", emeritus: "rgba(122,114,150,.14)" };
+
+  const active  = (positions || []).filter(p => p.status !== "archived");
+  const filled  = active.filter(p => p.status === "active" && (p.holder_member_id || p.holder_name));
+  const vacant  = active.filter(p => p.status === "vacant" || (!p.holder_member_id && !p.holder_name && p.status === "active"));
+
   return (
     <div>
-      <PageTitle sub="Board roster, terms, and succession — the continuity spine">Board Continuity</PageTitle>
-      <div style={{ fontSize: 13, color: POA.textMuted, marginBottom: 18, lineHeight: 1.6 }}>
-        Every seat, who holds it, and when the term ends. Continuity is documented so nothing walks out the door when a board turns over. Your board manages this roster.
-      </div>
+      <PageTitle sub="Board positions, terms, and succession — institutional memory that survives turnover">
+        Board Continuity
+      </PageTitle>
+
+      <Card style={{ marginBottom: 18, borderColor: POA.accentDim }}>
+        <div style={{ fontSize: 13, color: POA.textSecondary, lineHeight: 1.65 }}>
+          Every position, every term, every transition — recorded here so the association never loses institutional memory when leadership changes. Succession notes stay with the role, not the person.
+        </div>
+      </Card>
 
       <StatRow stats={[
-        { n: positions.length, label: "Board seats", color: POA.accent },
-        { n: filled, label: "Filled", color: POA.green },
-        { n: vacant, label: "Vacant", color: POA.amber },
+        { n: active.length,  label: "Total positions", color: POA.accent },
+        { n: filled.length,  label: "Filled",          color: POA.green },
+        { n: vacant.length,  label: "Vacant",          color: POA.amber },
       ]} />
 
-      <SectionTitle>Positions</SectionTitle>
-      {positions.map(p => {
-        const open = p.holder === "Open";
-        return (
-          <Card key={p.title}>
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <div style={{ width: 38, height: 38, borderRadius: "50%", background: open ? POA.track : POA.accentSoft, color: open ? POA.textMuted : POA.accent, display: "grid", placeItems: "center", fontWeight: 700, fontSize: 12, flexShrink: 0 }}>
-                {open ? "—" : initials(p.holder)}
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 700, fontSize: 14.5, color: POA.textPrimary }}>{p.title}</div>
-                <div style={{ fontSize: 12.5, color: POA.textMuted, marginTop: 2 }}>{open ? "Vacant" : p.holder} · Term {p.term}</div>
-              </div>
-              <span style={{ fontSize: 10, fontWeight: 700, padding: "3px 9px", borderRadius: 999, background: open ? "rgba(240,180,74,.14)" : "rgba(70,199,147,.14)", color: open ? POA.amber : POA.green, flexShrink: 0 }}>
-                {open ? "Vacant" : "Filled"}
-              </span>
+      <ErrBox msg={err} />
+
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", margin: "18px 0 10px" }}>
+        <p style={{ ...PS.kicker, margin: 0 }}>Current board</p>
+        {manage && !adding && !editing && (
+          <button style={PS.btn} onClick={startAdd}><Plus size={13} /> Add position</button>
+        )}
+      </div>
+
+      {/* Add / Edit form */}
+      {(adding || editing) && (
+        <Card style={{ marginBottom: 16 }}>
+          <SectionTitle>{editing ? `Edit — ${editing.title}` : "New position"}</SectionTitle>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Position title</div>
+              <input value={f.title} onChange={e => setF({ ...f, title: e.target.value })}
+                style={PS.input} placeholder="e.g. President, District 4 Rep" />
             </div>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Holder — pick from roster</div>
+              <select value={f.holder_member_id}
+                onChange={e => setF({ ...f, holder_member_id: e.target.value, holder_name: "" })}
+                style={{ ...PS.input }}>
+                <option value="">— Not on roster / type name below —</option>
+                {members.map(m => (
+                  <option key={m.id} value={m.id}>
+                    {m.full_name}{m.badge ? ` · Badge ${m.badge}` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {!f.holder_member_id && (
+              <div style={{ gridColumn: "1 / -1" }}>
+                <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Or type a name</div>
+                <input value={f.holder_name} onChange={e => setF({ ...f, holder_name: e.target.value })}
+                  style={PS.input} placeholder="Free text — for people not on the roster yet" />
+              </div>
+            )}
+            <div>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Term start</div>
+              <input type="date" value={f.term_start}
+                onChange={e => setF({ ...f, term_start: e.target.value })} style={PS.input} />
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Term end</div>
+              <input type="date" value={f.term_end}
+                onChange={e => setF({ ...f, term_end: e.target.value })} style={PS.input} />
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Status</div>
+              <select value={f.status} onChange={e => setF({ ...f, status: e.target.value })}
+                style={{ ...PS.input }}>
+                <option value="active">Active</option>
+                <option value="vacant">Vacant</option>
+                <option value="emeritus">Emeritus</option>
+              </select>
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Sort order</div>
+              <input type="number" value={f.sort}
+                onChange={e => setF({ ...f, sort: e.target.value })} style={PS.input} />
+            </div>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>
+                Succession notes — what the next person needs to know
+              </div>
+              <textarea value={f.succession_notes}
+                onChange={e => setF({ ...f, succession_notes: e.target.value })}
+                style={{ ...PS.textarea, minHeight: 100 }}
+                placeholder="Key contacts, ongoing initiatives, where files live, what to watch out for…" />
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button style={PS.btnPrimary} disabled={busy} onClick={doSave}>
+              {busy ? "Saving…" : editing ? "Save changes" : "Add position"}
+            </button>
+            <button style={PS.btn} onClick={resetForm}>Cancel</button>
+            {editing && isAdmin && (
+              <button style={{ ...PS.btn, color: POA.red, marginLeft: "auto" }}
+                onClick={() => { doArchive(editing.id); resetForm(); }}>
+                Archive
+              </button>
+            )}
+          </div>
+          <div style={{ fontSize: 11.5, color: POA.textMuted, marginTop: 8, fontStyle: "italic" }}>
+            Succession notes stay with the role — they survive leadership changes.
+          </div>
+        </Card>
+      )}
+
+      {!positions ? <Spinner /> : active.length === 0 ? (
+        <Card><div style={{ color: POA.textMuted, fontSize: 13.5 }}>No positions yet. Add your first board position above.</div></Card>
+      ) : active.map(p => {
+        const holderName = p.holder_member_id
+          ? (p.members?.full_name || "Member")
+          : (p.holder_name || null);
+        const expanded = expandedId === p.id;
+        return (
+          <Card key={p.id} style={{ marginBottom: 10 }}>
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 700, fontSize: 15, color: POA.textPrimary, marginBottom: 3 }}>
+                  {p.title}
+                </div>
+                <div style={{ fontSize: 13, color: holderName ? POA.textSecondary : POA.textMuted }}>
+                  {holderName || "Vacant"}
+                  {p.members?.badge ? ` · Badge ${p.members.badge}` : ""}
+                </div>
+                {(p.term_start || p.term_end) && (
+                  <div style={{ fontSize: 11.5, color: POA.textMuted, marginTop: 2 }}>
+                    Term {p.term_start ? fmtDate(p.term_start) : "?"} — {p.term_end ? fmtDate(p.term_end) : "ongoing"}
+                  </div>
+                )}
+              </div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, padding: "3px 9px", borderRadius: 999, background: statusBg[p.status] || POA.accentSoft, color: statusColor[p.status] || POA.accent, textTransform: "uppercase" }}>
+                  {p.status}
+                </span>
+                {manage && (
+                  <button style={{ ...PS.btn, padding: "5px 9px", fontSize: 11.5 }}
+                    onClick={() => startEdit(p)}>
+                    <Pencil size={11} />
+                  </button>
+                )}
+              </div>
+            </div>
+            {p.succession_notes && (
+              <>
+                <div onClick={() => setExpandedId(expanded ? null : p.id)}
+                  style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 10, cursor: "pointer", color: POA.textMuted, fontSize: 12 }}>
+                  {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                  Succession notes
+                </div>
+                {expanded && (
+                  <div style={{ marginTop: 8, background: POA.sidebar, border: `0.5px solid ${POA.hairline}`, borderLeft: `3px solid ${POA.accent}`, borderRadius: "0 9px 9px 0", padding: "11px 14px", fontSize: 13, color: POA.textSecondary, lineHeight: 1.65, whiteSpace: "pre-wrap" }}>
+                    {p.succession_notes}
+                  </div>
+                )}
+              </>
+            )}
           </Card>
         );
       })}
-
-      <div style={{ fontSize: 11.5, color: POA.textMuted, marginTop: 8, fontStyle: "italic" }}>
-        {isDeptAdmin(me.access) ? "You can update seats and terms in the Members section." : "Roster and terms are managed by your board."}
-      </div>
     </div>
   );
 }
@@ -1896,6 +2091,33 @@ async function saveAIDraft(row) {
 async function deleteAIDraft(id) {
   const { error } = await supabase.from("ai_outputs")
     .update({ deleted_at: new Date().toISOString() }).eq("id", id);
+  if (error) throw error;
+}
+async function listBoardPositions() {
+  const { data, error } = await supabase
+    .from("board_positions")
+    .select("*, members(full_name, badge)")
+    .neq("status", "archived")
+    .order("sort")
+    .order("created_at");
+  if (error) throw error;
+  return data || [];
+}
+async function createBoardPosition(row) {
+  const { data, error } = await supabase
+    .from("board_positions").insert(row).select().single();
+  if (error) throw error;
+  return data;
+}
+async function updateBoardPosition(id, patch) {
+  const { data, error } = await supabase
+    .from("board_positions").update(patch).eq("id", id).select().single();
+  if (error) throw error;
+  return data;
+}
+async function archiveBoardPosition(id) {
+  const { error } = await supabase
+    .from("board_positions").update({ status: "archived" }).eq("id", id);
   if (error) throw error;
 }
 async function listVideos() {
