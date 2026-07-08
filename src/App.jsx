@@ -2914,7 +2914,7 @@ function SocialMedia({ me, org }) {
             <SectionTitle>AI Caption Helper</SectionTitle>
             <div style={{ fontFamily: "inherit", fontWeight: 700, fontSize: 20, color: POA.textPrimary, marginBottom: 4 }}>Write a post for your association</div>
             <div style={{ fontSize: 13.5, color: POA.textMuted, marginBottom: 14 }}>What's the post about?</div>
-            <input value={captionTopic} onChange={e => setCaptionTopic(e.target.value)}
+            <input id="caption-input" value={captionTopic} onChange={e => setCaptionTopic(e.target.value)}
               onKeyDown={e => e.key === "Enter" && !captionBusy && doCaptionDraft()}
               placeholder="e.g. Our members volunteered at the District 4 food drive" style={{ ...PS.input, marginBottom: 12 }} />
             <button style={PS.btnPrimary} disabled={captionBusy || !captionTopic.trim()} onClick={doCaptionDraft}>
@@ -2947,7 +2947,7 @@ function SocialMedia({ me, org }) {
                   <div style={{ fontWeight: 700, fontSize: 13.5, color: POA.textPrimary, marginBottom: 4 }}>{i.title}</div>
                   <div style={{ fontSize: 12, color: POA.textMuted, lineHeight: 1.45, marginBottom: 10 }}>{i.desc}</div>
                   <button style={{ ...PS.btn, width: "100%", justifyContent: "center" }}
-                    onClick={() => setCaptionTopic(i.title)}>
+                    onClick={() => { setCaptionTopic(i.title); document.getElementById('caption-input')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }}>
                     <Sparkles size={12} /> Draft this
                   </button>
                 </div>
