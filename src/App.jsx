@@ -2080,11 +2080,22 @@ async function listAnnouncements() {
 async function listMessages() {
   const { data, error } = await supabase
     .from("correspondence")
-    .select("*, sender:members!correspondence_member_id_fkey(full_name), replies:correspondence!thread_id(*)")
+    .select("*, sender:members!correspondence_member_id_fkey(full_name)")
     .eq("kind", "message")
     .order("created_at", { ascending: false });
   if (error) throw error;
-  return data || [];
+  // fetch replies separately to avoid self-referencing join
+  const ids = (data || []).map(m => m.id);
+  if (ids.length === 0) return data || [];
+  const { data: replies } = await supabase
+    .from("correspondence")
+    .select("*")
+    .eq("kind", "reply")
+    .in("thread_id", ids);
+  return (data || []).map(m => ({
+    ...m,
+    replies: (replies || []).filter(r => r.thread_id === m.id),
+  }));
 }
 async function postAlert(subject, body) {
   const { data, error } = await supabase
