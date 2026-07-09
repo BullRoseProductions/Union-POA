@@ -1184,6 +1184,7 @@ function AskB4C({ me, org }) {
 
 function MyCard({ me, org }) {
   const [cardSettings, setCardSettings] = useState({});
+  const [showBack, setShowBack] = useState(false);
   useEffect(() => {
     supabase.from('org_settings')
       .select('*')
@@ -1208,6 +1209,7 @@ function MyCard({ me, org }) {
   return (
     <div>
       <PageTitle sub="Your digital membership card">My Card</PageTitle>
+      {!showBack && (
       <div style={{ position: "relative", background: "linear-gradient(160deg, #111D35 0%, #0A1020 60%, #060911 100%)", border: "1px solid rgba(219,165,37,.35)", borderRadius: 20, padding: "28px 26px", marginBottom: 12, boxShadow: "0 0 60px rgba(219,165,37,.08), 0 20px 60px rgba(0,0,0,.7), 0 4px 12px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.06)", overflow: "hidden", minHeight: 220 }}>
 
         {/* Ambient glow top-right */}
@@ -1295,6 +1297,33 @@ function MyCard({ me, org }) {
         {/* Bottom gold line */}
         <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 1.5, background: "linear-gradient(90deg, transparent 0%, rgba(219,165,37,.4) 40%, rgba(219,165,37,.6) 50%, rgba(219,165,37,.4) 60%, transparent 100%)" }} />
       </div>
+      )}
+
+      <button style={{ ...PS.btn, width: '100%', justifyContent: 'center', marginBottom: 12 }}
+        onClick={() => setShowBack(v => !v)}>
+        {showBack ? '← Show front' : 'Show back →'}
+      </button>
+
+      {showBack && (
+        <div style={{ position: 'relative', background: 'linear-gradient(160deg, #111D35 0%, #0A1020 60%, #060911 100%)', border: '1px solid rgba(219,165,37,.3)', borderRadius: 20, padding: '28px 26px', marginBottom: 12, boxShadow: '0 0 40px rgba(219,165,37,.06), 0 8px 32px rgba(0,0,0,.6)', overflow: 'hidden' }}>
+          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: 'linear-gradient(90deg, transparent, rgba(219,165,37,.6), transparent)', borderRadius: '20px 20px 0 0' }} />
+          <SectionTitle>Member rights</SectionTitle>
+          <div style={{ fontSize: 13.5, color: POA.textSecondary, lineHeight: 1.75, marginBottom: 16 }}>
+            As a member of {orgName}, you have the right to legal representation before any investigative interview. Contact your Legal Defense Rep immediately — before speaking to any investigator.
+          </div>
+          <div style={{ background: 'rgba(219,165,37,.06)', border: '0.5px solid rgba(219,165,37,.2)', borderRadius: 10, padding: '14px 16px', marginBottom: 16 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: POA.accent, letterSpacing: '.1em', textTransform: 'uppercase', marginBottom: 6 }}>Before any interview</div>
+            <div style={{ fontSize: 13.5, color: POA.textSecondary, lineHeight: 1.65, fontStyle: 'italic' }}>
+              "I am invoking my right to have association representation present before answering any questions."
+            </div>
+          </div>
+          <div style={{ fontSize: 11.5, color: POA.textMuted, lineHeight: 1.6 }}>
+            This card is issued by {orgName}. For questions about your membership or benefits, contact your board through the B4C app.
+          </div>
+          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 1.5, background: 'linear-gradient(90deg, transparent, rgba(219,165,37,.4), transparent)' }} />
+        </div>
+      )}
+
       <div style={{ fontSize: 11.5, color: POA.textMuted, textAlign: "center", fontStyle: "italic" }}>Show this screen to verify membership at association events.</div>
     </div>
   );
