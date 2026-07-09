@@ -1190,9 +1190,29 @@ function MyCard({ me, org }) {
         <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 1, background: "linear-gradient(90deg, transparent, rgba(219,165,37,.5), transparent)", borderRadius: "13px 13px 0 0" }} />
         <div style={{ ...PS.kicker, marginBottom: 14 }}>{org?.name || "Association"}</div>
         <div style={{ fontWeight: 700, fontSize: 22, color: POA.textPrimary, marginBottom: 4 }}>{me.full_name}</div>
-        <div style={{ fontSize: 13, color: POA.textSecondary, marginBottom: 18 }}>
+        <div style={{ fontSize: 13, color: POA.textSecondary, marginBottom: 12 }}>
           Badge {me.badge || "—"}{me.district ? ` · District ${me.district}` : ""} · {(me.access || ["Member"]).filter(r => r !== "Member")[0] || "Member"}
         </div>
+        {(me.dues_paid_through || me.member_since) && (
+          <div style={{ display: 'flex', gap: 16, marginBottom: 20 }}>
+            {me.dues_paid_through && (
+              <div>
+                <div style={{ fontSize: 9, color: POA.textMuted, textTransform: 'uppercase', letterSpacing: '.12em', marginBottom: 3 }}>Active through</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: new Date(me.dues_paid_through) < new Date() ? POA.red : POA.green }}>
+                  {new Date(me.dues_paid_through).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
+                </div>
+              </div>
+            )}
+            {me.member_since && (
+              <div>
+                <div style={{ fontSize: 9, color: POA.textMuted, textTransform: 'uppercase', letterSpacing: '.12em', marginBottom: 3 }}>Member since</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: POA.textSecondary }}>
+                  {new Date(me.member_since).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
           <div>
             <div style={{ fontSize: 10, color: POA.textMuted, textTransform: "uppercase", letterSpacing: ".1em" }}>Standing</div>

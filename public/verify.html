@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset='utf-8'>
+  <meta name='viewport' content='width=device-width, initial-scale=1'>
+  <title>B4C Member Verification</title>
+  <link href='https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Rajdhani:wght@700&display=swap' rel='stylesheet'>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Inter',system-ui,sans-serif;background:#04070F;color:#F5F0E8;min-height:100vh;display:grid;place-items:center;padding:20px}
+    .card{background:linear-gradient(135deg,#0E1630,#060911);border:1px solid rgba(219,165,37,.3);border-radius:20px;padding:32px 28px;max-width:420px;width:100%;box-shadow:0 0 40px rgba(219,165,37,.08),0 8px 32px rgba(0,0,0,.6)}
+    .top-line{height:2px;background:linear-gradient(90deg,transparent,rgba(219,165,37,.6),transparent);margin:-32px -28px 24px;border-radius:20px 20px 0 0}
+    .brand{font-family:'Rajdhani',sans-serif;font-size:18px;font-weight:700;letter-spacing:.08em;background:linear-gradient(135deg,#F0C84A,#DBA525);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:4px}
+    .org{font-size:12px;color:#706860;margin-bottom:24px}
+    .verified-badge{display:inline-flex;align-items:center;gap:6px;background:rgba(70,199,147,.12);border:1px solid rgba(70,199,147,.3);border-radius:999px;padding:6px 14px;font-size:12px;font-weight:700;color:#46C793;margin-bottom:20px}
+    .name{font-size:26px;font-weight:700;margin-bottom:8px}
+    .meta{font-size:13px;color:#B8B0A0;margin-bottom:20px;line-height:1.6}
+    .standing{display:inline-block;padding:5px 14px;border-radius:8px;font-size:13px;font-weight:700}
+    .good{background:rgba(219,165,37,.12);border:0.5px solid rgba(219,165,37,.25);color:#DBA525}
+    .bad{background:rgba(239,106,100,.12);border:0.5px solid rgba(239,106,100,.25);color:#EF6A64}
+    .footer{font-size:11px;color:#706860;margin-top:20px;text-align:center;line-height:1.6}
+    .error{text-align:center;padding:40px 0}
+    .error h2{font-size:18px;margin-bottom:8px;color:#EF6A64}
+    .error p{font-size:13px;color:#706860}
+    .spinner{width:32px;height:32px;border:3px solid rgba(219,165,37,.2);border-top-color:#DBA525;border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 16px}
+    @keyframes spin{to{transform:rotate(360deg)}}
+  </style>
+</head>
+<body>
+  <div class='card' id='card'>
+    <div class='top-line'></div>
+    <div style='text-align:center'><div class='spinner'></div><p style='color:#706860;font-size:13px'>Verifying membership…</p></div>
+  </div>
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const memberId = params.get('m');
+    const card = document.getElementById('card');
+    if (!memberId) {
+      card.innerHTML = '<div class="top-line"></div><div class="error"><h2>Invalid QR Code</h2><p>This verification link is not valid.</p></div>';
+    } else {
+      fetch('/api/verify?m=' + memberId)
+        .then(r => r.json())
+        .then(data => {
+          if (data.error) throw new Error(data.error);
+          const isGood = data.standing === 'Good' || data.standing === 'Active';
+          const duesDate = data.dues_paid_through ? new Date(data.dues_paid_through).toLocaleDateString(undefined,{month:'long',year:'numeric'}) : null;
+          const duesExpired = data.dues_paid_through && new Date(data.dues_paid_through) < new Date();
+          card.innerHTML = `
+            <div class="top-line"></div>
+            <div class="brand">B4C UNION</div>
+            <div class="org">${data.org_name}</div>
+            <div class="verified-badge">✓ Verified Member</div>
+            <div class="name">${data.full_name}</div>
+            <div class="meta">
+              ${data.badge ? 'Badge ' + data.badge : ''}
+              ${data.district ? ' · District ' + data.district : ''}
+            </div>
+            <div>
+              <div style="font-size:10px;color:#706860;text-transform:uppercase;letter-spacing:.12em;margin-bottom:6px">Standing</div>
+              <span class="standing ${isGood ? 'good' : 'bad'}">${data.standing}</span>
+            </div>
+            ${duesDate ? `<div style="margin-top:14px"><div style="font-size:10px;color:#706860;text-transform:uppercase;letter-spacing:.12em;margin-bottom:4px">Dues ${duesExpired ? 'expired' : 'active through'}</div><div style="font-size:13px;font-weight:600;color:${duesExpired ? '#EF6A64' : '#46C793'}">${duesDate}</div></div>` : ''}
+            <div class="footer">
+              Verified ${new Date().toLocaleString()}<br>
+              B4C · Before the Call
+            </div>`;
+        })
+        .catch(() => {
+          card.innerHTML = '<div class="top-line"></div><div class="error"><h2>Member Not Found</h2><p>This QR code could not be verified. Please contact your board.</p></div>';
+        });
+    }
+  </script>
+</body>
+</html>
