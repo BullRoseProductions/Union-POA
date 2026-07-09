@@ -4651,6 +4651,8 @@ function POABuilding({ me, org }) {
   const [bf, setBf] = useState({
     title: "", booking_date: "", start_time: "", end_time: "", notes: "",
   });
+  const [calCur, setCalCur] = useState({ y: new Date().getFullYear(), m: new Date().getMonth() });
+  const [calSelected, setCalSelected] = useState(null);
 
   const spaceName = orgSettings.event_space_name || "Event Space";
   const manage = canManage(me.access);
@@ -4996,6 +4998,152 @@ function POABuilding({ me, org }) {
                 <button style={PS.btn} onClick={() => { setShowBook(false); setErr(""); }}>Cancel</button>
               </div>
             </Card>
+          )}
+
+          {/* Calendar view */}
+          {bookings && (
+            <div style={{ marginBottom: 20 }}>
+              <Card>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    <button style={PS.btn} onClick={() => setCalCur(c => c.m === 0 ? { y: c.y-1, m: 11 } : { ...c, m: c.m-1 })}>‹</button>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: POA.textPrimary, minWidth: 130, textAlign: "center" }}>
+                      {MONTHS[calCur.m]} {calCur.y}
+                    </div>
+                    <button style={PS.btn} onClick={() => setCalCur(c => c.m === 11 ? { y: c.y+1, m: 0 } : { ...c, m: c.m+1 })}>›</button>
+                  </div>
+                  <button style={PS.btn} onClick={() => setCalCur({ y: new Date().getFullYear(), m: new Date().getMonth() })}>Today</button>
+                </div>
+
+                {/* Day headers */}
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 3, marginBottom: 6 }}>
+                  {DOW.map(d => <div key={d} style={{ fontSize: 9, fontWeight: 700, textAlign: "center", color: POA.textMuted, textTransform: "uppercase", letterSpacing: ".06em" }}>{d}</div>)}
+                </div>
+
+                {(() => {
+                  const dim      = new Date(calCur.y, calCur.m + 1, 0).getDate();
+                  const startDow = new Date(calCur.y, calCur.m, 1).getDay();
+                  const cells    = [];
+                  for (let i = 0; i < startDow; i++) cells.push(null);
+                  for (let d = 1; d <= dim; d++) cells.push(d);
+                  while (cells.length % 7) cells.push(null);
+
+                  // Map bookings to days for this month
+                  const byDay = {};
+                  bookings.forEach(b => {
+                    const bd = new Date(b.booking_date + "T12:00:00");
+                    if (bd.getFullYear() === calCur.y && bd.getMonth() === calCur.m) {
+                      const d = bd.getDate();
+                      (byDay[d] = byDay[d] || []).push(b);
+                    }
+                  });
+
+                  const todayD = new Date();
+                  const isToday = d => d && calCur.y === todayD.getFullYear() && calCur.m === todayD.getMonth() && d === todayD.getDate();
+
+                  return Array.from({ length: cells.length / 7 }, (_, w) => (
+                    <div key={w} style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 3, marginBottom: 3 }}>
+                      {cells.slice(w*7, w*7+7).map((d, i) => {
+                        const dayBookings = d ? (byDay[d] || []) : [];
+                        const hasConfirmed = dayBookings.some(b => b.status === "confirmed");
+                        const hasPending   = dayBookings.some(b => b.status === "pending");
+                        const hasCancelled = dayBookings.length > 0 && !hasConfirmed && !hasPending;
+                        const tod = isToday(d);
+
+                        let bg = "transparent";
+                        let border = `0.5px solid ${POA.hairline}`;
+                        if (hasConfirmed) { bg = "rgba(70,199,147,.15)";  border = "0.5px solid rgba(70,199,147,.4)"; }
+                        if (hasPending)   { bg = "rgba(219,165,37,.12)";  border = `0.5px solid rgba(219,165,37,.35)`; }
+                        if (hasCancelled) { bg = "rgba(239,106,100,.08)"; border = "0.5px solid rgba(239,106,100,.2)"; }
+                        if (tod) { border = `0.5px solid rgba(219,165,37,.6)`; }
+
+                        return (
+                          <div key={i}
+                            onClick={() => d && dayBookings.length > 0 && setCalSelected(calSelected === `${calCur.y}-${calCur.m}-${d}` ? null : `${calCur.y}-${calCur.m}-${d}`)}
+                            style={{ minHeight: 52, display: "flex", flexDirection: "column", borderRadius: 8, background: bg, border, cursor: dayBookings.length > 0 ? "pointer" : "default", padding: "4px 5px", gap: 2 }}>
+                            {d && (
+                              <>
+                                <div style={{ fontSize: 11, fontWeight: tod ? 700 : 400, color: tod ? POA.accent : POA.textMuted }}>{d}</div>
+                                {dayBookings.slice(0, 2).map(b => (
+                                  <div key={b.id} style={{ fontSize: 9, fontWeight: 600, padding: "1px 4px", borderRadius: 3, background: statusBg[b.status], color: statusColor[b.status], overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                    {b.start_time ? b.start_time.slice(0,5) + " " : ""}{b.title}
+                                  </div>
+                                ))}
+                                {dayBookings.length > 2 && <div style={{ fontSize: 8, color: POA.textMuted }}>+{dayBookings.length - 2} more</div>}
+                              </>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ));
+                })()}
+
+                {/* Legend */}
+                <div style={{ display: "flex", gap: 14, marginTop: 12, paddingTop: 10, borderTop: `0.5px solid ${POA.hairline}`, flexWrap: "wrap" }}>
+                  {[
+                    { color: "rgba(70,199,147,.5)",  label: "Confirmed" },
+                    { color: "rgba(219,165,37,.4)",  label: "Pending" },
+                    { color: "rgba(239,106,100,.3)", label: "Cancelled" },
+                  ].map(({ color, label }) => (
+                    <div key={label} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: POA.textMuted }}>
+                      <div style={{ width: 10, height: 10, borderRadius: 3, background: color }} />
+                      {label}
+                    </div>
+                  ))}
+                </div>
+              </Card>
+
+              {/* Selected day detail */}
+              {calSelected && (() => {
+                const [y, m, d] = calSelected.split("-").map(Number);
+                const dayBookings = bookings.filter(b => {
+                  const bd = new Date(b.booking_date + "T12:00:00");
+                  return bd.getFullYear() === y && bd.getMonth() === m && bd.getDate() === d;
+                });
+                if (!dayBookings.length) return null;
+                return (
+                  <Card style={{ marginTop: 10, borderLeft: `3px solid ${POA.accent}`, borderRadius: "0 13px 13px 0" }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".12em", textTransform: "uppercase", color: POA.accent, marginBottom: 10 }}>
+                      {new Date(y, m, d).toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
+                    </div>
+                    {dayBookings.map(b => (
+                      <div key={b.id} style={{ marginBottom: 12, paddingBottom: 12, borderBottom: `0.5px solid ${POA.hairline}` }}>
+                        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, marginBottom: 4 }}>
+                          <div style={{ fontWeight: 700, fontSize: 14, color: POA.textPrimary }}>{b.title}</div>
+                          <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: statusBg[b.status], color: statusColor[b.status], flexShrink: 0 }}>{b.status}</span>
+                        </div>
+                        <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>
+                          Requested by {b.members?.full_name || "Member"}
+                          {b.members?.email ? ` · ${b.members.email}` : ""}
+                        </div>
+                        {(b.start_time || b.end_time) && (
+                          <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>
+                            {b.start_time?.slice(0,5)}{b.end_time ? ` – ${b.end_time.slice(0,5)}` : ""}
+                          </div>
+                        )}
+                        {b.notes && <div style={{ fontSize: 12, color: POA.textMuted, fontStyle: "italic", marginBottom: 8 }}>{b.notes}</div>}
+                        {manage && b.status === "pending" && (
+                          <div style={{ display: "flex", gap: 6 }}>
+                            <button style={{ ...PS.btnPrimary, fontSize: 12, padding: "5px 12px" }} onClick={() => doUpdateStatus(b.id, "confirmed")}>
+                              <CheckCircle2 size={12} /> Confirm
+                            </button>
+                            <button style={{ ...PS.btn, fontSize: 12, color: POA.red }} onClick={() => doUpdateStatus(b.id, "cancelled")}>
+                              Decline
+                            </button>
+                          </div>
+                        )}
+                        {manage && b.status === "confirmed" && (
+                          <button style={{ ...PS.btn, fontSize: 12, color: POA.red }} onClick={() => doUpdateStatus(b.id, "cancelled")}>
+                            Cancel booking
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </Card>
+                );
+              })()}
+            </div>
           )}
 
           {/* Upcoming bookings */}
