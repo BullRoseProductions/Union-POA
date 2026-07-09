@@ -620,18 +620,24 @@ function MemberDash({ me, org, setView }) {
 
 function WhoToCall({ me }) {
   const [contacts, setContacts] = useState(null);
+  const [categories, setCategories] = useState([]);
   const [editing, setEditing]   = useState(null);
   const [adding, setAdding]     = useState(false);
   const [err, setErr]           = useState("");
   const [busy, setBusy]         = useState(false);
+  const [showCatMgr, setShowCatMgr] = useState(false);
+  const [catForm, setCatForm]   = useState({ label: "", color: "#DBA525" });
+  const [catBusy, setCatBusy]   = useState(false);
   const manage                  = canManage(me?.access);
 
   const blank = { role: "", name: "", phone: "", email: "", category: "Leadership", sort: 0 };
   const [f, setF] = useState(blank);
 
   async function load() {
-    try { setContacts(await listContacts()); }
-    catch(e) { setErr(e.message); }
+    try {
+      const [c, cats] = await Promise.all([listContacts(), listContactCategories()]);
+      setContacts(c); setCategories(cats);
+    } catch(e) { setErr(e.message); }
   }
   useEffect(() => { load(); }, []);
 
@@ -667,15 +673,29 @@ function WhoToCall({ me }) {
     catch(e) { setErr(e.message); }
   }
 
-  const CATEGORIES = ["Leadership","Legal","Welfare","Financial","Operations","Other"];
-  const CAT_COLOR = {
-    Leadership: POA.accent,
-    Legal: "#57B6E0",
-    Welfare: "#EF6A64",
-    Financial: POA.green,
-    Operations: POA.amber,
-    Other: POA.textMuted,
-  };
+  async function doSaveCat() {
+    if (!catForm.label.trim()) return;
+    setCatBusy(true);
+    try {
+      await createContactCategory({
+        department_id: me.department_id,
+        label: catForm.label.trim(),
+        color: catForm.color,
+        sort: categories.length + 1,
+      });
+      setCatForm({ label: "", color: "#DBA525" });
+      await load();
+    } catch(e) { setErr(e.message); }
+    finally { setCatBusy(false); }
+  }
+  async function doDeleteCat(id) {
+    if (!confirm('Remove this category? Contacts in it will still exist but lose their category grouping.')) return;
+    try { await deleteContactCategory(id); await load(); }
+    catch(e) { setErr(e.message); }
+  }
+
+  const CATEGORIES = categories.map(c => c.label);
+  const CAT_COLOR = Object.fromEntries(categories.map(c => [c.label, c.color]));
 
   // Group by category
   const grouped = {};
@@ -696,13 +716,49 @@ function WhoToCall({ me }) {
           </div>
         </div>
         {manage && (
-          <button style={PS.btn} onClick={() => { setAdding(!adding); setEditing(null); }}>
-            <Plus size={13} /> Add contact
-          </button>
+          <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+            <button style={PS.btn} onClick={() => setShowCatMgr(v => !v)}>
+              <Settings size={13} /> Categories
+            </button>
+            <button style={PS.btn} onClick={() => { setAdding(!adding); setEditing(null); }}>
+              <Plus size={13} /> Add contact
+            </button>
+          </div>
         )}
       </div>
 
       <ErrBox msg={err} />
+
+      {showCatMgr && manage && (
+        <Card style={{ marginBottom: 16 }}>
+          <SectionTitle>Manage categories</SectionTitle>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+            {categories.map(cat => (
+              <div key={cat.id} style={{ display: 'flex', alignItems: 'center', gap: 6, background: `${cat.color}15`, border: `1px solid ${cat.color}40`, borderRadius: 8, padding: '5px 10px' }}>
+                <div style={{ width: 8, height: 8, borderRadius: '50%', background: cat.color }} />
+                <span style={{ fontSize: 12, fontWeight: 600, color: cat.color }}>{cat.label}</span>
+                <button onClick={() => doDeleteCat(cat.id)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: POA.textMuted, fontSize: 14, lineHeight: 1, padding: '0 2px' }}>×</button>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 11, color: POA.textMuted, marginBottom: 4 }}>New category name</div>
+              <input value={catForm.label} onChange={e => setCatForm(f => ({ ...f, label: e.target.value }))}
+                style={PS.input} placeholder='e.g. Chaplain, EMS Liaison, Retiree Rep' />
+            </div>
+            <div>
+              <div style={{ fontSize: 11, color: POA.textMuted, marginBottom: 4 }}>Color</div>
+              <input type='color' value={catForm.color} onChange={e => setCatForm(f => ({ ...f, color: e.target.value }))}
+                style={{ width: 44, height: 38, borderRadius: 7, border: `0.5px solid ${POA.hairline}`, background: 'transparent', cursor: 'pointer', padding: 2 }} />
+            </div>
+            <button style={PS.btnPrimary} disabled={catBusy || !catForm.label.trim()} onClick={doSaveCat}>
+              <Plus size={13} /> Add
+            </button>
+          </div>
+        </Card>
+      )}
 
       {/* Add/Edit form */}
       {(adding || editing) && manage && (
@@ -722,7 +778,7 @@ function WhoToCall({ me }) {
             <div>
               <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Category</div>
               <select value={f.category} onChange={e => setF({ ...f, category: e.target.value })} style={PS.input}>
-                {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                {categories.map(c => <option key={c.id} value={c.label}>{c.label}</option>)}
               </select>
             </div>
             <div>
@@ -2695,6 +2751,32 @@ async function updateContact(id, patch) {
 async function deactivateContact(id) {
   const { error } = await supabase
     .from("contacts").update({ active: false }).eq("id", id);
+  if (error) throw error;
+}
+async function listContactCategories() {
+  const { data, error } = await supabase
+    .from("contact_categories")
+    .select("*")
+    .order("sort")
+    .order("created_at");
+  if (error) throw error;
+  return data || [];
+}
+async function createContactCategory(row) {
+  const { data, error } = await supabase
+    .from("contact_categories").insert(row).select().single();
+  if (error) throw error;
+  return data;
+}
+async function updateContactCategory(id, patch) {
+  const { data, error } = await supabase
+    .from("contact_categories").update(patch).eq("id", id).select().single();
+  if (error) throw error;
+  return data;
+}
+async function deleteContactCategory(id) {
+  const { error } = await supabase
+    .from("contact_categories").delete().eq("id", id);
   if (error) throw error;
 }
 async function listAnnouncements() {
