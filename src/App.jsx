@@ -2566,10 +2566,14 @@ function MyValue({ me }) {
 function Benefits({ me, setView }) {
   const [benefits, setBenefits]   = useState(null);
   const [contacts, setContacts]   = useState([]);
+  const [benCategories, setBenCategories] = useState([]);
   const [editing, setEditing]     = useState(null);
   const [adding, setAdding]       = useState(false);
   const [err, setErr]             = useState("");
   const [busy, setBusy]           = useState(false);
+  const [showBenCatMgr, setShowBenCatMgr] = useState(false);
+  const [benCatForm, setBenCatForm] = useState({ label: "" });
+  const [benCatBusy, setBenCatBusy] = useState(false);
   const manage                    = canManage(me?.access);
 
   const blank = { title: "", description: "", status: "Active", category: "Core", contact_role: "", sort: 0 };
@@ -2577,11 +2581,31 @@ function Benefits({ me, setView }) {
 
   async function load() {
     try {
-      const [b, c] = await Promise.all([listBenefits(), listContacts()]);
-      setBenefits(b); setContacts(c);
+      const [b, c, cats] = await Promise.all([listBenefits(), listContacts(), listBenefitCategories()]);
+      setBenefits(b); setContacts(c); setBenCategories(cats);
     } catch(e) { setErr(e.message); }
   }
   useEffect(() => { load(); }, []);
+
+  async function doSaveBenCat() {
+    if (!benCatForm.label.trim()) return;
+    setBenCatBusy(true);
+    try {
+      await createBenefitCategory({
+        department_id: me.department_id,
+        label: benCatForm.label.trim(),
+        sort: benCategories.length + 1,
+      });
+      setBenCatForm({ label: "" });
+      await load();
+    } catch(e) { setErr(e.message); }
+    finally { setBenCatBusy(false); }
+  }
+  async function doDeleteBenCat(id) {
+    if (!confirm('Remove this category?')) return;
+    try { await deleteBenefitCategory(id); await load(); }
+    catch(e) { setErr(e.message); }
+  }
 
   function startEdit(b) {
     setF({ title: b.title, description: b.description || "", status: b.status, category: b.category, contact_role: b.contact_role || "", sort: b.sort || 0 });
@@ -2645,13 +2669,43 @@ function Benefits({ me, setView }) {
           </div>
         </div>
         {manage && (
-          <button style={PS.btn} onClick={() => { setAdding(!adding); setEditing(null); }}>
-            <Plus size={13} /> Add benefit
-          </button>
+          <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+            <button style={PS.btn} onClick={() => setShowBenCatMgr(v => !v)}>
+              <Settings size={13} /> Categories
+            </button>
+            <button style={PS.btn} onClick={() => { setAdding(!adding); setEditing(null); }}>
+              <Plus size={13} /> Add benefit
+            </button>
+          </div>
         )}
       </div>
 
       <ErrBox msg={err} />
+
+      {showBenCatMgr && manage && (
+        <Card style={{ marginBottom: 16 }}>
+          <SectionTitle>Manage benefit categories</SectionTitle>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+            {benCategories.map(cat => (
+              <div key={cat.id} style={{ display: 'flex', alignItems: 'center', gap: 6, background: POA.accentSoft, border: `1px solid ${POA.accentDim}`, borderRadius: 8, padding: '5px 10px' }}>
+                <span style={{ fontSize: 12, fontWeight: 600, color: POA.accent }}>{cat.label}</span>
+                <button onClick={() => doDeleteBenCat(cat.id)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: POA.textMuted, fontSize: 14, lineHeight: 1, padding: '0 2px' }}>×</button>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 11, color: POA.textMuted, marginBottom: 4 }}>New category name</div>
+              <input value={benCatForm.label} onChange={e => setBenCatForm({ label: e.target.value })}
+                style={PS.input} placeholder='e.g. Housing, Transport, Chaplain Services' />
+            </div>
+            <button style={PS.btnPrimary} disabled={benCatBusy || !benCatForm.label.trim()} onClick={doSaveBenCat}>
+              <Plus size={13} /> Add
+            </button>
+          </div>
+        </Card>
+      )}
 
       {/* Add/Edit form */}
       {(adding || editing) && manage && (
@@ -2670,8 +2724,9 @@ function Benefits({ me, setView }) {
             </div>
             <div>
               <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Category</div>
-              <input value={f.category} onChange={e => setF({ ...f, category: e.target.value })}
-                style={PS.input} placeholder="e.g. Core, Legal, Wellness, Education" />
+              <select value={f.category} onChange={e => setF({ ...f, category: e.target.value })} style={PS.input}>
+                {benCategories.map(c => <option key={c.id} value={c.label}>{c.label}</option>)}
+              </select>
             </div>
             <div>
               <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Status</div>
@@ -3218,6 +3273,26 @@ async function updateBenefit(id, patch) {
 async function deactivateBenefit(id) {
   const { error } = await supabase
     .from("benefits").update({ active: false }).eq("id", id);
+  if (error) throw error;
+}
+async function listBenefitCategories() {
+  const { data, error } = await supabase
+    .from("benefit_categories")
+    .select("*")
+    .order("sort")
+    .order("created_at");
+  if (error) throw error;
+  return data || [];
+}
+async function createBenefitCategory(row) {
+  const { data, error } = await supabase
+    .from("benefit_categories").insert(row).select().single();
+  if (error) throw error;
+  return data;
+}
+async function deleteBenefitCategory(id) {
+  const { error } = await supabase
+    .from("benefit_categories").delete().eq("id", id);
   if (error) throw error;
 }
 async function listContactCategories() {
