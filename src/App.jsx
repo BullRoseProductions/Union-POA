@@ -2158,6 +2158,10 @@ function MeetingAttendance({ me }) {
   const [signinTokens, setSigninTokens] = useState({}); // eventId -> live token
   const [err, setErr]             = useState("");
   const [busy, setBusy]           = useState(false);
+  const [eventHistory, setEventHistory]   = useState([]);
+  const [showHistory, setShowHistory]     = useState(false);
+  const [historySearch, setHistorySearch] = useState('');
+  const [historyFilter, setHistoryFilter] = useState('all');
   const [newEvt, setNewEvt]       = useState({
     title: "", kind: "meeting", event_date: "", event_time: "", location: "", notes: "", visibility: "all", attendance_mode: "qr", assign_all: true, assigned_ids: [],
   });
@@ -2170,6 +2174,16 @@ function MeetingAttendance({ me }) {
     if (detail) setDetail(evts.find(e => e.id === detail.id) || null);
   }
   useEffect(() => { load(); }, []);
+
+  async function loadHistory() {
+    const { data, error } = await supabase
+      .from('events')
+      .select('*, event_attendance(member_id)')
+      .eq('department_id', me.department_id)
+      .eq('done', true)
+      .order('event_date', { ascending: false });
+    if (!error) setEventHistory(data || []);
+  }
 
   // ---- QR check-in capture on URL params (mirrors fire) ----
   useEffect(() => {
@@ -2614,6 +2628,58 @@ function MeetingAttendance({ me }) {
               </div>
             ))
       }
+
+      {canAdmin(me.access) && (
+        <div style={{ marginTop: 24 }}>
+          <div onClick={() => { setShowHistory(v => !v); if (!showHistory) loadHistory(); }}
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', marginBottom: showHistory ? 14 : 0 }}>
+            <p style={{ ...PS.kicker, margin: 0 }}>Event history</p>
+            {showHistory ? <ChevronUp size={15} color={POA.textMuted} /> : <ChevronDown size={15} color={POA.textMuted} />}
+          </div>
+          {showHistory && (
+            <div>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+                <input value={historySearch} onChange={e => setHistorySearch(e.target.value)}
+                  placeholder='Search events…' style={{ ...PS.input, flex: 1, minWidth: 180 }} />
+                <select value={historyFilter} onChange={e => setHistoryFilter(e.target.value)} style={{ ...PS.input, width: 140 }}>
+                  <option value='all'>All types</option>
+                  <option value='meeting'>Meetings</option>
+                  <option value='community'>Community</option>
+                  <option value='training'>Training</option>
+                  <option value='board'>Board</option>
+                  <option value='other'>Other</option>
+                </select>
+              </div>
+              {eventHistory
+                .filter(e => historyFilter === 'all' || e.kind === historyFilter)
+                .filter(e => !historySearch || e.title.toLowerCase().includes(historySearch.toLowerCase()))
+                .map(e => (
+                  <div key={e.id} style={{ ...PS.card, padding: '11px 14px', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 10, opacity: .8 }}>
+                    <div style={{ width: 7, height: 7, borderRadius: '50%', background: KIND_COLOR[e.kind] || POA.accent, flexShrink: 0 }} />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 600, fontSize: 13.5, color: POA.textPrimary }}>{e.title}</div>
+                      <div style={{ fontSize: 11, color: POA.textMuted, marginTop: 1 }}>
+                        {new Date(e.event_date + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+                        {e.location ? ` · ${e.location}` : ''}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+                      <span style={{ fontSize: 11, color: POA.textMuted }}>{(e.event_attendance || []).length} signed in</span>
+                      <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: POA.accentSoft, color: POA.accent }}>{e.kind}</span>
+                    </div>
+                  </div>
+                ))
+              }
+              {eventHistory.filter(e => historyFilter === 'all' || e.kind === historyFilter).filter(e => !historySearch || e.title.toLowerCase().includes(historySearch.toLowerCase())).length === 0 && (
+                <div style={{ ...PS.card, padding: '14px', color: POA.textMuted, fontSize: 13.5 }}>No past events match your filters.</div>
+              )}
+              <div style={{ fontSize: 11.5, color: POA.textMuted, marginTop: 8, fontStyle: 'italic' }}>
+                Event history is visible to Department Admins only. Past events are kept permanently for records.
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
