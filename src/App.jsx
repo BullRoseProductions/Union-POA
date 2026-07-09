@@ -5121,6 +5121,7 @@ function PAOrgConfig() {
     { key: 'm_card', label: 'My Card', group: 'Member' },
     { key: 'm_vote', label: 'VoteLink', group: 'Member' },
     { key: 'm_store', label: 'Store', group: 'Member' },
+    { key: 'm_booking', label: 'Event Space', group: 'Member' },
     { key: 'b_attendance', label: 'Meetings & Events', group: 'Board' },
     { key: 'b_meetings', label: 'Agenda & Minutes', group: 'Board' },
     { key: 'b_stipend', label: 'Stipend Log', group: 'Board' },
