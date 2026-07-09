@@ -1448,7 +1448,7 @@ function MemberEvents({ me, setView }) {
             <p style={{ ...PS.kicker, margin: 0 }}>Past events ({past.length})</p>
             {showPast ? <ChevronUp size={15} color={POA.textMuted} /> : <ChevronDown size={15} color={POA.textMuted} />}
           </div>
-          {showPast && past.slice(0,10).map(e => (
+          {showPast && past.slice(0,20).map(e => (
             <div key={e.id} style={{ ...PS.card, padding: "11px 14px", marginBottom: 6, opacity: .65, cursor: "pointer", display: "flex", alignItems: "center", gap: 10 }}
               onClick={() => setSelected(e)}>
               <div style={{ width: 7, height: 7, borderRadius: "50%", background: e.color, flexShrink: 0 }} />
@@ -2181,8 +2181,19 @@ function MeetingAttendance({ me }) {
       .select('*, event_attendance(member_id)')
       .eq('department_id', me.department_id)
       .eq('done', true)
+      .neq('status', 'archived')
       .order('event_date', { ascending: false });
     if (!error) setEventHistory(data || []);
+  }
+
+  async function doArchiveEvent(id) {
+    if (!confirm('Archive this event? It will be hidden from history but the data is preserved.')) return;
+    const { error } = await supabase
+      .from('events')
+      .update({ status: 'archived' })
+      .eq('id', id)
+      .eq('department_id', me.department_id);
+    if (!error) loadHistory();
   }
 
   // ---- QR check-in capture on URL params (mirrors fire) ----
@@ -2666,6 +2677,10 @@ function MeetingAttendance({ me }) {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
                       <span style={{ fontSize: 11, color: POA.textMuted }}>{(e.event_attendance || []).length} signed in</span>
                       <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: POA.accentSoft, color: POA.accent }}>{e.kind}</span>
+                      <button style={{ ...PS.btn, fontSize: 11, padding: '3px 8px', color: POA.red }}
+                        onClick={() => doArchiveEvent(e.id)}>
+                        Archive
+                      </button>
                     </div>
                   </div>
                 ))
