@@ -193,6 +193,7 @@ const BOARD_NAV = [
   { id: "b_building",     label: "POA Building",      Icon: Building2 },
   { id: "b_continuity",   label: "Board Continuity",  Icon: BookOpen },
   { id: "b_correspondence",label: "Correspondence",   Icon: Mail },
+  { id: "m_vote",         label: "VoteLink",          Icon: Vote },
   { id: "b_community",    label: "Community",         Icon: Users },
   { id: "b_members",      label: "Members",           Icon: Users },
   { id: "b_documents",    label: "Documents",         Icon: FileText },
@@ -8065,7 +8066,7 @@ export default function App() {
   const mountedViews = ALL_VIEWS.filter(viewId => {
     if (isPA) return true; // PA sees everything
     if (viewId.startsWith('pa_')) return false; // non-PA never mounts PA screens
-    if (curViewAs === 'board') return !viewId.startsWith('m_'); // board view: board + no member
+    if (curViewAs === 'board') return viewId === 'm_vote' || !viewId.startsWith('m_'); // board view: board screens + shared VoteLink
     if (curViewAs === 'member') return !viewId.startsWith('b_'); // member view: member + no board
     return true;
   });
