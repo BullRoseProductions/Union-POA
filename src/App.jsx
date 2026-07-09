@@ -514,13 +514,91 @@ function MemberDash({ me, org, setView }) {
         ))}
       </div>
 
-      {/* Calendar + Attendance side by side */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
-        {/* Mini calendar */}
+      {/* Bottom two-col — left: attendance + announcements / right: bigger calendar */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1.4fr", gap: 10, marginBottom: 14 }}>
+
+        {/* LEFT — Attendance + Announcements */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+
+          {/* Attendance tracker */}
+          <Card>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: POA.accent, marginBottom: 8 }}>
+              Attendance — Q{Math.ceil((today.getMonth()+1)/3)}
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+              <div style={{ fontSize: 11, color: POA.textMuted }}>{attCount} of {attGoal} meetings</div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: POA.accent }}>{attPct}%</div>
+            </div>
+            <div style={{ height: 6, background: POA.track, borderRadius: 3, overflow: "hidden", marginBottom: 8 }}>
+              <div style={{ height: "100%", width: `${attPct}%`, background: "linear-gradient(90deg, #DBA525, #F0C84A)", borderRadius: 3, boxShadow: "0 0 6px rgba(219,165,37,.4)" }} />
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 3, marginBottom: 6 }}>
+              {Array.from({ length: attGoal }, (_, i) => {
+                const done = i < attCount;
+                return (
+                  <div key={i} style={{ background: done ? "linear-gradient(135deg, rgba(219,165,37,.25), rgba(219,165,37,.1))" : POA.accentSoft, border: `0.5px solid ${done ? "rgba(219,165,37,.3)" : POA.hairline}`, borderRadius: 6, padding: "5px 3px", textAlign: "center", boxShadow: done ? "0 0 6px rgba(219,165,37,.1), inset 0 1px 0 rgba(219,165,37,.15)" : "none" }}>
+                    <CheckCircle2 size={12} color={done ? POA.accent : POA.accentDim} style={{ filter: done ? "drop-shadow(0 0 3px rgba(219,165,37,.5))" : "none" }} />
+                    <div style={{ fontSize: 8, color: done ? POA.accentDim : POA.textMuted, marginTop: 2 }}>Mtg {i+1}</div>
+                  </div>
+                );
+              })}
+            </div>
+            {attCount >= attGoal
+              ? <div style={{ fontSize: 10, color: POA.green, fontWeight: 600 }}>🎉 Quarter complete — raffle entry earned!</div>
+              : <div style={{ fontSize: 10, color: POA.textMuted }}>Attend {attGoal - attCount} more → raffle entry</div>
+            }
+          </Card>
+
+          {/* Announcements — compact */}
+          <Card style={{ flex: 1 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: POA.textMuted }}>Announcements</div>
+                {newCount > 0 && (
+                  <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 999, background: POA.accentSoft, color: POA.accent, border: `0.5px solid ${POA.accentDim}` }}>
+                    {newCount} new
+                  </span>
+                )}
+              </div>
+              <button onClick={() => setView("m_correspondence")}
+                style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, color: POA.accent, fontFamily: "inherit" }}>
+                All →
+              </button>
+            </div>
+
+            {announcements.length === 0 ? (
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <CheckCircle2 size={13} color={POA.green} style={{ flexShrink: 0 }} />
+                <div style={{ fontSize: 12, color: POA.textMuted }}>You're all caught up.</div>
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {announcements.map(a => (
+                  <div key={a.id} style={{ cursor: "pointer", paddingBottom: 8, borderBottom: `0.5px solid ${POA.hairline}` }}
+                    onClick={() => setView("m_correspondence")}>
+                    <div style={{ fontWeight: 600, fontSize: 12.5, color: POA.textPrimary, marginBottom: 2, lineHeight: 1.3 }}>{a.subject}</div>
+                    <div style={{ fontSize: 11, color: POA.textMuted, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 1, WebkitBoxOrient: "vertical" }}>{a.body}</div>
+                    <div style={{ fontSize: 10, color: POA.textMuted, marginTop: 3 }}>{fmtDate(a.created_at)}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+        </div>
+
+        {/* RIGHT — Bigger calendar with events */}
         <Card>
-          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: POA.accent, marginBottom: 10 }}>Upcoming events</div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 1, marginBottom: 4 }}>
-            {DOW.map(d => <div key={d} style={{ fontSize: 8, textAlign: "center", color: POA.textMuted, fontWeight: 700, padding: "2px 0" }}>{d}</div>)}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: POA.accent }}>
+              {MONTHS[today.getMonth()]} {today.getFullYear()}
+            </div>
+            <button onClick={() => setView("m_events")}
+              style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, color: POA.accent, fontFamily: "inherit" }}>
+              All events →
+            </button>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 2, marginBottom: 6 }}>
+            {DOW.map(d => <div key={d} style={{ fontSize: 8, textAlign: "center", color: POA.textMuted, fontWeight: 700, padding: "2px 0", textTransform: "uppercase" }}>{d}</div>)}
           </div>
           {(() => {
             const dim = new Date(today.getFullYear(), today.getMonth()+1, 0).getDate();
@@ -530,43 +608,34 @@ function MemberDash({ me, org, setView }) {
             for (let d = 1; d <= dim; d++) cells.push(d);
             while (cells.length % 7) cells.push(null);
             return Array.from({ length: cells.length / 7 }, (_, w) => (
-              <div key={w} style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 1, marginBottom: 1 }}>
-                {cells.slice(w*7, w*7+7).map((d, i) => (
-                  <div key={i} style={{ height: 20, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 4, background: d === today.getDate() ? POA.accentSoft : "transparent", fontSize: 9, color: d === today.getDate() ? POA.accent : POA.textMuted, fontWeight: d === today.getDate() ? 700 : 400 }}>
-                    {d || ""}
-                  </div>
-                ))}
+              <div key={w} style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 2, marginBottom: 2 }}>
+                {cells.slice(w*7, w*7+7).map((d, i) => {
+                  const isToday = d === today.getDate();
+                  return (
+                    <div key={i} style={{ height: 30, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-start", paddingTop: 4, borderRadius: 5, background: isToday ? "linear-gradient(135deg, rgba(219,165,37,.2), rgba(219,165,37,.08))" : "transparent", border: isToday ? "0.5px solid rgba(219,165,37,.3)" : "0.5px solid transparent", boxShadow: isToday ? "0 0 8px rgba(219,165,37,.15)" : "none" }}>
+                      <div style={{ fontSize: 10, color: isToday ? POA.accent : POA.textMuted, fontWeight: isToday ? 700 : 400 }}>{d || ""}</div>
+                    </div>
+                  );
+                })}
               </div>
             ));
           })()}
-        </Card>
 
-        {/* Attendance tracker */}
-        <Card>
-          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: POA.accent, marginBottom: 8 }}>Attendance — Q{Math.ceil((today.getMonth()+1)/3)}</div>
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-            <div style={{ fontSize: 12, color: POA.textMuted }}>{attCount} of {attGoal} meetings</div>
-            <div style={{ fontSize: 12, fontWeight: 700, color: POA.accent }}>{attPct}%</div>
-          </div>
-          <div style={{ height: 7, background: POA.track, borderRadius: 4, overflow: "hidden", marginBottom: 8 }}>
-            <div style={{ height: "100%", width: `${attPct}%`, background: POA.accent, borderRadius: 4 }} />
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 4, marginBottom: 8 }}>
-            {Array.from({ length: attGoal }, (_, i) => {
-              const done = i < attCount;
-              return (
-                <div key={i} style={{ background: done ? POA.accent : POA.accentSoft, borderRadius: 6, padding: "6px 4px", textAlign: "center" }}>
-                  <CheckCircle2 size={14} color={done ? "#fff" : POA.accentDim} />
-                  <div style={{ fontSize: 8, color: done ? "#fff" : POA.textMuted, marginTop: 2 }}>Mtg {i+1}</div>
+          {/* Upcoming events list below calendar */}
+          <div style={{ marginTop: 10, borderTop: `0.5px solid ${POA.hairline}`, paddingTop: 10 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", color: POA.textMuted, marginBottom: 6 }}>Upcoming</div>
+            {nextMeeting ? (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0" }}>
+                <div style={{ width: 6, height: 6, borderRadius: "50%", background: POA.accent, flexShrink: 0 }} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: POA.textPrimary }}>{nextMeeting.title}</div>
+                  <div style={{ fontSize: 10, color: POA.textMuted }}>{fmtDate(nextMeeting.scheduled_at)}</div>
                 </div>
-              );
-            })}
+              </div>
+            ) : (
+              <div style={{ fontSize: 12, color: POA.textMuted }}>No upcoming events.</div>
+            )}
           </div>
-          {attCount >= attGoal ? (
-            <div style={{ fontSize: 11, color: POA.green, fontWeight: 700 }}>🎉 Quarter complete — raffle entry earned!</div>
-          ) : (
-            <div style={{ fontSize: 10, color: POA.textMuted }}>Attend {attGoal - attCount} more to earn a raffle entry.</div>
-          )}
         </Card>
       </div>
 
@@ -604,52 +673,6 @@ function MemberDash({ me, org, setView }) {
             <div style={{ fontSize: 10, color: POA.textMuted }}>{label}</div>
           </button>
         ))}
-      </div>
-
-      {/* Announcements */}
-      <div style={{ marginTop: 18 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".12em", textTransform: "uppercase", color: POA.textMuted }}>
-              Announcements
-            </div>
-            {newCount > 0 && (
-              <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: POA.accentSoft, color: POA.accent, border: `0.5px solid ${POA.accentDim}` }}>
-                {newCount} new
-              </span>
-            )}
-          </div>
-          <button onClick={() => setView("m_correspondence")}
-            style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, color: POA.accent, fontFamily: "inherit" }}>
-            View all →
-          </button>
-        </div>
-
-        {announcements.length === 0 ? (
-          <Card>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "4px 0" }}>
-              <CheckCircle2 size={16} color={POA.green} style={{ flexShrink: 0 }} />
-              <div style={{ fontSize: 13, color: POA.textMuted }}>You're all caught up — no announcements yet.</div>
-            </div>
-          </Card>
-        ) : (
-          <>
-            {announcements.map((a, i) => (
-              <div key={a.id} style={{ ...PS.card, padding: "12px 14px", marginBottom: 8, cursor: "pointer" }}
-                onClick={() => setView("m_correspondence")}>
-                <div style={{ fontWeight: 600, fontSize: 13.5, color: POA.textPrimary, marginBottom: 3 }}>{a.subject}</div>
-                <div style={{ fontSize: 12, color: POA.textSecondary, lineHeight: 1.5, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
-                  {a.body}
-                </div>
-                <div style={{ fontSize: 11, color: POA.textMuted, marginTop: 5 }}>{fmtDate(a.created_at)}</div>
-              </div>
-            ))}
-            <button onClick={() => setView("m_correspondence")}
-              style={{ ...PS.btn, width: "100%", justifyContent: "center", fontSize: 12, marginTop: 4 }}>
-              View all announcements →
-            </button>
-          </>
-        )}
       </div>
 
       {activity.length > 0 && (
