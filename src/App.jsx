@@ -1220,6 +1220,7 @@ function MemberEvents({ me, setView }) {
         supabase.from("events")
           .select("*")
           .neq("visibility", "board")
+          .neq("status", "archived")
           .order("event_date", { ascending: true })
           .then(({ data, error }) => { if (error) throw error; return data || []; }),
         supabase.from("funding_events")
