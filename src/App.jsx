@@ -3469,6 +3469,7 @@ function PAOrgConfig() {
     { key: 'b_community', label: 'Community', group: 'Board' },
     { key: 'b_members', label: 'Members', group: 'Board' },
     { key: 'b_ledger', label: 'Value Ledger', group: 'Board' },
+    { key: 'b_settings', label: 'Settings', group: 'Board' },
   ];
   async function loadOrg(dept) {
     setSelected(dept);
