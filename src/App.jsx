@@ -4597,11 +4597,6 @@ async function removeVideo(id) {
   const { error } = await supabase.from("association_videos").delete().eq("id", id);
   if (error) throw error;
 }
-async function archiveStoreItem(id) {
-  const { error } = await supabase.from("store_items")
-    .update({ status: "archived" }).eq("id", id);
-  if (error) throw error;
-}
 async function listSpaceBookings() {
   const { data, error } = await supabase.from("space_bookings")
     .select("*, members(full_name, email)")
@@ -4712,7 +4707,7 @@ function POABuilding({ me, org }) {
 
   async function doArchive(id) {
     if (!confirm("Remove this item from the store?")) return;
-    try { await archiveStoreItem(id); await load(); }
+    try { await deactivateStoreItem(id); await load(); }
     catch(e) { setErr(e.message); }
   }
 
