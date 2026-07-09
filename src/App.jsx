@@ -355,12 +355,21 @@ function MemberDash({ me, org, setView }) {
   const [videos, setVideos] = useState([]);
   const [onCall, setOnCall_state] = useState([]);
   const [activity, setActivity] = useState([]);
+  const [announcements, setAnnouncements] = useState([]);
+  const [newCount, setNewCount] = useState(0);
 
   useEffect(() => {
     listMeetings().then(ms => setNextMeeting(ms.find(m => m.status === "open") || null));
     getActiveAlert().then(setActiveAlert).catch(() => null);
     getOnCall().then(setOnCall_state).catch(() => null);
     listActivityLog().then(setActivity).catch(() => null);
+    listAnnouncements().then(ann => {
+      setAnnouncements(ann.slice(0, 3));
+      const lastSeen = localStorage.getItem(`last_seen_${me.id}`) || '2000-01-01';
+      const unseen = ann.filter(a => a.created_at > lastSeen).length;
+      setNewCount(unseen);
+      localStorage.setItem(`last_seen_${me.id}`, new Date().toISOString());
+    }).catch(() => null);
     listVideos().then(v => setVideos(v.slice(0, 2))).catch(() => null);
     myActionItems(me.id).then(items => setOpenActions(items.filter(i => i.status === "open").length));
     // attendance this quarter
@@ -596,6 +605,52 @@ function MemberDash({ me, org, setView }) {
             <div style={{ fontSize: 10, color: POA.textMuted }}>{label}</div>
           </button>
         ))}
+      </div>
+
+      {/* Announcements */}
+      <div style={{ marginTop: 18 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".12em", textTransform: "uppercase", color: POA.textMuted }}>
+              Announcements
+            </div>
+            {newCount > 0 && (
+              <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: POA.accentSoft, color: POA.accent, border: `0.5px solid ${POA.accentDim}` }}>
+                {newCount} new
+              </span>
+            )}
+          </div>
+          <button onClick={() => setView("m_correspondence")}
+            style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, color: POA.accent, fontFamily: "inherit" }}>
+            View all →
+          </button>
+        </div>
+
+        {announcements.length === 0 ? (
+          <Card>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "4px 0" }}>
+              <CheckCircle2 size={16} color={POA.green} style={{ flexShrink: 0 }} />
+              <div style={{ fontSize: 13, color: POA.textMuted }}>You're all caught up — no announcements yet.</div>
+            </div>
+          </Card>
+        ) : (
+          <>
+            {announcements.map((a, i) => (
+              <div key={a.id} style={{ ...PS.card, padding: "12px 14px", marginBottom: 8, cursor: "pointer" }}
+                onClick={() => setView("m_correspondence")}>
+                <div style={{ fontWeight: 600, fontSize: 13.5, color: POA.textPrimary, marginBottom: 3 }}>{a.subject}</div>
+                <div style={{ fontSize: 12, color: POA.textSecondary, lineHeight: 1.5, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
+                  {a.body}
+                </div>
+                <div style={{ fontSize: 11, color: POA.textMuted, marginTop: 5 }}>{fmtDate(a.created_at)}</div>
+              </div>
+            ))}
+            <button onClick={() => setView("m_correspondence")}
+              style={{ ...PS.btn, width: "100%", justifyContent: "center", fontSize: 12, marginTop: 4 }}>
+              View all announcements →
+            </button>
+          </>
+        )}
       </div>
 
       {activity.length > 0 && (
