@@ -1183,10 +1183,22 @@ function AskB4C({ me, org }) {
 }
 
 function MyCard({ me, org }) {
-  const orgName      = org?.name || "Association";
-  const orgInitials  = orgName.split(" ").map(w => w[0]).slice(0, 3).join("").toUpperCase();
-  const shortName    = org?.short_name || orgInitials;
-  const logoUrl      = org?.logo_url || null;
+  const [cardSettings, setCardSettings] = useState({});
+  useEffect(() => {
+    supabase.from('org_settings')
+      .select('*')
+      .eq('department_id', me.department_id)
+      .then(({ data }) => {
+        const map = {};
+        (data || []).forEach(r => { map[r.key] = r.value; });
+        setCardSettings(map);
+      });
+  }, [me.department_id]);
+
+  const orgName      = cardSettings.org_name || org?.name || 'Association';
+  const orgInitials  = orgName.split(' ').map(w => w[0]).slice(0,3).join('').toUpperCase();
+  const shortName    = cardSettings.org_short_name || orgInitials;
+  const logoUrl      = cardSettings.org_logo_url || null;
   const role         = (me.access || ["Member"]).filter(r => r !== "Member")[0] || "Member";
   const standing     = me.standing || "Good";
   const goodStanding = standing === "Good" || standing === "Active";
