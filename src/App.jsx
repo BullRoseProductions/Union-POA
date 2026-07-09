@@ -691,7 +691,7 @@ function MyCard({ me, org }) {
   return (
     <div>
       <PageTitle sub="Your digital membership card">My Card</PageTitle>
-      <div style={{ ...PS.card, padding: "28px 24px", marginBottom: 16, background: `linear-gradient(135deg, #1a1030, #2a1860)`, border: `1px solid ${POA.accentDim}` }}>
+      <div style={{ ...PS.card, padding: "28px 24px", marginBottom: 16, background: `linear-gradient(135deg, #DBA525, #C49B2A)`, border: `1px solid ${POA.accentDim}` }}>
         <div style={{ ...PS.kicker, marginBottom: 14 }}>{org?.name || "Association"}</div>
         <div style={{ fontWeight: 700, fontSize: 22, color: POA.textPrimary, marginBottom: 4 }}>{me.full_name}</div>
         <div style={{ fontSize: 13, color: POA.textSecondary, marginBottom: 18 }}>
