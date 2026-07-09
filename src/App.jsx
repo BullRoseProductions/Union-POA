@@ -7664,6 +7664,13 @@ function MemberDocuments({ me }) {
           </div>
         ))
       )}
+      {search && filtered.length === 0 && (
+        <Card>
+          <div style={{ color: POA.textMuted, fontSize: 13.5 }}>
+            No documents match '{search}'. Try a different search term.
+          </div>
+        </Card>
+      )}
     </div>
   );
 }
