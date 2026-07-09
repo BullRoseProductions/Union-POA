@@ -3466,6 +3466,7 @@ function PAOrgConfig() {
     { key: 'b_building', label: 'POA Building', group: 'Board' },
     { key: 'b_continuity', label: 'Board Continuity', group: 'Board' },
     { key: 'b_correspondence', label: 'Correspondence', group: 'Board' },
+    { key: 'b_community', label: 'Community', group: 'Board' },
     { key: 'b_members', label: 'Members', group: 'Board' },
     { key: 'b_ledger', label: 'Value Ledger', group: 'Board' },
   ];
