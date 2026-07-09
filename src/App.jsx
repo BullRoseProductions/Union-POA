@@ -691,18 +691,18 @@ function MyCard({ me, org }) {
   return (
     <div>
       <PageTitle sub="Your digital membership card">My Card</PageTitle>
-      <div style={{ ...PS.card, padding: "28px 24px", marginBottom: 16, background: `linear-gradient(135deg, #DBA525, #C49B2A)`, border: `1px solid ${POA.accentDim}` }}>
-        <div style={{ ...PS.kicker, marginBottom: 14 }}>{org?.name || "Association"}</div>
-        <div style={{ fontWeight: 700, fontSize: 22, color: POA.textPrimary, marginBottom: 4 }}>{me.full_name}</div>
-        <div style={{ fontSize: 13, color: POA.textSecondary, marginBottom: 18 }}>
+      <div style={{ ...PS.card, padding: "28px 24px", marginBottom: 16, background: `linear-gradient(135deg, #DBA525, #C49B2A)`, border: `1px solid rgba(0,0,0,.15)` }}>
+        <div style={{ ...PS.kicker, color: "#06090A", marginBottom: 14 }}>{org?.name || "Association"}</div>
+        <div style={{ fontWeight: 700, fontSize: 22, color: "#06090A", marginBottom: 4 }}>{me.full_name}</div>
+        <div style={{ fontSize: 13, color: "rgba(6,9,10,.65)", marginBottom: 18 }}>
           Badge {me.badge || "—"}{me.district ? ` · District ${me.district}` : ""} · {(me.access || ["Member"]).filter(r => r !== "Member")[0] || "Member"}
         </div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
           <div>
-            <div style={{ fontSize: 10, color: POA.textMuted, textTransform: "uppercase", letterSpacing: ".1em" }}>Standing</div>
-            <div style={{ fontWeight: 700, color: POA.green, fontSize: 15 }}>{me.standing || "Good"}</div>
+            <div style={{ fontSize: 10, color: "rgba(6,9,10,.65)", textTransform: "uppercase", letterSpacing: ".1em" }}>Standing</div>
+            <div style={{ fontWeight: 700, color: "#06090A", fontSize: 15, background: "rgba(0,0,0,.2)", borderRadius: 6, padding: "2px 10px", display: "inline-block", marginTop: 3 }}>{me.standing || "Good"}</div>
           </div>
-          <div style={{ fontSize: 11, color: POA.textMuted }}>B4C · POA</div>
+          <div style={{ fontSize: 11, color: "rgba(6,9,10,.65)" }}>B4C · POA</div>
         </div>
       </div>
       <div style={{ fontSize: 11.5, color: POA.textMuted, textAlign: "center", fontStyle: "italic" }}>Show this screen to verify membership at association events.</div>
