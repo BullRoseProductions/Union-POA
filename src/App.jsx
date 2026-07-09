@@ -4778,7 +4778,7 @@ function POABuilding({ me, org }) {
       <div style={{ display: "flex", gap: 6, marginBottom: 20 }}>
         {TABS.map(t => (
           <button key={t.id} onClick={() => { setTab(t.id); setErr(""); }}
-            style={{ ...PS.btn, background: tab === t.id ? POA.accent : POA.btnBg, color: tab === t.id ? "#fff" : POA.btnText, border: tab === t.id ? "none" : `0.5px solid ${POA.btnBorder}` }}>
+            style={{ ...PS.btn, background: tab === t.id ? POA.accent : POA.btnBg, color: tab === t.id ? "#06090A" : POA.btnText, border: tab === t.id ? "none" : `0.5px solid ${POA.btnBorder}` }}>
             {t.label}
           </button>
         ))}
@@ -4837,7 +4837,7 @@ function POABuilding({ me, org }) {
                   <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
                     {["url", "upload"].map(mode => (
                       <button key={mode} onClick={() => setF({ ...f, image_mode: mode, image_url: "", image_file: null })}
-                        style={{ ...PS.btn, background: f.image_mode === mode ? POA.accent : POA.btnBg, color: f.image_mode === mode ? "#fff" : POA.btnText, border: f.image_mode === mode ? "none" : `0.5px solid ${POA.btnBorder}` }}>
+                        style={{ ...PS.btn, background: f.image_mode === mode ? POA.accent : POA.btnBg, color: f.image_mode === mode ? "#06090A" : POA.btnText, border: f.image_mode === mode ? "none" : `0.5px solid ${POA.btnBorder}` }}>
                         {mode === "url" ? "Paste a link" : "Upload a photo"}
                       </button>
                     ))}
@@ -5502,7 +5502,7 @@ function BoardCorrespondence({ me, members }) {
       <div style={{ display: "flex", gap: 6, marginBottom: 20 }}>
         {TABS.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
-            style={{ ...PS.btn, background: tab === t.id ? POA.accent : POA.btnBg, color: tab === t.id ? "#fff" : POA.btnText, border: tab === t.id ? "none" : `0.5px solid ${POA.btnBorder}` }}>
+            style={{ ...PS.btn, background: tab === t.id ? POA.accent : POA.btnBg, color: tab === t.id ? "#06090A" : POA.btnText, border: tab === t.id ? "none" : `0.5px solid ${POA.btnBorder}` }}>
             {t.label}
             {t.id === "inbox" && messages && messages.filter(m => m.kind === "message").length > 0 && (
               <span style={{ background: POA.accentSoft, color: POA.accent, borderRadius: 999, padding: "1px 7px", fontSize: 11, fontWeight: 700 }}>{messages.filter(m => m.kind === "message").length}</span>
@@ -5897,7 +5897,7 @@ function ValueLedger({ me }) {
       <div style={{ display: "flex", gap: 6, marginBottom: 20 }}>
         {[["ledger","Ledger"],["items","Value Items"]].map(([id, label]) => (
           <button key={id} onClick={() => setLedgerTab(id)}
-            style={{ ...PS.btn, background: ledgerTab === id ? POA.accent : POA.btnBg, color: ledgerTab === id ? "#fff" : POA.btnText, border: ledgerTab === id ? "none" : `0.5px solid ${POA.btnBorder}` }}>
+            style={{ ...PS.btn, background: ledgerTab === id ? POA.accent : POA.btnBg, color: ledgerTab === id ? "#06090A" : POA.btnText, border: ledgerTab === id ? "none" : `0.5px solid ${POA.btnBorder}` }}>
             {label}
           </button>
         ))}
@@ -5908,12 +5908,12 @@ function ValueLedger({ me }) {
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 20 }}>
         {PERIODS.map((p, i) => (
           <button key={p.label} onClick={() => { setPeriod(i); setShowCustom(false); }}
-            style={{ ...PS.btn, background: !showCustom && period === i ? POA.accent : POA.btnBg, color: !showCustom && period === i ? "#fff" : POA.btnText, border: !showCustom && period === i ? "none" : `0.5px solid ${POA.btnBorder}` }}>
+            style={{ ...PS.btn, background: !showCustom && period === i ? POA.accent : POA.btnBg, color: !showCustom && period === i ? "#06090A" : POA.btnText, border: !showCustom && period === i ? "none" : `0.5px solid ${POA.btnBorder}` }}>
             {p.label}
           </button>
         ))}
         <button onClick={() => setShowCustom(true)}
-          style={{ ...PS.btn, background: showCustom ? POA.accent : POA.btnBg, color: showCustom ? "#fff" : POA.btnText, border: showCustom ? "none" : `0.5px solid ${POA.btnBorder}` }}>
+          style={{ ...PS.btn, background: showCustom ? POA.accent : POA.btnBg, color: showCustom ? "#06090A" : POA.btnText, border: showCustom ? "none" : `0.5px solid ${POA.btnBorder}` }}>
           Custom
         </button>
       </div>
@@ -7172,14 +7172,14 @@ function Fundraising({ me, org }) {
           {/* Category tabs */}
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
             <button onClick={() => { setIdeaCat("All"); setIdeaTags([]); }}
-              style={{ ...PS.btn, background: ideaCat === "All" ? POA.accent : POA.btnBg, color: ideaCat === "All" ? "#fff" : POA.btnText, border: ideaCat === "All" ? "none" : `0.5px solid ${POA.btnBorder}`, fontSize: 12 }}>
+              style={{ ...PS.btn, background: ideaCat === "All" ? POA.accent : POA.btnBg, color: ideaCat === "All" ? "#06090A" : POA.btnText, border: ideaCat === "All" ? "none" : `0.5px solid ${POA.btnBorder}`, fontSize: 12 }}>
               All ({POA_IDEA_BANK.length})
             </button>
             {ALL_CATS.map(cat => {
               const count = POA_IDEA_BANK.filter(i => i.cat === cat).length;
               return (
                 <button key={cat} onClick={() => { setIdeaCat(cat); setIdeaTags([]); }}
-                  style={{ ...PS.btn, background: ideaCat === cat ? POA.accent : POA.btnBg, color: ideaCat === cat ? "#fff" : POA.btnText, border: ideaCat === cat ? "none" : `0.5px solid ${POA.btnBorder}`, fontSize: 12 }}>
+                  style={{ ...PS.btn, background: ideaCat === cat ? POA.accent : POA.btnBg, color: ideaCat === cat ? "#06090A" : POA.btnText, border: ideaCat === cat ? "none" : `0.5px solid ${POA.btnBorder}`, fontSize: 12 }}>
                   {cat} ({count})
                 </button>
               );
