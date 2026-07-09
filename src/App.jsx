@@ -24,44 +24,114 @@ const APP = "Before the Call";
 
 /* ---------- POA palette (violet-dark, mirrors FIRE token shape) ---------- */
 const POA = {
-  pageBg: "radial-gradient(130% 100% at 100% 0%, #130D1F 0%, #0C0A14 42%, #090810 100%)",
-  sidebar: "#09080F",
-  card: "#120E1E",
-  hairline: "rgba(255,255,255,.06)",
-  cardShadow: "0 10px 30px rgba(0,0,0,.4)",
-  cardRadius: 14,
-  textPrimary: "#F4F1FA",
-  textSecondary: "#B0A8C8",
-  textMuted: "#7A7296",
-  textMuted2: "#9890B0",
-  accent: "#9B6BE6",       // primary violet
-  accentDim: "#5a3f8c",
-  accentSoft: "rgba(155,107,230,.14)",
-  accentBright: "#B48AEF",
+  pageBg: "radial-gradient(130% 100% at 100% 0%, #0D1428 0%, #070C18 42%, #04070F 100%)",
+  sidebar: "linear-gradient(180deg, #060B1A 0%, #030610 100%)",
+  sidebarSolid: "#030610",
+  card: "#0A1020",
+  card2: "#0E1630",
+  hairline: "rgba(255,255,255,.07)",
+  hairline2: "rgba(255,255,255,.12)",
+  cardShadow: "0 4px 20px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.04)",
+  cardRadius: 13,
+  textPrimary: "#F5F0E8",
+  textSecondary: "#B8B0A0",
+  textMuted: "#706860",
+  textMuted2: "#8A8278",
+  accent: "#DBA525",
+  accentDim: "#8A6510",
+  accentSoft: "rgba(219,165,37,.10)",
+  accentGlow: "rgba(219,165,37,.20)",
+  accentBright: "#F0C84A",
   green: "#46C793",
   greenText: "#7AD8B0",
-  amber: "#F0B44A",
-  amberText: "#D6A95E",
+  amber: "#E8A030",
+  amberText: "#D4904A",
   red: "#EF6A64",
   redText: "#E58A90",
   track: "rgba(255,255,255,.06)",
   btnBg: "rgba(255,255,255,.04)",
   btnBorder: "rgba(255,255,255,.10)",
-  inputBorder: "rgba(255,255,255,.12)",
-  btnText: "#E4DFF4",
-  btnIcon: "#9890B0",
-  navLabel: "#C4BCDA",
+  inputBorder: "rgba(255,255,255,.10)",
+  btnText: "#E0D8C8",
+  btnIcon: "#908878",
+  navLabel: "rgba(192,184,168,.7)",
   white: "#fff",
 };
 
 /* ---------- Style recipes (same shape as fire's FS) ---------- */
 const PS = {
-  kicker: { fontSize: 10, textTransform: "uppercase", letterSpacing: ".18em", color: POA.accent, fontWeight: 700, margin: 0 },
-  card: { background: POA.card, border: `0.5px solid ${POA.hairline}`, borderRadius: POA.cardRadius, boxShadow: POA.cardShadow },
-  btn: { display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 11px", fontSize: 12.5, fontWeight: 600, background: POA.btnBg, border: `0.5px solid ${POA.btnBorder}`, borderRadius: 9, color: POA.btnText, cursor: "pointer", fontFamily: "inherit" },
-  btnPrimary: { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8, background: POA.accent, color: POA.white, border: "none", borderRadius: 9, padding: "10px 16px", fontSize: 13.5, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" },
-  input: { border: `0.5px solid ${POA.inputBorder}`, borderRadius: 8, padding: "10px 12px", fontSize: 14, fontFamily: "inherit", background: POA.card, color: POA.textPrimary, colorScheme: "dark", width: "100%" },
-  textarea: { border: `0.5px solid ${POA.inputBorder}`, borderRadius: 8, padding: "10px 12px", fontSize: 13.5, fontFamily: "inherit", background: POA.card, color: POA.textPrimary, colorScheme: "dark", width: "100%", minHeight: 130, resize: "vertical", lineHeight: 1.55 },
+  card: {
+    background: "linear-gradient(135deg, #0E1630 0%, #0A1020 100%)",
+    border: "0.5px solid rgba(255,255,255,.10)",
+    borderRadius: 13,
+    padding: "14px 16px",
+    boxShadow: "0 4px 20px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.04)",
+    position: "relative",
+  },
+  btn: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
+    padding: "7px 13px",
+    borderRadius: 8,
+    border: "0.5px solid rgba(255,255,255,.10)",
+    background: "rgba(255,255,255,.04)",
+    color: "#E0D8C8",
+    fontSize: 13,
+    fontWeight: 500,
+    cursor: "pointer",
+    fontFamily: "inherit",
+    boxShadow: "0 1px 4px rgba(0,0,0,.3)",
+  },
+  btnPrimary: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
+    padding: "8px 16px",
+    borderRadius: 8,
+    border: "none",
+    background: "linear-gradient(135deg, #DBA525, #C49B2A)",
+    color: "#06090A",
+    fontSize: 13,
+    fontWeight: 700,
+    cursor: "pointer",
+    fontFamily: "inherit",
+    boxShadow: "0 2px 10px rgba(219,165,37,.3), inset 0 1px 0 rgba(255,255,255,.12)",
+  },
+  input: {
+    width: "100%",
+    padding: "9px 12px",
+    borderRadius: 8,
+    border: "0.5px solid rgba(255,255,255,.10)",
+    background: "rgba(0,0,0,.3)",
+    color: "#F5F0E8",
+    fontSize: 13,
+    fontFamily: "inherit",
+    outline: "none",
+    boxShadow: "inset 0 1px 3px rgba(0,0,0,.4)",
+  },
+  textarea: {
+    width: "100%",
+    padding: "9px 12px",
+    borderRadius: 8,
+    border: "0.5px solid rgba(255,255,255,.10)",
+    background: "rgba(0,0,0,.3)",
+    color: "#F5F0E8",
+    fontSize: 13,
+    fontFamily: "inherit",
+    outline: "none",
+    resize: "vertical",
+    minHeight: 80,
+    boxShadow: "inset 0 1px 3px rgba(0,0,0,.4)",
+  },
+  kicker: {
+    fontSize: 10,
+    fontWeight: 700,
+    letterSpacing: ".14em",
+    textTransform: "uppercase",
+    color: "#DBA525",
+    marginBottom: 8,
+  },
 };
 
 /* ---------- Role helpers (exact shape from fire) ---------- */
@@ -5765,27 +5835,29 @@ export default function App() {
   if (me === null) return <NotOnRoster session={session} />;
 
   return (
-    <div style={{ display: "flex", minHeight: "100vh", background: POA.pageBg, fontFamily: "'Inter', system-ui, sans-serif", color: POA.textPrimary }}>
+    <div style={{ display: "flex", minHeight: "100vh", background: "radial-gradient(ellipse 80% 60% at 50% -10%, #0D1830 0%, #04070F 60%)", fontFamily: "'Inter', system-ui, sans-serif", color: POA.textPrimary }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Rajdhani:wght@600;700&display=swap');
         * { box-sizing: border-box; }
         body { margin: 0; }
         @keyframes spin { to { transform: rotate(360deg); } }
         ::-webkit-scrollbar { width: 0; }
-        .nav-item:hover { background: rgba(155,107,230,.08) !important; }
+        .nav-item:hover { background: rgba(219,165,37,.08) !important; }
       `}</style>
 
       {/* ---- Sidebar ---- */}
       <aside style={{
-        width: 220, flexShrink: 0, background: POA.sidebar,
-        borderRight: `0.5px solid ${POA.hairline}`,
+        width: 220, flexShrink: 0,
+        background: 'linear-gradient(180deg, #060B1A 0%, #030610 100%)',
+        borderRight: '0.5px solid rgba(219,165,37,.12)',
         display: "flex", flexDirection: "column",
         position: "sticky", top: 0, height: "100vh", overflowY: "auto",
       }}>
         {/* Brand */}
-        <div style={{ padding: "22px 18px 16px", borderBottom: `0.5px solid ${POA.hairline}` }}>
-          <div style={{ fontSize: 11, letterSpacing: ".18em", textTransform: "uppercase", color: POA.accent, fontWeight: 700, marginBottom: 3 }}>Before the Call</div>
-          <div style={{ fontSize: 13.5, fontWeight: 700, color: POA.textPrimary }}>{org?.name || "POA"}</div>
+        <div style={{ padding: "22px 18px 16px", borderBottom: '0.5px solid rgba(219,165,37,.10)', background: 'linear-gradient(180deg, rgba(219,165,37,.05) 0%, transparent 100%)', position: 'relative' }}>
+          <div style={{ fontFamily: "'Rajdhani', sans-serif", fontSize: 20, fontWeight: 700, letterSpacing: '.06em', background: 'linear-gradient(135deg, #F0C84A 0%, #DBA525 50%, #A87A18 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', lineHeight: 1, marginBottom: 1, filter: 'drop-shadow(0 0 8px rgba(219,165,37,.3))' }}>B4C UNION</div>
+          <div style={{ fontSize: 8, letterSpacing: '.2em', textTransform: 'uppercase', color: POA.textMuted, fontWeight: 600 }}>Before the Call</div>
+          <div style={{ fontSize: 13.5, fontWeight: 700, color: POA.textPrimary, marginTop: 8 }}>{org?.name || "POA"}</div>
           <div style={{ fontSize: 11, color: POA.textMuted }}>{orgSettings.org_short_name || ""}</div>
           <div style={{ fontSize: 11, color: POA.textMuted, marginTop: 2 }}>{curViewAs === "board" ? "Board Console" : "Member Hub"}</div>
         </div>
@@ -5801,7 +5873,7 @@ export default function App() {
               return (
                 <button key={opt.key}
                   onClick={() => { setViewAs(opt.key); setView(null); setSideOpen(false); }}
-                  style={{ flex: 1, padding: "6px 0", fontSize: 12, fontWeight: 700, fontFamily: "inherit", cursor: "pointer", borderRadius: 8, border: `0.5px solid ${on ? POA.accent : POA.btnBorder}`, background: on ? POA.accent : "transparent", color: on ? POA.white : POA.navLabel }}>
+                  style={{ flex: 1, padding: "6px 0", fontSize: 12, fontWeight: 700, fontFamily: "inherit", cursor: "pointer", borderRadius: 8, border: `0.5px solid ${on ? POA.accent : POA.btnBorder}`, background: on ? 'linear-gradient(135deg, rgba(219,165,37,.25), rgba(219,165,37,.10))' : "transparent", color: on ? POA.accent : POA.navLabel, boxShadow: on ? '0 1px 4px rgba(0,0,0,.4), inset 0 1px 0 rgba(219,165,37,.15)' : "none" }}>
                   {opt.label}
                 </button>
               );
@@ -5815,7 +5887,7 @@ export default function App() {
             const on = activeView === id;
             return (
               <button key={id} className="nav-item" onClick={() => { setView(id); setSideOpen(false); }}
-                style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "9px 10px", borderRadius: 9, border: "none", cursor: "pointer", fontFamily: "inherit", fontSize: 13.5, fontWeight: on ? 600 : 400, color: on ? POA.white : POA.navLabel, background: on ? POA.accent : "transparent", marginBottom: 2, textAlign: "left", borderLeft: on ? `3px solid ${POA.accentBright}` : "3px solid transparent" }}>
+                style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "9px 10px", borderRadius: 9, border: "none", cursor: "pointer", fontFamily: "inherit", fontSize: 13.5, fontWeight: on ? 600 : 400, color: on ? POA.accent : POA.navLabel, background: on ? 'linear-gradient(135deg, rgba(219,165,37,.18) 0%, rgba(219,165,37,.06) 100%)' : "transparent", marginBottom: 2, textAlign: "left", borderLeft: on ? '2px solid #DBA525' : "2px solid transparent", boxShadow: on ? 'inset 0 0 20px rgba(219,165,37,.05), 0 2px 8px rgba(0,0,0,.3)' : "none" }}>
                 <Icon size={16} style={{ flexShrink: 0, opacity: on ? 1 : 0.7 }} />
                 {label}
               </button>
@@ -5830,7 +5902,7 @@ export default function App() {
                 const on = activeView === id;
                 return (
                   <button key={id} className="nav-item" onClick={() => { setView(id); setSideOpen(false); }}
-                    style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "9px 10px", borderRadius: 9, border: "none", cursor: "pointer", fontFamily: "inherit", fontSize: 13.5, fontWeight: on ? 600 : 400, color: on ? POA.white : POA.navLabel, background: on ? POA.accent : "transparent", marginBottom: 2, textAlign: "left", borderLeft: on ? `3px solid ${POA.accentBright}` : "3px solid transparent" }}>
+                    style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "9px 10px", borderRadius: 9, border: "none", cursor: "pointer", fontFamily: "inherit", fontSize: 13.5, fontWeight: on ? 600 : 400, color: on ? POA.accent : POA.navLabel, background: on ? 'linear-gradient(135deg, rgba(219,165,37,.18) 0%, rgba(219,165,37,.06) 100%)' : "transparent", marginBottom: 2, textAlign: "left", borderLeft: on ? '2px solid #DBA525' : "2px solid transparent", boxShadow: on ? 'inset 0 0 20px rgba(219,165,37,.05), 0 2px 8px rgba(0,0,0,.3)' : "none" }}>
                     <Icon size={16} style={{ flexShrink: 0, opacity: on ? 1 : 0.7 }} />
                     {label}
                   </button>
@@ -5856,7 +5928,7 @@ export default function App() {
       </aside>
 
       {/* ---- Main content ---- */}
-      <main style={{ flex: 1, overflowY: "auto", padding: "32px 36px", maxWidth: 860 }}>
+      <main style={{ flex: 1, overflowY: "auto", padding: "32px 36px", maxWidth: 860, background: 'radial-gradient(ellipse 60% 40% at 80% 0%, rgba(219,165,37,.04) 0%, transparent 60%)' }}>
         {mountedViews.map(viewId => (
           <div key={viewId} style={{ display: activeView === viewId ? "block" : "none" }}>
             {renderScreen(viewId, { me, org, setView })}
