@@ -2563,7 +2563,7 @@ function MyValue({ me }) {
   );
 }
 
-function Benefits({ me }) {
+function Benefits({ me, setView }) {
   const [benefits, setBenefits]   = useState(null);
   const [contacts, setContacts]   = useState([]);
   const [editing, setEditing]     = useState(null);
@@ -2758,14 +2758,14 @@ function Benefits({ me }) {
                         </a>
                       )}
                       {!helpContact.phone && !helpContact.email && (
-                        <button style={{ ...PS.btn, fontSize: 12 }} onClick={() => {}}>
+                        <button style={{ ...PS.btn, fontSize: 12 }} onClick={() => setView('m_call')}>
                           <Phone size={12} /> Contact {b.contact_role}
                         </button>
                       )}
                     </div>
                   ) : (
                     <button style={{ ...PS.btn, fontSize: 12 }}
-                      onClick={() => {}}>
+                      onClick={() => setView('m_call')}>
                       <Phone size={12} /> Get help with this
                     </button>
                   )}
@@ -7296,7 +7296,7 @@ function renderScreen(view, { me, org, setView }) {
       case "m_events":   return <MemberEvents />;
       case "m_partners": return <TrustedPartners />;
       case "m_community": return <Community me={me} />;
-      case "m_benefits": return <Benefits me={me} />;
+      case "m_benefits": return <Benefits me={me} setView={setView} />;
       case "m_vote":     return <VoteLink />;
       case "m_store":    return <Store />;
       case "m_correspondence": return <MemberCorrespondence me={me} />;
