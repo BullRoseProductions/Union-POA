@@ -178,6 +178,7 @@ const MEMBER_NAV = [
   { id: "m_card",     label: "My Card",          Icon: CreditCard },
   { id: "m_vote",     label: "VoteLink",         Icon: Vote },
   { id: "m_store",    label: "Store",            Icon: ShoppingBag },
+  { id: "m_booking",  label: "Event Space",      Icon: Building2 },
   { id: "m_correspondence", label: "Correspondence", Icon: Mail },
   { id: "m_documents", label: "Documents", Icon: FileText },
 ];
@@ -7508,7 +7509,7 @@ function MemberDocuments() {
 const ALL_VIEWS = [
   // member views
   'm_dash','m_call','m_ask','m_partners','m_community',
-  'm_benefits','m_events','m_card','m_vote','m_store','m_correspondence','m_documents',
+  'm_benefits','m_events','m_card','m_vote','m_store','m_booking','m_correspondence','m_documents',
   // board views
   'b_dash','b_attendance','b_meetings','b_stipend','b_causes',
   'b_fundraising','b_social','b_building','b_continuity',
@@ -8160,6 +8161,223 @@ function BoardCommunity({ me }) {
   );
 }
 
+function EventSpaceBooking({ me }) {
+  const today = new Date();
+  const [cur, setCur]         = useState({ y: today.getFullYear(), m: today.getMonth() });
+  const [bookings, setBookings] = useState(null);
+  const [selected, setSelected] = useState(null);
+  const [showForm, setShowForm] = useState(false);
+  const [err, setErr]           = useState("");
+  const [busy, setBusy]         = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [bf, setBf]             = useState({ title: "", booking_date: "", start_time: "", end_time: "", notes: "" });
+
+  async function load() {
+    try {
+      const { data, error } = await supabase
+        .from("space_bookings")
+        .select("booking_date, start_time, end_time, status")
+        .eq("department_id", me.department_id)
+        .neq("status", "cancelled")
+        .gte("booking_date", `${cur.y}-${String(cur.m + 1).padStart(2,"0")}-01`)
+        .lte("booking_date", `${cur.y}-${String(cur.m + 1).padStart(2,"0")}-31`);
+      if (error) throw error;
+      setBookings(data || []);
+    } catch(e) { setErr(e.message); }
+  }
+
+  useEffect(() => { load(); }, [cur.y, cur.m]);
+
+  async function doRequest() {
+    if (!bf.title.trim() || !bf.booking_date) { setErr("Date and purpose are required."); return; }
+    setBusy(true); setErr("");
+    try {
+      await createSpaceBooking({
+        department_id: me.department_id,
+        title: bf.title.trim(),
+        booked_by: me.id,
+        booking_date: bf.booking_date,
+        start_time: bf.start_time || null,
+        end_time: bf.end_time || null,
+        notes: bf.notes.trim() || null,
+        status: "pending",
+      });
+      setSubmitted(true);
+      setShowForm(false);
+      setBf({ title: "", booking_date: "", start_time: "", end_time: "", notes: "" });
+      await load();
+    } catch(e) { setErr(e.message); }
+    finally { setBusy(false); }
+  }
+
+  // Build calendar
+  const dim      = new Date(cur.y, cur.m + 1, 0).getDate();
+  const startDow = new Date(cur.y, cur.m, 1).getDay();
+  const cells    = [];
+  for (let i = 0; i < startDow; i++) cells.push(null);
+  for (let d = 1; d <= dim; d++) cells.push(d);
+  while (cells.length % 7) cells.push(null);
+
+  // Map booked dates
+  const bookedDates = new Set();
+  const pendingDates = new Set();
+  (bookings || []).forEach(b => {
+    const d = new Date(b.booking_date + "T12:00:00").getDate();
+    if (b.status === "confirmed") bookedDates.add(d);
+    else if (b.status === "pending") pendingDates.add(d);
+  });
+
+  const isToday = d => d && cur.y === today.getFullYear() && cur.m === today.getMonth() && d === today.getDate();
+  const isPast  = d => {
+    const date = new Date(cur.y, cur.m, d);
+    return date < new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  };
+
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 20 }}>
+        <div>
+          <p style={{ ...PS.kicker, marginBottom: 4 }}>Event Space</p>
+          <h1 style={{ fontFamily: "inherit", fontSize: 24, fontWeight: 700, color: POA.textPrimary, margin: 0 }}>
+            Book the Space
+          </h1>
+          <div style={{ fontSize: 13, color: POA.textMuted, marginTop: 4 }}>
+            Check availability and request a booking — board approves within 24 hours.
+          </div>
+        </div>
+        <button style={PS.btnPrimary} onClick={() => { setShowForm(v => !v); setSubmitted(false); }}>
+          <Plus size={13} /> Request booking
+        </button>
+      </div>
+
+      <ErrBox msg={err} />
+
+      {/* Success message */}
+      {submitted && (
+        <div style={{ background: "rgba(70,199,147,.1)", border: "0.5px solid rgba(70,199,147,.3)", borderRadius: 10, padding: "12px 16px", fontSize: 13, color: POA.greenText, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
+          <CheckCircle2 size={16} color={POA.green} />
+          Request submitted — your board will confirm within 24 hours.
+        </div>
+      )}
+
+      {/* Booking request form */}
+      {showForm && (
+        <Card style={{ marginBottom: 20 }}>
+          <SectionTitle>Request a booking</SectionTitle>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>What's it for?</div>
+              <input value={bf.title} onChange={e => setBf({ ...bf, title: e.target.value })}
+                style={PS.input} placeholder="e.g. District 4 meeting, training session, family event" />
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Date</div>
+              <input type="date" value={bf.booking_date}
+                min={today.toISOString().split("T")[0]}
+                onChange={e => setBf({ ...bf, booking_date: e.target.value })}
+                style={PS.input} />
+            </div>
+            <div></div>
+            <div>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Start time (optional)</div>
+              <input type="time" value={bf.start_time} onChange={e => setBf({ ...bf, start_time: e.target.value })}
+                style={PS.input} />
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>End time (optional)</div>
+              <input type="time" value={bf.end_time} onChange={e => setBf({ ...bf, end_time: e.target.value })}
+                style={PS.input} />
+            </div>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Notes (optional)</div>
+              <textarea value={bf.notes} onChange={e => setBf({ ...bf, notes: e.target.value })}
+                style={{ ...PS.textarea, minHeight: 70 }}
+                placeholder="Setup needs, number of people, equipment required…" />
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button style={PS.btnPrimary} disabled={busy || !bf.title.trim() || !bf.booking_date} onClick={doRequest}>
+              {busy ? "Submitting…" : "Submit request"}
+            </button>
+            <button style={PS.btn} onClick={() => { setShowForm(false); setErr(""); }}>Cancel</button>
+          </div>
+          <div style={{ fontSize: 11.5, color: POA.textMuted, marginTop: 8, fontStyle: "italic" }}>
+            Your board reviews all requests. You'll hear back in Correspondence.
+          </div>
+        </Card>
+      )}
+
+      {/* Calendar */}
+      <Card style={{ marginBottom: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+          <div style={{ display: "flex", gap: 6 }}>
+            <button style={PS.btn} onClick={() => setCur(c => c.m === 0 ? { y: c.y-1, m: 11 } : { ...c, m: c.m-1 })}>‹</button>
+            <div style={{ fontSize: 14, fontWeight: 700, color: POA.textPrimary, alignSelf: "center", minWidth: 120, textAlign: "center" }}>
+              {MONTHS[cur.m]} {cur.y}
+            </div>
+            <button style={PS.btn} onClick={() => setCur(c => c.m === 11 ? { y: c.y+1, m: 0 } : { ...c, m: c.m+1 })}>›</button>
+          </div>
+          <button style={PS.btn} onClick={() => setCur({ y: today.getFullYear(), m: today.getMonth() })}>Today</button>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 3, marginBottom: 6 }}>
+          {DOW.map(d => <div key={d} style={{ fontSize: 9, fontWeight: 700, textAlign: "center", color: POA.textMuted, textTransform: "uppercase", letterSpacing: ".06em", padding: "2px 0" }}>{d}</div>)}
+        </div>
+
+        {Array.from({ length: cells.length / 7 }, (_, w) => (
+          <div key={w} style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 3, marginBottom: 3 }}>
+            {cells.slice(w*7, w*7+7).map((d, i) => {
+              const booked  = d && bookedDates.has(d);
+              const pending = d && pendingDates.has(d);
+              const past    = d && isPast(d);
+              const tod     = isToday(d);
+
+              let bg = "transparent";
+              let border = `0.5px solid ${POA.hairline}`;
+              let textColor = past ? "rgba(255,255,255,.2)" : POA.textMuted;
+
+              if (booked)  { bg = "rgba(239,106,100,.15)"; border = "0.5px solid rgba(239,106,100,.4)"; textColor = "#EF6A64"; }
+              if (pending) { bg = "rgba(219,165,37,.1)";   border = `0.5px solid rgba(219,165,37,.3)`;  textColor = POA.accent; }
+              if (tod)     { bg = "linear-gradient(135deg, rgba(219,165,37,.2), rgba(219,165,37,.08))"; border = `0.5px solid rgba(219,165,37,.5)`; textColor = POA.accent; }
+
+              return (
+                <div key={i} onClick={() => d && !past && setBf(prev => ({ ...prev, booking_date: `${cur.y}-${String(cur.m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}` }))}
+                  style={{ height: 44, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", borderRadius: 8, background: bg, border, cursor: d && !past && !booked ? "pointer" : "default", transition: ".1s", gap: 2 }}>
+                  {d && (
+                    <>
+                      <div style={{ fontSize: 12, fontWeight: tod || booked ? 700 : 400, color: textColor }}>{d}</div>
+                      {booked  && <div style={{ fontSize: 8, fontWeight: 700, color: "#EF6A64", letterSpacing: ".04em" }}>BOOKED</div>}
+                      {pending && <div style={{ fontSize: 8, fontWeight: 700, color: POA.accent, letterSpacing: ".04em" }}>PENDING</div>}
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ))}
+
+        {/* Legend */}
+        <div style={{ display: "flex", gap: 16, marginTop: 14, paddingTop: 12, borderTop: `0.5px solid ${POA.hairline}`, flexWrap: "wrap" }}>
+          {[
+            { color: "rgba(239,106,100,.5)", label: "Unavailable" },
+            { color: "rgba(219,165,37,.4)",  label: "Pending approval" },
+            { color: "rgba(219,165,37,.8)",  label: "Today" },
+          ].map(({ color, label }) => (
+            <div key={label} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: POA.textMuted }}>
+              <div style={{ width: 10, height: 10, borderRadius: 3, background: color }} />
+              {label}
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      <div style={{ fontSize: 12, color: POA.textMuted, fontStyle: "italic", textAlign: "center" }}>
+        Tap any available date to pre-fill the request form. Red dates are unavailable — board sees booking details, members see availability only.
+      </div>
+    </div>
+  );
+}
+
 /* ================================================================
    SCREEN ROUTER
    ================================================================ */
@@ -8176,6 +8394,7 @@ function renderScreen(view, { me, org, setView }) {
       case "m_benefits": return <Benefits me={me} setView={setView} />;
       case "m_vote":     return <VoteLink me={me} org={org} setView={setView} />;
       case "m_store":    return <Store me={me} />;
+      case "m_booking":  return <EventSpaceBooking me={me} />;
       case "m_correspondence": return <MemberCorrespondence me={me} />;
       case "m_documents": return <MemberDocuments />;
       default:           return <ComingSoon label={view} />;
