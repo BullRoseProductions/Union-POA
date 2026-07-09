@@ -196,6 +196,7 @@ const BOARD_NAV = [
   { id: "b_members",      label: "Members",           Icon: Users },
   { id: "b_documents",    label: "Documents",         Icon: FileText },
   { id: "b_ledger",       label: "Value Ledger",      Icon: TrendingUp },
+  { id: "b_settings",     label: "Settings",          Icon: Settings },
 ];
 
 const PA_NAV = [
@@ -5702,10 +5703,14 @@ const ALL_VIEWS = [
   // board views
   'b_dash','b_attendance','b_meetings','b_stipend','b_causes',
   'b_fundraising','b_social','b_building','b_continuity',
-  'b_correspondence','b_members','b_ledger','b_documents',
+  'b_correspondence','b_members','b_ledger','b_documents','b_settings',
   // pa views
   'pa_dash','pa_orgs','pa_config','pa_add',
 ];
+
+function OrgSettings({ me, org }) {
+  return <ComingSoon label="Settings" />;
+}
 
 /* ================================================================
    SCREEN ROUTER
@@ -5742,6 +5747,7 @@ function renderScreen(view, { me, org, setView }) {
     case "b_continuity":    return <BoardContinuity me={me} />;
     case "b_correspondence":return <BoardCorrespondence me={me} />;
     case "b_ledger":        return <ValueLedger me={me} />;
+    case "b_settings":      return <OrgSettings me={me} org={org} />;
     case "pa_dash":         return <PADash />;
     case "pa_orgs":         return <PADash />;
     case "pa_config":       return <PAOrgConfig />;
