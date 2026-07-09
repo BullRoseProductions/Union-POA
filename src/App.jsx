@@ -5682,6 +5682,7 @@ function MemberCorrespondence({ me }) {
   const [busy, setBusy]         = useState(false);
   const [err, setErr]           = useState('');
   const [sent, setSent]         = useState(false);
+  const [alert, setAlert]       = useState(null);
 
   async function load() {
     const [ann, msgs] = await Promise.all([listAnnouncements(), listMessages()]);
@@ -5690,6 +5691,7 @@ function MemberCorrespondence({ me }) {
   }
   useEffect(() => {
     localStorage.setItem(`last_seen_${me.id}`, new Date().toISOString());
+    getActiveAlert().then(setAlert).catch(() => null);
     load();
   }, [me.id]);
 
@@ -5710,10 +5712,20 @@ function MemberCorrespondence({ me }) {
   return (
     <div>
       <PageTitle sub="Association announcements and your messages to the board">Correspondence</PageTitle>
+      {alert && (
+        <div style={{ background: 'rgba(239,106,100,.1)', border: '1px solid rgba(239,106,100,.4)', borderRadius: 12, padding: '12px 16px', marginBottom: 16, display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+          <AlertTriangle size={16} color={POA.red} style={{ flexShrink: 0, marginTop: 2 }} />
+          <div>
+            <div style={{ fontWeight: 700, color: POA.red, fontSize: 13, marginBottom: 2 }}>CRITICAL ALERT</div>
+            <div style={{ fontWeight: 700, color: POA.textPrimary, marginBottom: 2 }}>{alert.subject}</div>
+            <div style={{ fontSize: 12, color: POA.textSecondary }}>{alert.body}</div>
+          </div>
+        </div>
+      )}
       <div style={{ display: 'flex', gap: 6, marginBottom: 20 }}>
         {TABS.map(t => (
           <button key={t.id} onClick={() => { setTab(t.id); setSent(false); setErr(''); }}
-            style={{ ...PS.btn, background: tab === t.id ? POA.accent : POA.btnBg, color: tab === t.id ? '#fff' : POA.btnText, border: tab === t.id ? 'none' : `0.5px solid ${POA.btnBorder}` }}>
+            style={{ ...PS.btn, background: tab === t.id ? POA.accent : POA.btnBg, color: tab === t.id ? '#06090A' : POA.btnText, border: tab === t.id ? 'none' : `0.5px solid ${POA.btnBorder}` }}>
             {t.label}
           </button>
         ))}
