@@ -4597,25 +4597,6 @@ async function removeVideo(id) {
   const { error } = await supabase.from("association_videos").delete().eq("id", id);
   if (error) throw error;
 }
-async function listStoreItems() {
-  const { data, error } = await supabase.from("store_items")
-    .select("*").eq("status", "active")
-    .order("sort").order("created_at", { ascending: false });
-  if (error) throw error;
-  return data || [];
-}
-async function createStoreItem(row) {
-  const { data, error } = await supabase.from("store_items")
-    .insert(row).select().single();
-  if (error) throw error;
-  return data;
-}
-async function updateStoreItem(id, patch) {
-  const { data, error } = await supabase.from("store_items")
-    .update(patch).eq("id", id).select().single();
-  if (error) throw error;
-  return data;
-}
 async function archiveStoreItem(id) {
   const { error } = await supabase.from("store_items")
     .update({ status: "archived" }).eq("id", id);
