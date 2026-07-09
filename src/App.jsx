@@ -368,7 +368,6 @@ function MemberDash({ me, org, setView }) {
       const lastSeen = localStorage.getItem(`last_seen_${me.id}`) || '2000-01-01';
       const unseen = ann.filter(a => a.created_at > lastSeen).length;
       setNewCount(unseen);
-      localStorage.setItem(`last_seen_${me.id}`, new Date().toISOString());
     }).catch(() => null);
     listVideos().then(v => setVideos(v.slice(0, 2))).catch(() => null);
     myActionItems(me.id).then(items => setOpenActions(items.filter(i => i.status === "open").length));
@@ -4423,7 +4422,10 @@ function MemberCorrespondence({ me }) {
     setAnnouncements(ann);
     setMessages(msgs.filter(m => m.member_id === me.id));
   }
-  useEffect(() => { load(); }, [me.id]);
+  useEffect(() => {
+    localStorage.setItem(`last_seen_${me.id}`, new Date().toISOString());
+    load();
+  }, [me.id]);
 
   async function doSend() {
     if (!form.subject.trim() || !form.body.trim()) { setErr('Subject and message required.'); return; }
