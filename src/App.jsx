@@ -3451,7 +3451,7 @@ function PAOrgConfig() {
     { key: 'm_call', label: 'Who to Call', group: 'Member' },
     { key: 'm_ask', label: 'Ask B4C', group: 'Member' },
     { key: 'm_partners', label: 'Trusted Partners', group: 'Member' },
-    { key: 'm_value', label: 'My Value', group: 'Member' },
+    { key: 'm_community', label: 'Community', group: 'Member' },
     { key: 'm_benefits', label: 'Benefits', group: 'Member' },
     { key: 'm_events', label: 'Events', group: 'Member' },
     { key: 'm_card', label: 'My Card', group: 'Member' },
