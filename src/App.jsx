@@ -3473,34 +3473,227 @@ function VoteLink({ me, org, setView }) {
   );
 }
 
-function Store() {
-  const items = [
-    { name: "Association Polo", desc: "Embroidered logo, moisture-wicking. Sizes S–4XL.", price: "$42", tag: "Apparel" },
-    { name: "Challenge Coin", desc: "Solid brass, association seal. Limited run.", price: "$18", tag: "Collectible" },
-    { name: "Duty Bag", desc: "Tactical backpack with patch. Association branded.", price: "$65", tag: "Gear" },
-    { name: "Decal Set", desc: "3-pack window decals. Association + FOP logos.", price: "$8", tag: "Accessories" },
-  ];
+function Store({ me }) {
+  const [items, setItems]     = useState(null);
+  const [editing, setEditing] = useState(null);
+  const [adding, setAdding]   = useState(false);
+  const [err, setErr]         = useState("");
+  const [busy, setBusy]       = useState(false);
+  const manage                = canManage(me?.access);
+
+  const blank = { name: "", description: "", price: "", category: "General", image_url: "", order_url: "", is_raffle: false, sort: 0 };
+  const [f, setF] = useState(blank);
+
+  async function load() {
+    try { setItems(await listStoreItems()); }
+    catch(e) { setErr(e.message); }
+  }
+  useEffect(() => { load(); }, []);
+
+  function startEdit(item) {
+    setF({ name: item.name, description: item.description || "", price: item.price || "", category: item.category, image_url: item.image_url || "", order_url: item.order_url || "", is_raffle: item.is_raffle || false, sort: item.sort || 0 });
+    setEditing(item); setAdding(false); setErr("");
+  }
+  function resetForm() { setEditing(null); setAdding(false); setErr(""); setF(blank); }
+
+  async function doSave() {
+    if (!f.name.trim()) { setErr("Item name is required."); return; }
+    setBusy(true); setErr("");
+    try {
+      const row = {
+        department_id: me.department_id,
+        name: f.name.trim(),
+        description: f.description.trim() || null,
+        price: f.price.trim() || null,
+        category: f.category.trim() || "General",
+        image_url: f.image_url.trim() || null,
+        order_url: f.order_url.trim() || null,
+        is_raffle: f.is_raffle,
+        sort: Number(f.sort) || 0,
+      };
+      if (editing) await updateStoreItem(editing.id, row);
+      else await createStoreItem(row);
+      resetForm(); await load();
+    } catch(e) { setErr(e.message); }
+    finally { setBusy(false); }
+  }
+
+  async function doRemove(id) {
+    if (!confirm("Remove this item?")) return;
+    try { await deactivateStoreItem(id); await load(); }
+    catch(e) { setErr(e.message); }
+  }
+
+  const raffleItems  = (items || []).filter(i => i.is_raffle);
+  const regularItems = (items || []).filter(i => !i.is_raffle);
+
+  // Group regular items by category
+  const grouped = {};
+  regularItems.forEach(i => { (grouped[i.category] = grouped[i.category] || []).push(i); });
+
+  function ItemCard({ item }) {
+    return (
+      <div style={{ background: "linear-gradient(160deg, #101828 0%, #0A1020 100%)", border: `0.5px solid ${POA.hairline2}`, borderRadius: 12, padding: "14px 14px", boxShadow: "0 2px 12px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.03)", display: "flex", flexDirection: "column", gap: 6, position: "relative" }}>
+        {item.image_url && (
+          <div style={{ width: "100%", height: 120, borderRadius: 8, overflow: "hidden", marginBottom: 4, background: "rgba(0,0,0,.3)" }}>
+            <img src={item.image_url} alt={item.name}
+              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+              onError={e => { e.target.parentElement.style.display = "none"; }} />
+          </div>
+        )}
+        <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: POA.accent }}>{item.category}</div>
+        <div style={{ fontWeight: 700, fontSize: 14, color: POA.textPrimary }}>{item.name}</div>
+        {item.description && <div style={{ fontSize: 12, color: POA.textMuted, lineHeight: 1.5, flex: 1 }}>{item.description}</div>}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 4 }}>
+          {item.price && <div style={{ fontWeight: 700, fontSize: 15, color: POA.accent }}>{item.price}</div>}
+          <div style={{ display: "flex", gap: 6, marginLeft: item.price ? 0 : "auto" }}>
+            {item.order_url ? (
+              <a href={item.order_url} target="_blank" rel="noreferrer"
+                style={{ ...PS.btnPrimary, fontSize: 11, padding: "5px 12px", textDecoration: "none" }}>
+                Order ↗
+              </a>
+            ) : (
+              <span style={{ fontSize: 11, color: POA.textMuted, fontStyle: "italic" }}>Link coming soon</span>
+            )}
+            {manage && (
+              <button style={{ ...PS.btn, fontSize: 11, padding: "4px 8px" }} onClick={() => startEdit(item)}>
+                <Pencil size={11} />
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div>
-      <PageTitle sub="Association gear and merchandise">Store</PageTitle>
-      <div style={{ fontSize: 13, color: POA.textMuted, marginBottom: 16, lineHeight: 1.6 }}>
-        Orders go through the association's store — B4C links you there. Proceeds support the association's programs.
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 20 }}>
+        <div>
+          <p style={{ ...PS.kicker, marginBottom: 4 }}>Store</p>
+          <h1 style={{ fontFamily: "inherit", fontSize: 24, fontWeight: 700, color: POA.textPrimary, margin: 0 }}>
+            Association Gear
+          </h1>
+          <div style={{ fontSize: 13, color: POA.textMuted, marginTop: 4 }}>
+            Official merchandise — proceeds support your association.
+          </div>
+        </div>
+        {manage && (
+          <button style={PS.btn} onClick={() => { setAdding(!adding); setEditing(null); }}>
+            <Plus size={13} /> Add item
+          </button>
+        )}
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-        {items.map(item => (
-          <div key={item.name} style={{ ...PS.card, padding: "14px 15px" }}>
-            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: POA.accent, marginBottom: 6 }}>{item.tag}</div>
-            <div style={{ fontWeight: 700, fontSize: 14, color: POA.textPrimary, marginBottom: 4 }}>{item.name}</div>
-            <div style={{ fontSize: 12, color: POA.textMuted, lineHeight: 1.45, marginBottom: 10 }}>{item.desc}</div>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <div style={{ fontWeight: 700, color: POA.accent, fontSize: 15 }}>{item.price}</div>
-              <button style={{ ...PS.btn, padding: "5px 10px", fontSize: 11.5 }}>Order ↗</button>
+
+      <ErrBox msg={err} />
+
+      {/* Add/Edit form */}
+      {(adding || editing) && manage && (
+        <Card style={{ marginBottom: 20 }}>
+          <SectionTitle>{editing ? `Edit — ${editing.name}` : "New store item"}</SectionTitle>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Item name</div>
+              <input value={f.name} onChange={e => setF({ ...f, name: e.target.value })}
+                style={PS.input} placeholder="e.g. Association Polo" />
+            </div>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Description</div>
+              <textarea value={f.description} onChange={e => setF({ ...f, description: e.target.value })}
+                style={{ ...PS.textarea, minHeight: 70 }} placeholder="What is it? Sizes, materials, details." />
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Price</div>
+              <input value={f.price} onChange={e => setF({ ...f, price: e.target.value })}
+                style={PS.input} placeholder="e.g. $42" />
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Category</div>
+              <input value={f.category} onChange={e => setF({ ...f, category: e.target.value })}
+                style={PS.input} placeholder="e.g. Apparel, Gear, Collectibles" />
+            </div>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Order link (external URL)</div>
+              <input type="url" value={f.order_url} onChange={e => setF({ ...f, order_url: e.target.value })}
+                style={PS.input} placeholder="https://yourstore.com/item" />
+            </div>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Image URL (optional)</div>
+              <input type="url" value={f.image_url} onChange={e => setF({ ...f, image_url: e.target.value })}
+                style={PS.input} placeholder="https://..." />
+            </div>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}
+                onClick={() => setF(x => ({ ...x, is_raffle: !x.is_raffle }))}>
+                <div style={{ width: 20, height: 20, borderRadius: 6, border: `2px solid ${f.is_raffle ? POA.accent : POA.hairline2}`, background: f.is_raffle ? POA.accent : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: ".15s" }}>
+                  {f.is_raffle && <CheckCircle2 size={12} color="#06090A" />}
+                </div>
+                <div>
+                  <div style={{ fontSize: 13.5, fontWeight: 600, color: f.is_raffle ? POA.accent : POA.textPrimary }}>Raffle prize</div>
+                  <div style={{ fontSize: 11, color: POA.textMuted }}>Shows in the raffle prizes section — members earn entries through attendance</div>
+                </div>
+              </div>
             </div>
           </div>
-        ))}
-      </div>
-      <div style={{ fontSize: 11.5, color: POA.textMuted, marginTop: 14, fontStyle: "italic" }}>
-        Store catalog is managed by your board. Items and prices update automatically.
+          <div style={{ display: "flex", gap: 8 }}>
+            <button style={PS.btnPrimary} disabled={busy} onClick={doSave}>
+              {busy ? "Saving…" : editing ? "Save changes" : "Add item"}
+            </button>
+            <button style={PS.btn} onClick={resetForm}>Cancel</button>
+            {editing && (
+              <button style={{ ...PS.btn, color: POA.red, marginLeft: "auto" }}
+                onClick={() => { doRemove(editing.id); resetForm(); }}>
+                Remove
+              </button>
+            )}
+          </div>
+        </Card>
+      )}
+
+      {!items ? <Spinner /> : items.length === 0 ? (
+        <Card>
+          <div style={{ textAlign: "center", padding: "24px 0" }}>
+            <div style={{ fontSize: 36, marginBottom: 10 }}>🛍️</div>
+            <div style={{ fontWeight: 700, fontSize: 15, color: POA.textPrimary, marginBottom: 4 }}>Store coming soon</div>
+            <div style={{ fontSize: 13, color: POA.textMuted }}>Your board will add merchandise here. Check back soon.</div>
+          </div>
+        </Card>
+      ) : (
+        <>
+          {/* Raffle prizes section */}
+          {raffleItems.length > 0 && (
+            <div style={{ marginBottom: 24 }}>
+              <div style={{ background: "linear-gradient(135deg, rgba(219,165,37,.1), rgba(219,165,37,.03))", border: "0.5px solid rgba(219,165,37,.25)", borderRadius: 12, padding: "12px 16px", marginBottom: 12, display: "flex", alignItems: "center", gap: 10 }}>
+                <div style={{ fontSize: 22 }}>🎟️</div>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 14, color: POA.accent }}>Raffle prizes</div>
+                  <div style={{ fontSize: 12, color: POA.textMuted }}>Attend 4 meetings this quarter to earn a raffle entry for these prizes.</div>
+                </div>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px,1fr))", gap: 10 }}>
+                {raffleItems.map(item => <ItemCard key={item.id} item={item} />)}
+              </div>
+            </div>
+          )}
+
+          {/* Regular store items by category */}
+          {Object.entries(grouped).map(([cat, catItems]) => (
+            <div key={cat} style={{ marginBottom: 20 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".14em", textTransform: "uppercase", color: POA.textMuted, marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}>
+                <div style={{ height: 1, width: 16, background: POA.accent, opacity: .4 }} />
+                {cat}
+                <div style={{ height: 1, flex: 1, background: POA.hairline }} />
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px,1fr))", gap: 10 }}>
+                {catItems.map(item => <ItemCard key={item.id} item={item} />)}
+              </div>
+            </div>
+          ))}
+        </>
+      )}
+
+      <div style={{ fontSize: 11.5, color: POA.textMuted, marginTop: 8, fontStyle: "italic", textAlign: "center" }}>
+        Orders go through the association's external store. B4C never handles payment.
       </div>
     </div>
   );
@@ -3878,6 +4071,34 @@ async function updateBenefit(id, patch) {
 async function deactivateBenefit(id) {
   const { error } = await supabase
     .from("benefits").update({ active: false }).eq("id", id);
+  if (error) throw error;
+}
+async function listStoreItems() {
+  const { data, error } = await supabase
+    .from("store_items")
+    .select("*")
+    .eq("active", true)
+    .order("is_raffle", { ascending: false })
+    .order("sort")
+    .order("created_at");
+  if (error) throw error;
+  return data || [];
+}
+async function createStoreItem(row) {
+  const { data, error } = await supabase
+    .from("store_items").insert(row).select().single();
+  if (error) throw error;
+  return data;
+}
+async function updateStoreItem(id, patch) {
+  const { data, error } = await supabase
+    .from("store_items").update(patch).eq("id", id).select().single();
+  if (error) throw error;
+  return data;
+}
+async function deactivateStoreItem(id) {
+  const { error } = await supabase
+    .from("store_items").update({ active: false }).eq("id", id);
   if (error) throw error;
 }
 async function listBenefitCategories() {
@@ -7978,7 +8199,7 @@ function renderScreen(view, { me, org, setView }) {
       case "m_community": return <Community me={me} />;
       case "m_benefits": return <Benefits me={me} setView={setView} />;
       case "m_vote":     return <VoteLink me={me} org={org} setView={setView} />;
-      case "m_store":    return <Store />;
+      case "m_store":    return <Store me={me} />;
       case "m_correspondence": return <MemberCorrespondence me={me} />;
       case "m_documents": return <MemberDocuments />;
       default:           return <ComingSoon label={view} />;
