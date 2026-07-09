@@ -1183,51 +1183,105 @@ function AskB4C({ me, org }) {
 }
 
 function MyCard({ me, org }) {
+  const orgName      = org?.name || "Association";
+  const orgInitials  = orgName.split(" ").map(w => w[0]).slice(0, 3).join("").toUpperCase();
+  const shortName    = org?.short_name || orgInitials;
+  const logoUrl      = org?.logo_url || null;
+  const role         = (me.access || ["Member"]).filter(r => r !== "Member")[0] || "Member";
+  const standing     = me.standing || "Good";
+  const goodStanding = standing === "Good" || standing === "Active";
+  const standingColor  = goodStanding ? POA.accent : POA.red;
+  const standingBg     = goodStanding ? "rgba(219,165,37,.12)" : "rgba(239,106,100,.12)";
+  const standingBorder = goodStanding ? "rgba(219,165,37,.25)" : "rgba(239,106,100,.25)";
   return (
     <div>
       <PageTitle sub="Your digital membership card">My Card</PageTitle>
-      <div style={{ ...PS.card, padding: "28px 24px", marginBottom: 16, background: `linear-gradient(135deg, #0E1630 0%, #0A1020 100%)`, border: `1px solid rgba(219,165,37,.3)`, boxShadow: "0 0 30px rgba(219,165,37,.1), 0 4px 20px rgba(0,0,0,.5), inset 0 1px 0 rgba(219,165,37,.1)" }}>
-        <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 1, background: "linear-gradient(90deg, transparent, rgba(219,165,37,.5), transparent)", borderRadius: "13px 13px 0 0" }} />
-        <div style={{ ...PS.kicker, marginBottom: 14 }}>{org?.name || "Association"}</div>
-        <div style={{ fontWeight: 700, fontSize: 22, color: POA.textPrimary, marginBottom: 4 }}>{me.full_name}</div>
-        <div style={{ fontSize: 13, color: POA.textSecondary, marginBottom: 12 }}>
-          Badge {me.badge || "—"}{me.district ? ` · District ${me.district}` : ""} · {(me.access || ["Member"]).filter(r => r !== "Member")[0] || "Member"}
-        </div>
-        {(me.dues_paid_through || me.member_since) && (
-          <div style={{ display: 'flex', gap: 16, marginBottom: 20 }}>
-            {me.dues_paid_through && (
-              <div>
-                <div style={{ fontSize: 9, color: POA.textMuted, textTransform: 'uppercase', letterSpacing: '.12em', marginBottom: 3 }}>Active through</div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: new Date(me.dues_paid_through) < new Date() ? POA.red : POA.green }}>
-                  {new Date(me.dues_paid_through).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
+      <div style={{ position: "relative", background: "linear-gradient(160deg, #111D35 0%, #0A1020 60%, #060911 100%)", border: "1px solid rgba(219,165,37,.35)", borderRadius: 20, padding: "28px 26px", marginBottom: 12, boxShadow: "0 0 60px rgba(219,165,37,.08), 0 20px 60px rgba(0,0,0,.7), 0 4px 12px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.06)", overflow: "hidden", minHeight: 220 }}>
+
+        {/* Ambient glow top-right */}
+        <div style={{ position: "absolute", top: -60, right: -60, width: 220, height: 220, borderRadius: "50%", background: "radial-gradient(circle, rgba(219,165,37,.08) 0%, transparent 70%)", pointerEvents: "none" }} />
+        {/* Ambient glow bottom-left */}
+        <div style={{ position: "absolute", bottom: -40, left: -40, width: 160, height: 160, borderRadius: "50%", background: "radial-gradient(circle, rgba(219,165,37,.04) 0%, transparent 70%)", pointerEvents: "none" }} />
+
+        {/* Top gold line */}
+        <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: "linear-gradient(90deg, transparent 0%, rgba(219,165,37,.7) 40%, rgba(240,200,74,.9) 50%, rgba(219,165,37,.7) 60%, transparent 100%)", borderRadius: "20px 20px 0 0" }} />
+
+        {/* Main content — left side */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16 }}>
+          <div style={{ flex: 1 }}>
+            {/* Header — logo + org */}
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
+              {logoUrl ? (
+                <img src={logoUrl} alt="logo" style={{ height: 32, width: 32, objectFit: "contain", borderRadius: 6 }} onError={e => { e.target.style.display = "none"; }} />
+              ) : (
+                <div style={{ width: 32, height: 32, borderRadius: 7, background: "linear-gradient(135deg, rgba(219,165,37,.2), rgba(219,165,37,.06))", border: "1px solid rgba(219,165,37,.25)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Rajdhani',sans-serif", fontSize: 11, fontWeight: 700, color: POA.accent, flexShrink: 0, boxShadow: "0 0 10px rgba(219,165,37,.1)" }}>
+                  {orgInitials}
                 </div>
+              )}
+              <div>
+                <div style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: 14, fontWeight: 700, letterSpacing: ".1em", background: "linear-gradient(135deg, #F0C84A 0%, #DBA525 60%, #A87A18 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text", filter: "drop-shadow(0 0 6px rgba(219,165,37,.2))" }}>
+                  {shortName}
+                </div>
+                <div style={{ fontSize: 10, color: POA.textMuted, letterSpacing: ".04em" }}>{orgName}</div>
+              </div>
+            </div>
+
+            {/* Member name */}
+            <div style={{ fontWeight: 700, fontSize: 22, color: "#F5F0E8", marginBottom: 5, letterSpacing: ".01em", textShadow: "0 1px 8px rgba(0,0,0,.4)" }}>
+              {me.full_name}
+            </div>
+
+            {/* Badge + district + role */}
+            <div style={{ fontSize: 12.5, color: POA.textSecondary, marginBottom: 14, display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
+              {me.badge && <span>Badge {me.badge}</span>}
+              {me.district && <><span style={{ color: "rgba(255,255,255,.2)" }}>·</span><span>District {me.district}</span></>}
+              <span style={{ color: "rgba(255,255,255,.2)" }}>·</span>
+              <span>{role}</span>
+            </div>
+
+            {/* Dues / member since */}
+            {(me.dues_paid_through || me.member_since) && (
+              <div style={{ display: "flex", gap: 16, marginBottom: 16 }}>
+                {me.dues_paid_through && (
+                  <div>
+                    <div style={{ fontSize: 8, color: POA.textMuted, textTransform: "uppercase", letterSpacing: ".14em", marginBottom: 3 }}>Active through</div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: new Date(me.dues_paid_through) < new Date() ? POA.red : POA.green }}>
+                      {new Date(me.dues_paid_through).toLocaleDateString(undefined, { month: "short", year: "numeric" })}
+                    </div>
+                  </div>
+                )}
+                {me.member_since && (
+                  <div>
+                    <div style={{ fontSize: 8, color: POA.textMuted, textTransform: "uppercase", letterSpacing: ".14em", marginBottom: 3 }}>Member since</div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: POA.textSecondary }}>
+                      {new Date(me.member_since).toLocaleDateString(undefined, { month: "short", year: "numeric" })}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
-            {me.member_since && (
-              <div>
-                <div style={{ fontSize: 9, color: POA.textMuted, textTransform: 'uppercase', letterSpacing: '.12em', marginBottom: 3 }}>Member since</div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: POA.textSecondary }}>
-                  {new Date(me.member_since).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
-          <div style={{ display: "flex", alignItems: "flex-end", gap: 16 }}>
+
+            {/* Standing */}
             <div>
-              <div style={{ fontSize: 10, color: POA.textMuted, textTransform: "uppercase", letterSpacing: ".1em" }}>Standing</div>
-              <div style={{ fontWeight: 700, color: POA.accent, fontSize: 15, background: "rgba(219,165,37,.12)", border: "0.5px solid rgba(219,165,37,.25)", borderRadius: 6, padding: "2px 10px", display: "inline-block", marginTop: 3 }}>{me.standing || "Good"}</div>
-            </div>
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ background: '#fff', padding: 8, borderRadius: 10, display: 'inline-block', boxShadow: '0 2px 12px rgba(0,0,0,.4)' }}>
-                <QRCodeCanvas value={`${window.location.origin}/verify.html?m=${me.id}`} size={80} />
+              <div style={{ fontSize: 8, color: POA.textMuted, textTransform: "uppercase", letterSpacing: ".14em", marginBottom: 5 }}>Standing</div>
+              <div style={{ fontWeight: 700, fontSize: 13, background: standingBg, border: `0.5px solid ${standingBorder}`, color: standingColor, borderRadius: 7, padding: "4px 14px", display: "inline-block", boxShadow: `0 0 12px ${standingColor}25, inset 0 1px 0 rgba(255,255,255,.06)` }}>
+                {standing}
               </div>
-              <div style={{ fontSize: 9, color: POA.textMuted, marginTop: 4 }}>Scan to verify</div>
             </div>
           </div>
-          <div style={{ fontSize: 11, color: POA.textMuted }}>B4C · POA</div>
+
+          {/* RIGHT SIDE — QR code */}
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6, paddingTop: 4 }}>
+            <div style={{ background: "#fff", padding: 10, borderRadius: 12, boxShadow: "0 4px 20px rgba(0,0,0,.5), 0 0 0 1px rgba(255,255,255,.1)", position: "relative" }}>
+              <QRCodeCanvas value={`${window.location.origin}/verify.html?m=${me.id}`} size={90} />
+            </div>
+            <div style={{ fontSize: 9, color: POA.textMuted, letterSpacing: ".06em", textTransform: "uppercase" }}>Scan to verify</div>
+            <div style={{ fontSize: 9, color: "rgba(219,165,37,.5)", fontFamily: "'Rajdhani',sans-serif", fontWeight: 700, letterSpacing: ".08em" }}>B4C · UNION</div>
+          </div>
         </div>
+
+        {/* Bottom gold line */}
+        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 1.5, background: "linear-gradient(90deg, transparent 0%, rgba(219,165,37,.4) 40%, rgba(219,165,37,.6) 50%, rgba(219,165,37,.4) 60%, transparent 100%)" }} />
       </div>
       <div style={{ fontSize: 11.5, color: POA.textMuted, textAlign: "center", fontStyle: "italic" }}>Show this screen to verify membership at association events.</div>
     </div>
