@@ -2075,7 +2075,7 @@ function MeetingAttendance({ me }) {
               {detail.done ? "Done" : "Open"}
             </span>
             <span style={{ fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 999, background: POA.track, color: POA.textMuted }}>
-              {detail.attendance_mode === "qr" ? "QR" : detail.attendance_mode === "manual" ? "Manual" : "No tracking"}
+              {detail.attendance_mode === "qr" ? "QR sign-in" : detail.attendance_mode === "manual" ? "Manual sign-in" : "No sign-in"}
             </span>
           </div>
         </div>
@@ -2163,7 +2163,7 @@ function MeetingAttendance({ me }) {
             return <p style={{ ...PS.kicker, marginBottom: 10 }}>Sign-in sheet ({att.length} / {roster.length}){detail.assign_all ? "" : " · assigned only"}</p>;
           })()}
           <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 10 }}>
-            {manage && !detail.done ? "Tap a name to mark them signed in, or use the QR code for self-serve." : "Attendance record."}
+            {manage && !detail.done ? "Tap a name to mark them signed in, or use the QR code for self-serve." : "Sign-in record."}
           </div>
           {(detail.assign_all
             ? members
