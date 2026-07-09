@@ -5709,7 +5709,250 @@ const ALL_VIEWS = [
 ];
 
 function OrgSettings({ me, org }) {
-  return <ComingSoon label="Settings" />;
+  const isAdmin = canAdmin(me.access);
+  const [tab, setTab] = useState(isAdmin ? "identity" : "brand");
+  const [settings, setSettings] = useState({
+    building_name: "",
+    org_short_name: "",
+    org_type_label: "",
+    org_address: "",
+    org_phone: "",
+    org_website: "",
+    org_founded: "",
+    org_logo_url: "",
+    org_primary_color: "#DBA525",
+  });
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [err, setErr] = useState("");
+
+  useEffect(() => {
+    supabase.from("org_settings")
+      .select("*")
+      .eq("department_id", me.department_id)
+      .then(({ data }) => {
+        if (!data) return;
+        const map = {};
+        data.forEach(r => { map[r.key] = r.value; });
+        setSettings(prev => ({ ...prev, ...map }));
+      });
+  }, [me.department_id]);
+
+  async function saveSetting(key, value) {
+    const { error } = await supabase.from("org_settings")
+      .upsert({ department_id: me.department_id, key, value },
+        { onConflict: "department_id,key" });
+    if (error) throw error;
+  }
+
+  async function doSave() {
+    setBusy(true); setErr(""); setSaved(false);
+    try {
+      await Promise.all(
+        Object.entries(settings)
+          .filter(([, v]) => v !== "")
+          .map(([k, v]) => saveSetting(k, v))
+      );
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch(e) { setErr(e.message); }
+    finally { setBusy(false); }
+  }
+
+  const TABS = [
+    ...(isAdmin ? [{ id: "identity", label: "Org Identity" }] : []),
+    { id: "brand", label: "Brand Standards" },
+    { id: "support", label: "Support & Privacy" },
+  ];
+
+  const Field = ({ label, k, placeholder, type = "text" }) => (
+    <div style={{ marginBottom: 12 }}>
+      <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>{label}</div>
+      {isAdmin ? (
+        <input type={type} value={settings[k] || ""} placeholder={placeholder}
+          onChange={e => setSettings(s => ({ ...s, [k]: e.target.value }))}
+          style={PS.input} />
+      ) : (
+        <div style={{ fontSize: 13.5, color: POA.textPrimary, padding: "9px 12px", background: "rgba(0,0,0,.2)", borderRadius: 8, border: `0.5px solid ${POA.hairline}` }}>
+          {settings[k] || <span style={{ color: POA.textMuted, fontStyle: "italic" }}>Not set</span>}
+        </div>
+      )}
+    </div>
+  );
+
+  return (
+    <div>
+      <PageTitle sub="Organization settings, brand standards, and support">Settings</PageTitle>
+
+      <div style={{ display: "flex", gap: 6, marginBottom: 20 }}>
+        {TABS.map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)}
+            style={{ ...PS.btn, background: tab === t.id ? POA.accent : POA.btnBg, color: tab === t.id ? "#06090A" : POA.btnText, border: tab === t.id ? "none" : `0.5px solid ${POA.btnBorder}`, fontWeight: tab === t.id ? 700 : 500 }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── ORG IDENTITY (DeptAdmin only) ── */}
+      {tab === "identity" && isAdmin && (
+        <div>
+          <Card style={{ marginBottom: 16 }}>
+            <SectionTitle>Association identity</SectionTitle>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <Field label="Full association name" k="org_name" placeholder="Fort Worth Police Officers Association" />
+              </div>
+              <Field label="Short name / abbreviation" k="org_short_name" placeholder="FWPOA" />
+              <Field label="Type label" k="org_type_label" placeholder="Association" />
+              <div style={{ gridColumn: "1 / -1" }}>
+                <Field label="Headquarters address" k="org_address" placeholder="123 Main St, Fort Worth, TX 76101" />
+              </div>
+              <Field label="Phone number" k="org_phone" placeholder="(817) 555-0100" type="tel" />
+              <Field label="Website" k="org_website" placeholder="https://fwpoa.org" type="url" />
+              <Field label="Year founded" k="org_founded" placeholder="1968" />
+              <Field label="Building / space name" k="building_name" placeholder="POA Building" />
+            </div>
+          </Card>
+
+          <Card style={{ marginBottom: 16 }}>
+            <SectionTitle>Branding</SectionTitle>
+            <Field label="Logo URL (link to your logo image)" k="org_logo_url" placeholder="https://fwpoa.org/logo.png" type="url" />
+            {settings.org_logo_url && (
+              <div style={{ marginBottom: 12 }}>
+                <img src={settings.org_logo_url} alt="Logo preview"
+                  style={{ height: 60, objectFit: "contain", borderRadius: 8, background: "rgba(0,0,0,.3)", padding: 8 }}
+                  onError={e => { e.target.style.display = "none"; }} />
+              </div>
+            )}
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Association color</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <input type="color" value={settings.org_primary_color || "#DBA525"}
+                  onChange={e => setSettings(s => ({ ...s, org_primary_color: e.target.value }))}
+                  style={{ width: 44, height: 36, borderRadius: 7, border: `0.5px solid ${POA.hairline}`, background: "transparent", cursor: "pointer", padding: 2 }} />
+                <input value={settings.org_primary_color || "#DBA525"}
+                  onChange={e => setSettings(s => ({ ...s, org_primary_color: e.target.value }))}
+                  style={{ ...PS.input, maxWidth: 120 }} placeholder="#DBA525" />
+                <div style={{ fontSize: 12, color: POA.textMuted }}>Used for future per-org theming</div>
+              </div>
+            </div>
+          </Card>
+
+          <ErrBox msg={err} />
+          {saved && (
+            <div style={{ background: "rgba(70,199,147,.1)", border: "0.5px solid rgba(70,199,147,.3)", borderRadius: 10, padding: "11px 14px", fontSize: 13, color: POA.greenText, marginBottom: 12 }}>
+              ✓ Settings saved.
+            </div>
+          )}
+          <button style={{ ...PS.btnPrimary, width: "100%" }} disabled={busy} onClick={doSave}>
+            {busy ? "Saving…" : "Save settings"}
+          </button>
+          <div style={{ fontSize: 11.5, color: POA.textMuted, marginTop: 8, fontStyle: "italic", textAlign: "center" }}>
+            Changes apply immediately across the app for all members.
+          </div>
+        </div>
+      )}
+
+      {/* ── BRAND STANDARDS (all board) ── */}
+      {tab === "brand" && (
+        <div>
+          <Card style={{ marginBottom: 14 }}>
+            <SectionTitle>Your association identity</SectionTitle>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              {[
+                { label: "Full name", k: "org_name" },
+                { label: "Short name", k: "org_short_name" },
+                { label: "Type", k: "org_type_label" },
+                { label: "Building", k: "building_name" },
+                { label: "Address", k: "org_address" },
+                { label: "Phone", k: "org_phone" },
+                { label: "Website", k: "org_website" },
+                { label: "Founded", k: "org_founded" },
+              ].map(({ label, k }) => (
+                <div key={k}>
+                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: POA.textMuted, marginBottom: 3 }}>{label}</div>
+                  <div style={{ fontSize: 13.5, color: POA.textPrimary }}>{settings[k] || <span style={{ color: POA.textMuted, fontStyle: "italic" }}>Not set</span>}</div>
+                </div>
+              ))}
+            </div>
+          </Card>
+
+          {settings.org_logo_url && (
+            <Card style={{ marginBottom: 14 }}>
+              <SectionTitle>Logo</SectionTitle>
+              <img src={settings.org_logo_url} alt="Association logo"
+                style={{ height: 80, objectFit: "contain", borderRadius: 8, background: "rgba(0,0,0,.3)", padding: 10 }}
+                onError={e => { e.target.style.display = "none"; }} />
+            </Card>
+          )}
+
+          <Card style={{ marginBottom: 14 }}>
+            <SectionTitle>Brand color</SectionTitle>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <div style={{ width: 40, height: 40, borderRadius: 9, background: settings.org_primary_color || "#DBA525", border: `0.5px solid ${POA.hairline}`, boxShadow: `0 0 16px ${settings.org_primary_color || "#DBA525"}40` }} />
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: POA.textPrimary }}>{settings.org_primary_color || "#DBA525"}</div>
+                <div style={{ fontSize: 12, color: POA.textMuted }}>Primary association color</div>
+              </div>
+            </div>
+          </Card>
+
+          <Card>
+            <SectionTitle>Brand guidelines</SectionTitle>
+            <div style={{ fontSize: 13.5, color: POA.textSecondary, lineHeight: 1.7 }}>
+              When representing the association publicly, always use the official name, logo, and color above. Do not modify the logo, use unofficial colors, or represent the association without board authorization. For media inquiries, direct to the association president.
+            </div>
+            {isAdmin && (
+              <button style={{ ...PS.btn, marginTop: 12 }} onClick={() => setTab("identity")}>
+                <Settings size={13} /> Edit settings
+              </button>
+            )}
+          </Card>
+        </div>
+      )}
+
+      {/* ── SUPPORT & PRIVACY (everyone) ── */}
+      {tab === "support" && (
+        <div>
+          <Card style={{ marginBottom: 14 }}>
+            <SectionTitle>Get support</SectionTitle>
+            <div style={{ fontSize: 13.5, color: POA.textSecondary, lineHeight: 1.7, marginBottom: 14 }}>
+              B4C is built and maintained by BullRose Productions. If something isn't working or you need help, reach out directly.
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <a href="mailto:ashlea@bullroseproductions.com"
+                style={{ ...PS.btnPrimary, textDecoration: "none", justifyContent: "center" }}>
+                <Mail size={14} /> Email support
+              </a>
+              <a href="https://bullroseproductions.com" target="_blank" rel="noreferrer"
+                style={{ ...PS.btn, textDecoration: "none", justifyContent: "center" }}>
+                BullRoseProductions.com ↗
+              </a>
+            </div>
+          </Card>
+
+          <Card style={{ marginBottom: 14 }}>
+            <SectionTitle>Privacy & data</SectionTitle>
+            <div style={{ fontSize: 13.5, color: POA.textSecondary, lineHeight: 1.7 }}>
+              B4C stores your association's data securely using Supabase, hosted in the United States. Member data is never sold, shared with advertisers, or used for any purpose other than powering your association's platform. Only your association's authorized administrators can access member records. You can request deletion of your data at any time by contacting support.
+            </div>
+          </Card>
+
+          <Card style={{ marginBottom: 14 }}>
+            <SectionTitle>Terms of use</SectionTitle>
+            <div style={{ fontSize: 13.5, color: POA.textSecondary, lineHeight: 1.7 }}>
+              B4C is provided for use by authorized first responder associations and their members. By using this platform, you agree to use it only for lawful association business. Misuse, unauthorized access, or sharing of credentials is prohibited. BullRose Productions reserves the right to suspend access for violations of these terms.
+            </div>
+          </Card>
+
+          <div style={{ fontSize: 11.5, color: POA.textMuted, textAlign: "center", lineHeight: 1.6 }}>
+            B4C · Before the Call · Built by BullRose Productions<br />
+            © {new Date().getFullYear()} BullRose Productions. All rights reserved.
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 /* ================================================================
