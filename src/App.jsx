@@ -618,31 +618,198 @@ function MemberDash({ me, org, setView }) {
   );
 }
 
-function WhoToCall({ org }) {
-  const contacts = [
-    { role: "Association President", note: "General questions, member support" },
-    { role: "Legal Defense Rep", note: "Officer in need of counsel" },
-    { role: "Member Welfare Chair", note: "Personal crisis, family support" },
-    { role: "PAC / Political Chair", note: "Endorsements, political activity" },
-    { role: "Treasurer", note: "Dues, reimbursements, financial" },
-  ];
+function WhoToCall({ me }) {
+  const [contacts, setContacts] = useState(null);
+  const [editing, setEditing]   = useState(null);
+  const [adding, setAdding]     = useState(false);
+  const [err, setErr]           = useState("");
+  const [busy, setBusy]         = useState(false);
+  const manage                  = canManage(me?.access);
+
+  const blank = { role: "", name: "", phone: "", email: "", category: "Leadership", sort: 0 };
+  const [f, setF] = useState(blank);
+
+  async function load() {
+    try { setContacts(await listContacts()); }
+    catch(e) { setErr(e.message); }
+  }
+  useEffect(() => { load(); }, []);
+
+  function startEdit(c) {
+    setF({ role: c.role, name: c.name || "", phone: c.phone || "", email: c.email || "", category: c.category, sort: c.sort || 0 });
+    setEditing(c); setAdding(false); setErr("");
+  }
+  function resetForm() { setEditing(null); setAdding(false); setErr(""); setF(blank); }
+
+  async function doSave() {
+    if (!f.role.trim()) { setErr("Role is required."); return; }
+    setBusy(true); setErr("");
+    try {
+      const row = {
+        department_id: me.department_id,
+        role: f.role.trim(),
+        name: f.name.trim() || null,
+        phone: f.phone.trim() || null,
+        email: f.email.trim() || null,
+        category: f.category,
+        sort: Number(f.sort) || 0,
+      };
+      if (editing) await updateContact(editing.id, row);
+      else await createContact(row);
+      resetForm(); await load();
+    } catch(e) { setErr(e.message); }
+    finally { setBusy(false); }
+  }
+
+  async function doRemove(id) {
+    if (!confirm("Remove this contact?")) return;
+    try { await deactivateContact(id); await load(); }
+    catch(e) { setErr(e.message); }
+  }
+
+  const CATEGORIES = ["Leadership","Legal","Welfare","Financial","Operations","Other"];
+  const CAT_COLOR = {
+    Leadership: POA.accent,
+    Legal: "#57B6E0",
+    Welfare: "#EF6A64",
+    Financial: POA.green,
+    Operations: POA.amber,
+    Other: POA.textMuted,
+  };
+
+  // Group by category
+  const grouped = {};
+  (contacts || []).forEach(c => {
+    (grouped[c.category] = grouped[c.category] || []).push(c);
+  });
+
   return (
     <div>
-      <PageTitle sub="Direct lines for what matters">Who to Call</PageTitle>
-      <div style={{ fontSize: 13, color: POA.textMuted, marginBottom: 16, lineHeight: 1.6 }}>
-        Your association's contact directory. Numbers and emails are managed by your board — if something's missing, flag it in Correspondence.
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 20 }}>
+        <div>
+          <p style={{ ...PS.kicker, marginBottom: 4 }}>Who to Call</p>
+          <h1 style={{ fontFamily: "inherit", fontSize: 24, fontWeight: 700, color: POA.textPrimary, margin: 0 }}>
+            Your association contacts
+          </h1>
+          <div style={{ fontSize: 13, color: POA.textMuted, marginTop: 4 }}>
+            Direct lines for what matters — tap to call or email.
+          </div>
+        </div>
+        {manage && (
+          <button style={PS.btn} onClick={() => { setAdding(!adding); setEditing(null); }}>
+            <Plus size={13} /> Add contact
+          </button>
+        )}
       </div>
-      {contacts.map(c => (
-        <Card key={c.role}>
-          <div style={{ fontWeight: 700, fontSize: 14.5, color: POA.textPrimary }}>{c.role}</div>
-          <div style={{ fontSize: 12.5, color: POA.textMuted, marginTop: 3 }}>{c.note}</div>
-          <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
-            <button style={PS.btn}><Phone size={13} /> Call</button>
-            <button style={PS.btn}><Mail size={13} /> Email</button>
+
+      <ErrBox msg={err} />
+
+      {/* Add/Edit form */}
+      {(adding || editing) && manage && (
+        <Card style={{ marginBottom: 20 }}>
+          <SectionTitle>{editing ? `Edit — ${editing.role}` : "New contact"}</SectionTitle>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Role / title</div>
+              <input value={f.role} onChange={e => setF({ ...f, role: e.target.value })}
+                style={PS.input} placeholder="e.g. Legal Defense Rep" />
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Name</div>
+              <input value={f.name} onChange={e => setF({ ...f, name: e.target.value })}
+                style={PS.input} placeholder="Officer full name" />
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Category</div>
+              <select value={f.category} onChange={e => setF({ ...f, category: e.target.value })} style={PS.input}>
+                {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Phone</div>
+              <input type="tel" value={f.phone} onChange={e => setF({ ...f, phone: e.target.value })}
+                style={PS.input} placeholder="(817) 555-0100" />
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Email</div>
+              <input type="email" value={f.email} onChange={e => setF({ ...f, email: e.target.value })}
+                style={PS.input} placeholder="officer@fwpoa.org" />
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button style={PS.btnPrimary} disabled={busy} onClick={doSave}>
+              {busy ? "Saving…" : editing ? "Save changes" : "Add contact"}
+            </button>
+            <button style={PS.btn} onClick={resetForm}>Cancel</button>
+            {editing && (
+              <button style={{ ...PS.btn, color: POA.red, marginLeft: "auto" }}
+                onClick={() => { doRemove(editing.id); resetForm(); }}>
+                Remove
+              </button>
+            )}
           </div>
         </Card>
-      ))}
-      <div style={{ fontSize: 11.5, color: POA.textMuted, marginTop: 8, fontStyle: "italic" }}>Contact details are set by your board in the Members section.</div>
+      )}
+
+      {!contacts ? <Spinner /> : contacts.length === 0 ? (
+        <Card>
+          <div style={{ color: POA.textMuted, fontSize: 13.5, textAlign: "center", padding: "16px 0" }}>
+            {manage ? "No contacts yet — add your first contact above." : "No contacts have been added yet. Check back soon."}
+          </div>
+        </Card>
+      ) : (
+        Object.entries(grouped).map(([cat, catContacts]) => (
+          <div key={cat} style={{ marginBottom: 20 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".14em", textTransform: "uppercase", color: CAT_COLOR[cat] || POA.textMuted, marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ height: 1, width: 16, background: CAT_COLOR[cat] || POA.textMuted, opacity: .5 }} />
+              {cat}
+              <div style={{ height: 1, flex: 1, background: POA.hairline }} />
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 10 }}>
+              {catContacts.map(c => (
+                <div key={c.id} style={{ background: "linear-gradient(135deg, #0E1630 0%, #0A1020 100%)", border: `0.5px solid ${POA.hairline2}`, borderRadius: 12, padding: "14px 15px", boxShadow: "0 2px 12px rgba(0,0,0,.3), inset 0 1px 0 rgba(255,255,255,.04)", position: "relative", display: "flex", flexDirection: "column", gap: 4 }}>
+                  {/* Category color top bar */}
+                  <div style={{ position: "absolute", top: 0, left: 16, right: 16, height: 2, background: CAT_COLOR[cat] || POA.accent, borderRadius: "0 0 3px 3px", opacity: .6 }} />
+                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: CAT_COLOR[cat] || POA.accent, marginTop: 4 }}>{c.role}</div>
+                  {c.name && <div style={{ fontWeight: 700, fontSize: 14, color: POA.textPrimary }}>{c.name}</div>}
+                  {!c.name && <div style={{ fontSize: 13, color: POA.textMuted, fontStyle: "italic" }}>Name not set</div>}
+                  {c.phone && <div style={{ fontSize: 12, color: POA.textMuted, marginTop: 2 }}>{c.phone}</div>}
+                  <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                    {c.phone ? (
+                      <a href={`tel:${c.phone.replace(/\D/g, "")}`}
+                        style={{ ...PS.btnPrimary, fontSize: 11, padding: "5px 10px", textDecoration: "none", flex: 1, justifyContent: "center" }}>
+                        <Phone size={12} /> Call
+                      </a>
+                    ) : (
+                      <button style={{ ...PS.btn, fontSize: 11, padding: "5px 10px", flex: 1, justifyContent: "center", opacity: .4 }} disabled>
+                        <Phone size={12} /> No number
+                      </button>
+                    )}
+                    {c.email && (
+                      <a href={`mailto:${c.email}`}
+                        style={{ ...PS.btn, fontSize: 11, padding: "5px 10px", textDecoration: "none", justifyContent: "center" }}>
+                        <Mail size={12} />
+                      </a>
+                    )}
+                    {manage && (
+                      <button style={{ ...PS.btn, fontSize: 11, padding: "5px 8px" }}
+                        onClick={() => startEdit(c)}>
+                        <Pencil size={11} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))
+      )}
+
+      {!manage && (
+        <div style={{ fontSize: 11.5, color: POA.textMuted, marginTop: 8, fontStyle: "italic", textAlign: "center" }}>
+          Contact details are managed by your board. Flag missing info in Correspondence.
+        </div>
+      )}
     </div>
   );
 }
@@ -2501,6 +2668,33 @@ async function clearOnCall(deptId, priority) {
     .delete()
     .eq("department_id", deptId)
     .eq("priority", priority);
+  if (error) throw error;
+}
+async function listContacts() {
+  const { data, error } = await supabase
+    .from("contacts")
+    .select("*")
+    .eq("active", true)
+    .order("sort")
+    .order("created_at");
+  if (error) throw error;
+  return data || [];
+}
+async function createContact(row) {
+  const { data, error } = await supabase
+    .from("contacts").insert(row).select().single();
+  if (error) throw error;
+  return data;
+}
+async function updateContact(id, patch) {
+  const { data, error } = await supabase
+    .from("contacts").update(patch).eq("id", id).select().single();
+  if (error) throw error;
+  return data;
+}
+async function deactivateContact(id) {
+  const { error } = await supabase
+    .from("contacts").update({ active: false }).eq("id", id);
   if (error) throw error;
 }
 async function listAnnouncements() {
@@ -6461,7 +6655,7 @@ function renderScreen(view, { me, org, setView }) {
   if (view.startsWith("m_")) {
     switch (view) {
       case "m_dash":     return <MemberDash me={me} org={org} setView={setView} />;
-      case "m_call":     return <WhoToCall org={org} />;
+      case "m_call":     return <WhoToCall me={me} />;
       case "m_ask":      return <AskB4C me={me} org={org} />;
       case "m_card":     return <MyCard me={me} org={org} />;
       case "m_events":   return <MemberEvents />;
