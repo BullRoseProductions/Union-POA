@@ -1206,27 +1206,262 @@ function MyCard({ me, org }) {
   );
 }
 
-function MemberEvents() {
-  const [meetings, setMeetings] = useState(null);
-  useEffect(() => { listMeetings().then(setMeetings); }, []);
-  if (!meetings) return <Spinner />;
+function MemberEvents({ me, setView }) {
+  const today = new Date();
+  const [cur, setCur]         = useState({ y: today.getFullYear(), m: today.getMonth() });
+  const [events, setEvents]   = useState(null);
+  const [funding, setFunding] = useState([]);
+  const [selected, setSelected] = useState(null);
+  const [showPast, setShowPast] = useState(false);
+
+  async function load() {
+    try {
+      const [evts, fund] = await Promise.all([
+        supabase.from("events")
+          .select("*")
+          .neq("visibility", "board")
+          .order("event_date", { ascending: true })
+          .then(({ data, error }) => { if (error) throw error; return data || []; }),
+        supabase.from("funding_events")
+          .select("*")
+          .order("date", { ascending: true })
+          .then(({ data, error }) => { if (error) throw error; return data || []; }),
+      ]);
+      setEvents(evts);
+      setFunding(fund);
+    } catch(e) {
+      setEvents([]);
+    }
+  }
+  useEffect(() => { load(); }, []);
+
+  // Normalize both sources into one shape
+  const allEvents = [
+    ...(events || []).map(e => ({
+      id: e.id,
+      title: e.title,
+      date: e.event_date,
+      time: e.event_time,
+      location: e.location,
+      kind: e.kind,
+      description: e.description || e.notes,
+      link_url: e.link_url,
+      done: e.done,
+      source: "event",
+      color: KIND_COLOR[e.kind] || POA.accent,
+    })),
+    ...funding.map(f => ({
+      id: f.id,
+      title: f.title,
+      date: f.date,
+      time: null,
+      location: null,
+      kind: "fundraising",
+      description: f.description,
+      link_url: f.link_url,
+      done: false,
+      source: "funding",
+      color: f.color || POA.amber,
+    })),
+  ].sort((a, b) => a.date > b.date ? 1 : -1);
+
+  const upcoming = allEvents.filter(e => !e.done && e.date >= today.toISOString().split("T")[0]);
+  const past     = allEvents.filter(e => e.done || e.date < today.toISOString().split("T")[0]);
+
+  // Calendar grid
+  const dim      = new Date(cur.y, cur.m + 1, 0).getDate();
+  const startDow = new Date(cur.y, cur.m, 1).getDay();
+  const cells    = [];
+  for (let i = 0; i < startDow; i++) cells.push(null);
+  for (let d = 1; d <= dim; d++) cells.push(d);
+  while (cells.length % 7) cells.push(null);
+
+  const byDay = {};
+  allEvents.forEach(e => {
+    if (!e.date) return;
+    const ed = new Date(e.date + "T12:00:00");
+    if (ed.getFullYear() === cur.y && ed.getMonth() === cur.m) {
+      const d = ed.getDate();
+      (byDay[d] = byDay[d] || []).push(e);
+    }
+  });
+
+  const isToday = d => d && cur.y === today.getFullYear() && cur.m === today.getMonth() && d === today.getDate();
+
+  const KIND_LABEL = {
+    meeting: "Meeting", board: "Board Meeting", training: "Training",
+    community: "Community", general: "General", other: "Event",
+    fundraising: "Fundraiser",
+  };
+
+  if (selected) {
+    return (
+      <div>
+        <button onClick={() => setSelected(null)} style={{ ...PS.btn, marginBottom: 16 }}>
+          <ArrowLeft size={13} /> Events
+        </button>
+        <div style={{ ...PS.card, padding: "20px" }}>
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 16 }}>
+            <div style={{ width: 10, height: 10, borderRadius: "50%", background: selected.color, marginTop: 8, flexShrink: 0 }} />
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".12em", textTransform: "uppercase", color: selected.color, marginBottom: 4 }}>
+                {KIND_LABEL[selected.kind] || "Event"}
+              </div>
+              <h2 style={{ fontFamily: "inherit", fontSize: 22, fontWeight: 700, color: POA.textPrimary, margin: "0 0 8px" }}>
+                {selected.title}
+              </h2>
+              <div style={{ fontSize: 13.5, color: POA.textMuted, lineHeight: 1.6 }}>
+                {selected.date && new Date(selected.date + "T12:00:00").toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
+                {selected.time ? ` · ${selected.time.slice(0,5)}` : ""}
+              </div>
+              {selected.location && (
+                <div style={{ fontSize: 13.5, color: POA.textMuted, marginTop: 4 }}>
+                  📍 {selected.location}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {selected.description && (
+            <div style={{ fontSize: 13.5, color: POA.textSecondary, lineHeight: 1.7, marginBottom: 16, padding: "14px 16px", background: "rgba(0,0,0,.2)", borderRadius: 10, border: `0.5px solid ${POA.hairline}` }}>
+              {selected.description}
+            </div>
+          )}
+
+          {selected.link_url && (
+            <a href={selected.link_url} target="_blank" rel="noreferrer"
+              style={{ ...PS.btnPrimary, textDecoration: "none", display: "inline-flex", marginBottom: 12 }}>
+              Register / Learn more ↗
+            </a>
+          )}
+
+          <div style={{ fontSize: 12, color: POA.textMuted, fontStyle: "italic" }}>
+            {selected.source === "funding" ? "This is a fundraising event." : "This event is organized by your association."}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div>
-      <PageTitle sub="Upcoming meetings and association events">Events</PageTitle>
-      {meetings.filter(m => m.visibility !== "board").length === 0 && (
-        <Card><div style={{ color: POA.textMuted, fontSize: 13.5 }}>No upcoming meetings scheduled yet.</div></Card>
-      )}
-      {meetings.filter(m => m.visibility !== "board").map(m => (
-        <Card key={m.id}>
-          <div style={{ fontWeight: 700, fontSize: 15, color: POA.textPrimary }}>{m.title}</div>
-          <div style={{ fontSize: 12.5, color: POA.textMuted, marginTop: 3 }}>
-            {fmtDate(m.scheduled_at)}{m.location ? ` · ${m.location}` : ""}
+      <p style={{ ...PS.kicker, marginBottom: 4 }}>Events</p>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 20 }}>
+        <div>
+          <h1 style={{ fontFamily: "inherit", fontSize: 24, fontWeight: 700, color: POA.textPrimary, margin: 0 }}>
+            {MONTHS[cur.m]} {cur.y}
+          </h1>
+          <div style={{ fontSize: 13, color: POA.textMuted, marginTop: 2 }}>
+            Meetings, community events, and everything in between.
           </div>
-          <div style={{ marginTop: 8 }}>
-            <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 999, background: POA.accentSoft, color: POA.accent }}>{m.kind}</span>
+        </div>
+        <div style={{ display: "flex", gap: 6 }}>
+          <button style={PS.btn} onClick={() => setCur(c => c.m === 0 ? { y: c.y-1, m: 11 } : { ...c, m: c.m-1 })}>‹</button>
+          <button style={PS.btn} onClick={() => setCur({ y: today.getFullYear(), m: today.getMonth() })}>Today</button>
+          <button style={PS.btn} onClick={() => setCur(c => c.m === 11 ? { y: c.y+1, m: 0 } : { ...c, m: c.m+1 })}>›</button>
+        </div>
+      </div>
+
+      {/* Calendar */}
+      <div style={{ ...PS.card, padding: "16px 18px", marginBottom: 20 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 2, marginBottom: 8 }}>
+          {DOW.map(d => <div key={d} style={{ fontSize: 9, fontWeight: 700, textAlign: "center", color: POA.textMuted, textTransform: "uppercase", letterSpacing: ".06em", padding: "3px 0" }}>{d}</div>)}
+        </div>
+        {Array.from({ length: cells.length / 7 }, (_, w) => (
+          <div key={w} style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 2, marginBottom: 2 }}>
+            {cells.slice(w*7, w*7+7).map((d, i) => {
+              const dayEvents = d ? (byDay[d] || []) : [];
+              return (
+                <div key={i} style={{ minHeight: 70, background: isToday(d) ? "linear-gradient(135deg, rgba(219,165,37,.15), rgba(219,165,37,.05))" : "transparent", border: `0.5px solid ${isToday(d) ? "rgba(219,165,37,.3)" : POA.hairline}`, borderRadius: 8, padding: "4px 5px", boxShadow: isToday(d) ? "0 0 8px rgba(219,165,37,.1)" : "none" }}>
+                  {d && (
+                    <>
+                      <div style={{ fontSize: 11, fontWeight: isToday(d) ? 700 : 400, color: isToday(d) ? POA.accent : POA.textMuted, marginBottom: 3 }}>{d}</div>
+                      {dayEvents.map(e => (
+                        <button key={e.id} onClick={() => setSelected(e)}
+                          style={{ display: "block", width: "100%", textAlign: "left", background: e.color, border: "none", borderRadius: 4, padding: "2px 5px", fontSize: 9.5, fontWeight: 600, color: "#fff", marginBottom: 2, cursor: "pointer", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", boxShadow: `0 0 6px ${e.color}40` }}>
+                          {e.time ? e.time.slice(0,5) + " " : ""}{e.title}
+                        </button>
+                      ))}
+                    </>
+                  )}
+                </div>
+              );
+            })}
           </div>
-        </Card>
+        ))}
+      </div>
+
+      {/* Legend */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 16 }}>
+        {[
+          { label: "Meeting", color: KIND_COLOR.meeting || POA.accent },
+          { label: "Community", color: KIND_COLOR.community || "#46C793" },
+          { label: "Fundraiser", color: POA.amber },
+          { label: "Training", color: KIND_COLOR.training || "#46C793" },
+        ].map(({ label, color }) => (
+          <div key={label} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: POA.textMuted }}>
+            <div style={{ width: 8, height: 8, borderRadius: "50%", background: color }} />
+            {label}
+          </div>
+        ))}
+      </div>
+
+      {/* Upcoming list */}
+      <p style={{ ...PS.kicker, marginBottom: 10 }}>Upcoming</p>
+      {!events ? <Spinner /> : upcoming.length === 0 ? (
+        <div style={{ ...PS.card, padding: "16px", color: POA.textMuted, fontSize: 13.5 }}>
+          No upcoming events scheduled. Check back soon.
+        </div>
+      ) : upcoming.map(e => (
+        <div key={e.id} style={{ ...PS.card, padding: "13px 16px", marginBottom: 8, cursor: "pointer", display: "flex", alignItems: "center", gap: 12 }}
+          onClick={() => setSelected(e)}>
+          <div style={{ width: 8, height: 8, borderRadius: "50%", background: e.color, flexShrink: 0, boxShadow: `0 0 6px ${e.color}60` }} />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 700, fontSize: 14, color: POA.textPrimary }}>{e.title}</div>
+            <div style={{ fontSize: 12, color: POA.textMuted, marginTop: 2 }}>
+              {new Date(e.date + "T12:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
+              {e.time ? ` · ${e.time.slice(0,5)}` : ""}
+              {e.location ? ` · ${e.location}` : ""}
+            </div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+            <span style={{ fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 999, background: `${e.color}18`, color: e.color, border: `0.5px solid ${e.color}40` }}>
+              {KIND_LABEL[e.kind] || "Event"}
+            </span>
+            {e.link_url && (
+              <a href={e.link_url} target="_blank" rel="noreferrer"
+                onClick={ev => ev.stopPropagation()}
+                style={{ ...PS.btnPrimary, fontSize: 11, padding: "4px 10px", textDecoration: "none" }}>
+                Register ↗
+              </a>
+            )}
+            <ChevronRight size={14} color={POA.textMuted} />
+          </div>
+        </div>
       ))}
+
+      {/* Past events — collapsible */}
+      {past.length > 0 && (
+        <div style={{ marginTop: 16 }}>
+          <div onClick={() => setShowPast(v => !v)}
+            style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", marginBottom: showPast ? 10 : 0 }}>
+            <p style={{ ...PS.kicker, margin: 0 }}>Past events ({past.length})</p>
+            {showPast ? <ChevronUp size={15} color={POA.textMuted} /> : <ChevronDown size={15} color={POA.textMuted} />}
+          </div>
+          {showPast && past.slice(0,10).map(e => (
+            <div key={e.id} style={{ ...PS.card, padding: "11px 14px", marginBottom: 6, opacity: .65, cursor: "pointer", display: "flex", alignItems: "center", gap: 10 }}
+              onClick={() => setSelected(e)}>
+              <div style={{ width: 7, height: 7, borderRadius: "50%", background: e.color, flexShrink: 0 }} />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 600, fontSize: 13, color: POA.textPrimary }}>{e.title}</div>
+                <div style={{ fontSize: 11, color: POA.textMuted }}>
+                  {new Date(e.date + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -7368,7 +7603,7 @@ function renderScreen(view, { me, org, setView }) {
       case "m_call":     return <WhoToCall me={me} />;
       case "m_ask":      return <AskB4C me={me} org={org} />;
       case "m_card":     return <MyCard me={me} org={org} />;
-      case "m_events":   return <MemberEvents />;
+      case "m_events":   return <MemberEvents me={me} setView={setView} />;
       case "m_partners": return <TrustedPartners />;
       case "m_community": return <Community me={me} />;
       case "m_benefits": return <Benefits me={me} setView={setView} />;
