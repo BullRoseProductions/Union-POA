@@ -1214,9 +1214,17 @@ function MyCard({ me, org }) {
           </div>
         )}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
-          <div>
-            <div style={{ fontSize: 10, color: POA.textMuted, textTransform: "uppercase", letterSpacing: ".1em" }}>Standing</div>
-            <div style={{ fontWeight: 700, color: POA.accent, fontSize: 15, background: "rgba(219,165,37,.12)", border: "0.5px solid rgba(219,165,37,.25)", borderRadius: 6, padding: "2px 10px", display: "inline-block", marginTop: 3 }}>{me.standing || "Good"}</div>
+          <div style={{ display: "flex", alignItems: "flex-end", gap: 16 }}>
+            <div>
+              <div style={{ fontSize: 10, color: POA.textMuted, textTransform: "uppercase", letterSpacing: ".1em" }}>Standing</div>
+              <div style={{ fontWeight: 700, color: POA.accent, fontSize: 15, background: "rgba(219,165,37,.12)", border: "0.5px solid rgba(219,165,37,.25)", borderRadius: 6, padding: "2px 10px", display: "inline-block", marginTop: 3 }}>{me.standing || "Good"}</div>
+            </div>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ background: '#fff', padding: 8, borderRadius: 10, display: 'inline-block', boxShadow: '0 2px 12px rgba(0,0,0,.4)' }}>
+                <QRCodeCanvas value={`${window.location.origin}/verify.html?m=${me.id}`} size={80} />
+              </div>
+              <div style={{ fontSize: 9, color: POA.textMuted, marginTop: 4 }}>Scan to verify</div>
+            </div>
           </div>
           <div style={{ fontSize: 11, color: POA.textMuted }}>B4C · POA</div>
         </div>
