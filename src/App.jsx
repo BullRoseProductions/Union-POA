@@ -7600,9 +7600,10 @@ function BoardDocuments({ me }) {
   );
 }
 
-function MemberDocuments() {
+function MemberDocuments({ me }) {
   const [docs, setDocs] = useState(null);
   const [err, setErr]   = useState("");
+  const [search, setSearch] = useState('');
 
   useEffect(() => {
     listDocuments().then(setDocs).catch(e => setErr(e.message));
@@ -7615,8 +7616,14 @@ function MemberDocuments() {
     } catch(e) { setErr("Couldn't open document: " + e.message); }
   }
 
+  const filtered = (docs || []).filter(d =>
+    !search || d.name.toLowerCase().includes(search.toLowerCase()) || (d.notes || '').toLowerCase().includes(search.toLowerCase())
+  );
   const grouped = {};
-  (docs || []).forEach(d => { (grouped[d.category] = grouped[d.category] || []).push(d); });
+  filtered.forEach(d => {
+    const cat = d.category || 'General';
+    (grouped[cat] = grouped[cat] || []).push(d);
+  });
 
   return (
     <div>
@@ -7627,6 +7634,12 @@ function MemberDocuments() {
         </div>
       </Card>
       <ErrBox msg={err} />
+      {docs && docs.length > 0 && (
+        <div style={{ marginBottom: 14 }}>
+          <input value={search} onChange={e => setSearch(e.target.value)}
+            placeholder='Search documents…' style={{ ...PS.input }} />
+        </div>
+      )}
       {!docs ? <Spinner /> : docs.length === 0 ? (
         <Card><div style={{ color: POA.textMuted, fontSize: 13.5 }}>No documents have been shared with members yet. Check back soon.</div></Card>
       ) : (
@@ -8545,7 +8558,7 @@ function renderScreen(view, { me, org, setView }) {
       case "m_store":    return <Store me={me} />;
       case "m_booking":  return <EventSpaceBooking me={me} />;
       case "m_correspondence": return <MemberCorrespondence me={me} />;
-      case "m_documents": return <MemberDocuments />;
+      case "m_documents": return <MemberDocuments me={me} />;
       default:           return <ComingSoon label={view} />;
     }
   }
