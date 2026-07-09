@@ -2564,30 +2564,219 @@ function MyValue({ me }) {
 }
 
 function Benefits({ me }) {
-  const benefits = [
-    { title: "Legal Defense Fund", status: "Active", desc: "Up to $500K in legal representation for on-duty incidents. Contact your rep before speaking to investigators.", tag: "Core" },
-    { title: "Death & Disability", status: "Active", desc: "Association-negotiated supplemental coverage on top of department benefits.", tag: "Core" },
-    { title: "Scholarship Fund", status: "Active", desc: "Annual scholarships for members' children. Applications open each spring.", tag: "Education" },
-    { title: "Member Assistance Program", status: "Active", desc: "Free confidential counseling — mental health, financial, family. No records shared with the department.", tag: "Wellness" },
-    { title: "Retirement Support", status: "Active", desc: "Peer advisors who've navigated the pension system. Call before you sign anything.", tag: "Financial" },
-  ];
+  const [benefits, setBenefits]   = useState(null);
+  const [contacts, setContacts]   = useState([]);
+  const [editing, setEditing]     = useState(null);
+  const [adding, setAdding]       = useState(false);
+  const [err, setErr]             = useState("");
+  const [busy, setBusy]           = useState(false);
+  const manage                    = canManage(me?.access);
+
+  const blank = { title: "", description: "", status: "Active", category: "Core", contact_role: "", sort: 0 };
+  const [f, setF] = useState(blank);
+
+  async function load() {
+    try {
+      const [b, c] = await Promise.all([listBenefits(), listContacts()]);
+      setBenefits(b); setContacts(c);
+    } catch(e) { setErr(e.message); }
+  }
+  useEffect(() => { load(); }, []);
+
+  function startEdit(b) {
+    setF({ title: b.title, description: b.description || "", status: b.status, category: b.category, contact_role: b.contact_role || "", sort: b.sort || 0 });
+    setEditing(b); setAdding(false); setErr("");
+  }
+  function resetForm() { setEditing(null); setAdding(false); setErr(""); setF(blank); }
+
+  async function doSave() {
+    if (!f.title.trim()) { setErr("Title is required."); return; }
+    setBusy(true); setErr("");
+    try {
+      const row = {
+        department_id: me.department_id,
+        title: f.title.trim(),
+        description: f.description.trim() || null,
+        status: f.status,
+        category: f.category.trim() || "Core",
+        contact_role: f.contact_role.trim() || null,
+        sort: Number(f.sort) || 0,
+      };
+      if (editing) await updateBenefit(editing.id, row);
+      else await createBenefit(row);
+      resetForm(); await load();
+    } catch(e) { setErr(e.message); }
+    finally { setBusy(false); }
+  }
+
+  async function doRemove(id) {
+    if (!confirm("Remove this benefit?")) return;
+    try { await deactivateBenefit(id); await load(); }
+    catch(e) { setErr(e.message); }
+  }
+
+  const STATUS_COLOR = {
+    "Active":      { bg: "rgba(70,199,147,.14)", color: POA.green },
+    "Coming Soon": { bg: "rgba(219,165,37,.14)", color: POA.accent },
+    "Inactive":    { bg: "rgba(255,255,255,.06)", color: POA.textMuted },
+  };
+
+  // Group by category
+  const grouped = {};
+  (benefits || []).forEach(b => {
+    (grouped[b.category] = grouped[b.category] || []).push(b);
+  });
+
+  // Find contact for "Get help"
+  function getHelpContact(contactRole) {
+    return contacts.find(c => c.role === contactRole);
+  }
+
   return (
     <div>
-      <PageTitle sub="What your membership covers">Benefits</PageTitle>
-      {benefits.map(b => (
-        <Card key={b.title}>
-          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, marginBottom: 6 }}>
-            <div style={{ fontWeight: 700, fontSize: 15, color: POA.textPrimary }}>{b.title}</div>
-            <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-              <span style={{ fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 999, background: "rgba(70,199,147,.14)", color: POA.green }}>{b.status}</span>
-              <span style={{ fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 999, background: POA.accentSoft, color: POA.accent }}>{b.tag}</span>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 20 }}>
+        <div>
+          <p style={{ ...PS.kicker, marginBottom: 4 }}>Benefits</p>
+          <h1 style={{ fontFamily: "inherit", fontSize: 24, fontWeight: 700, color: POA.textPrimary, margin: 0 }}>
+            What your membership covers
+          </h1>
+          <div style={{ fontSize: 13, color: POA.textMuted, marginTop: 4 }}>
+            Every benefit your dues deliver — managed by your board.
+          </div>
+        </div>
+        {manage && (
+          <button style={PS.btn} onClick={() => { setAdding(!adding); setEditing(null); }}>
+            <Plus size={13} /> Add benefit
+          </button>
+        )}
+      </div>
+
+      <ErrBox msg={err} />
+
+      {/* Add/Edit form */}
+      {(adding || editing) && manage && (
+        <Card style={{ marginBottom: 20 }}>
+          <SectionTitle>{editing ? `Edit — ${editing.title}` : "New benefit"}</SectionTitle>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Benefit title</div>
+              <input value={f.title} onChange={e => setF({ ...f, title: e.target.value })}
+                style={PS.input} placeholder="e.g. Legal Defense Fund" />
+            </div>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Description</div>
+              <textarea value={f.description} onChange={e => setF({ ...f, description: e.target.value })}
+                style={{ ...PS.textarea, minHeight: 80 }} placeholder="What does this benefit cover and how do members use it?" />
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Category</div>
+              <input value={f.category} onChange={e => setF({ ...f, category: e.target.value })}
+                style={PS.input} placeholder="e.g. Core, Legal, Wellness, Education" />
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Status</div>
+              <select value={f.status} onChange={e => setF({ ...f, status: e.target.value })} style={PS.input}>
+                <option>Active</option>
+                <option>Coming Soon</option>
+                <option>Inactive</option>
+              </select>
+            </div>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Who to contact for help (optional)</div>
+              <select value={f.contact_role} onChange={e => setF({ ...f, contact_role: e.target.value })} style={PS.input}>
+                <option value="">— No specific contact —</option>
+                {contacts.map(c => <option key={c.id} value={c.role}>{c.role}{c.name ? ` — ${c.name}` : ""}</option>)}
+              </select>
             </div>
           </div>
-          <div style={{ fontSize: 13, color: POA.textMuted, lineHeight: 1.55 }}>{b.desc}</div>
-          <button style={{ ...PS.btn, marginTop: 10 }}><Phone size={13} /> Get help with this</button>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button style={PS.btnPrimary} disabled={busy} onClick={doSave}>
+              {busy ? "Saving…" : editing ? "Save changes" : "Add benefit"}
+            </button>
+            <button style={PS.btn} onClick={resetForm}>Cancel</button>
+            {editing && (
+              <button style={{ ...PS.btn, color: POA.red, marginLeft: "auto" }}
+                onClick={() => { doRemove(editing.id); resetForm(); }}>
+                Remove
+              </button>
+            )}
+          </div>
         </Card>
-      ))}
-      <div style={{ fontSize: 11.5, color: POA.textMuted, marginTop: 8, fontStyle: "italic" }}>
+      )}
+
+      {!benefits ? <Spinner /> : benefits.length === 0 ? (
+        <Card>
+          <div style={{ color: POA.textMuted, fontSize: 13.5, textAlign: "center", padding: "16px 0" }}>
+            {manage ? "No benefits yet — add your first one above." : "No benefits have been added yet. Check back soon."}
+          </div>
+        </Card>
+      ) : (
+        Object.entries(grouped).map(([cat, catBenefits]) => (
+          <div key={cat} style={{ marginBottom: 20 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".14em", textTransform: "uppercase", color: POA.textMuted, marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ height: 1, width: 16, background: POA.accent, opacity: .4 }} />
+              {cat}
+              <div style={{ height: 1, flex: 1, background: POA.hairline }} />
+            </div>
+            {catBenefits.map(b => {
+              const helpContact = b.contact_role ? getHelpContact(b.contact_role) : null;
+              const statusStyle = STATUS_COLOR[b.status] || STATUS_COLOR["Inactive"];
+              return (
+                <Card key={b.id} style={{ marginBottom: 10 }}>
+                  <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, marginBottom: b.description ? 8 : 0 }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 700, fontSize: 15, color: POA.textPrimary }}>{b.title}</div>
+                    </div>
+                    <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
+                      <span style={{ fontSize: 10, fontWeight: 700, padding: "3px 9px", borderRadius: 999, background: statusStyle.bg, color: statusStyle.color }}>
+                        {b.status}
+                      </span>
+                      {manage && (
+                        <button style={{ ...PS.btn, padding: "4px 8px", fontSize: 11 }} onClick={() => startEdit(b)}>
+                          <Pencil size={11} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  {b.description && (
+                    <div style={{ fontSize: 13, color: POA.textMuted, lineHeight: 1.65, marginBottom: 12 }}>
+                      {b.description}
+                    </div>
+                  )}
+                  {helpContact ? (
+                    <div style={{ display: "flex", gap: 8 }}>
+                      {helpContact.phone && (
+                        <a href={`tel:${helpContact.phone.replace(/\D/g,"")}`}
+                          style={{ ...PS.btnPrimary, fontSize: 12, padding: "6px 12px", textDecoration: "none" }}>
+                          <Phone size={12} /> Call {helpContact.name || b.contact_role}
+                        </a>
+                      )}
+                      {helpContact.email && (
+                        <a href={`mailto:${helpContact.email}`}
+                          style={{ ...PS.btn, fontSize: 12, padding: "6px 12px", textDecoration: "none" }}>
+                          <Mail size={12} /> Email
+                        </a>
+                      )}
+                      {!helpContact.phone && !helpContact.email && (
+                        <button style={{ ...PS.btn, fontSize: 12 }} onClick={() => {}}>
+                          <Phone size={12} /> Contact {b.contact_role}
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <button style={{ ...PS.btn, fontSize: 12 }}
+                      onClick={() => {}}>
+                      <Phone size={12} /> Get help with this
+                    </button>
+                  )}
+                </Card>
+              );
+            })}
+          </div>
+        ))
+      )}
+
+      <div style={{ fontSize: 11.5, color: POA.textMuted, marginTop: 4, fontStyle: "italic", textAlign: "center" }}>
         Benefits are managed by your board. Contact your rep if something looks wrong.
       </div>
     </div>
@@ -3002,6 +3191,33 @@ async function updateContact(id, patch) {
 async function deactivateContact(id) {
   const { error } = await supabase
     .from("contacts").update({ active: false }).eq("id", id);
+  if (error) throw error;
+}
+async function listBenefits() {
+  const { data, error } = await supabase
+    .from("benefits")
+    .select("*")
+    .eq("active", true)
+    .order("sort")
+    .order("created_at");
+  if (error) throw error;
+  return data || [];
+}
+async function createBenefit(row) {
+  const { data, error } = await supabase
+    .from("benefits").insert(row).select().single();
+  if (error) throw error;
+  return data;
+}
+async function updateBenefit(id, patch) {
+  const { data, error } = await supabase
+    .from("benefits").update(patch).eq("id", id).select().single();
+  if (error) throw error;
+  return data;
+}
+async function deactivateBenefit(id) {
+  const { error } = await supabase
+    .from("benefits").update({ active: false }).eq("id", id);
   if (error) throw error;
 }
 async function listContactCategories() {
