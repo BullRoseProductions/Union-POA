@@ -3278,32 +3278,196 @@ function Benefits({ me, setView }) {
   );
 }
 
-function VoteLink() {
-  const votes = [
-    { title: "CBA Ratification Vote", status: "open", desc: "Vote on the proposed collective bargaining agreement. Closes July 31.", url: "#" },
-    { title: "Board Election — District 4 Rep", status: "upcoming", desc: "Nominations close August 15. Election opens September 1.", url: null },
-    { title: "Bylaw Amendment — Article 7", status: "closed", desc: "Amendment passed 87% in favor. Effective immediately.", url: null },
-  ];
-  const statusColor = { open: POA.green, upcoming: POA.amber, closed: POA.textMuted };
+function VoteLink({ me, org, setView }) {
+  const [voteSettings, setVoteSettings] = useState(null);
+  const manage = canManage(me?.access);
+  const isAdmin = canAdmin(me?.access);
+  const [editing, setEditing] = useState(false);
+  const [f, setF] = useState({ title: "", description: "", link_url: "", open_date: "", close_date: "", active: true });
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [err, setErr] = useState("");
+
+  async function load() {
+    const { data } = await supabase
+      .from("org_settings")
+      .select("*")
+      .eq("department_id", me.department_id)
+      .in("key", ["vote_title","vote_description","vote_link_url","vote_open_date","vote_close_date","vote_active"]);
+    const map = {};
+    (data || []).forEach(r => { map[r.key] = r.value; });
+    setVoteSettings(map);
+    setF({
+      title: map.vote_title || "",
+      description: map.vote_description || "",
+      link_url: map.vote_link_url || "",
+      open_date: map.vote_open_date || "",
+      close_date: map.vote_close_date || "",
+      active: map.vote_active !== "false",
+    });
+  }
+
+  useEffect(() => { load(); }, [me.department_id]);
+
+  async function doSave() {
+    setBusy(true); setErr(""); setSaved(false);
+    try {
+      const entries = [
+        ["vote_title", f.title],
+        ["vote_description", f.description],
+        ["vote_link_url", f.link_url],
+        ["vote_open_date", f.open_date],
+        ["vote_close_date", f.close_date],
+        ["vote_active", String(f.active)],
+      ];
+      await Promise.all(entries.map(([key, value]) =>
+        supabase.from("org_settings").upsert(
+          { department_id: me.department_id, key, value },
+          { onConflict: "department_id,key" }
+        )
+      ));
+      await load();
+      setEditing(false);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+      await logActivity(me.department_id, "vote", `🗳️ Vote ${f.active ? "opened" : "updated"}: ${f.title}`, "m_vote");
+    } catch(e) { setErr(e.message); }
+    finally { setBusy(false); }
+  }
+
+  const hasVote = voteSettings?.vote_link_url;
+  const isActive = voteSettings?.vote_active !== "false";
+  const now = new Date();
+  const openDate = voteSettings?.vote_open_date ? new Date(voteSettings.vote_open_date) : null;
+  const closeDate = voteSettings?.vote_close_date ? new Date(voteSettings.vote_close_date + "T23:59:59") : null;
+  const voteOpen = hasVote && isActive && (!openDate || openDate <= now) && (!closeDate || closeDate >= now);
+
   return (
     <div>
-      <PageTitle sub="Association votes and elections">VoteLink</PageTitle>
-      <div style={{ fontSize: 13, color: POA.textMuted, marginBottom: 16, lineHeight: 1.6 }}>
-        Official votes are conducted on your association's secure voting platform. B4C links you there — we don't process votes.
-      </div>
-      {votes.map(v => (
-        <Card key={v.title}>
-          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, marginBottom: 6 }}>
-            <div style={{ fontWeight: 700, fontSize: 15, color: POA.textPrimary }}>{v.title}</div>
-            <span style={{ fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 999, background: `rgba(${v.status === "open" ? "70,199,147" : v.status === "upcoming" ? "240,180,74" : "122,114,150"},.14)`, color: statusColor[v.status], flexShrink: 0, textTransform: "uppercase" }}>{v.status}</span>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 20 }}>
+        <div>
+          <p style={{ ...PS.kicker, marginBottom: 4 }}>VoteLink</p>
+          <h1 style={{ fontFamily: "inherit", fontSize: 24, fontWeight: 700, color: POA.textPrimary, margin: 0 }}>
+            Association Vote
+          </h1>
+          <div style={{ fontSize: 13, color: POA.textMuted, marginTop: 4 }}>
+            Official votes and ballots from your board.
           </div>
-          <div style={{ fontSize: 13, color: POA.textMuted, lineHeight: 1.55, marginBottom: 10 }}>{v.desc}</div>
-          {v.url && <a href={v.url} style={{ ...PS.btnPrimary, textDecoration: "none", display: "inline-flex" }}><Vote size={14} /> Cast your vote ↗</a>}
-        </Card>
-      ))}
-      <div style={{ fontSize: 11.5, color: POA.textMuted, marginTop: 8, fontStyle: "italic" }}>
-        Vote links and deadlines are posted by your board. Active votes show here automatically.
+        </div>
+        {manage && (
+          <button style={PS.btn} onClick={() => setEditing(v => !v)}>
+            <Settings size={13} /> {editing ? "Cancel" : "Set vote link"}
+          </button>
+        )}
       </div>
+
+      <ErrBox msg={err} />
+
+      {/* Board edit form */}
+      {editing && manage && (
+        <Card style={{ marginBottom: 20 }}>
+          <SectionTitle>Configure vote</SectionTitle>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Vote title</div>
+              <input value={f.title} onChange={e => setF({ ...f, title: e.target.value })}
+                style={PS.input} placeholder="e.g. CBA Ratification Vote 2026" />
+            </div>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Description</div>
+              <textarea value={f.description} onChange={e => setF({ ...f, description: e.target.value })}
+                style={{ ...PS.textarea, minHeight: 70 }} placeholder="What are members voting on? Any instructions?" />
+            </div>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Voting link (secure external URL)</div>
+              <input type="url" value={f.link_url} onChange={e => setF({ ...f, link_url: e.target.value })}
+                style={PS.input} placeholder="https://www.electionrunner.com/..." />
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Opens (optional)</div>
+              <input type="date" value={f.open_date} onChange={e => setF({ ...f, open_date: e.target.value })}
+                style={PS.input} />
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Closes (optional)</div>
+              <input type="date" value={f.close_date} onChange={e => setF({ ...f, close_date: e.target.value })}
+                style={PS.input} />
+            </div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, cursor: "pointer" }}
+            onClick={() => setF(x => ({ ...x, active: !x.active }))}>
+            <div style={{ width: 20, height: 20, borderRadius: 6, border: `2px solid ${f.active ? POA.accent : POA.hairline2}`, background: f.active ? POA.accent : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: ".15s" }}>
+              {f.active && <CheckCircle2 size={12} color="#06090A" />}
+            </div>
+            <div style={{ fontSize: 13.5, color: f.active ? POA.accent : POA.textMuted, fontWeight: f.active ? 600 : 400 }}>
+              Vote is active — members can see and access it
+            </div>
+          </div>
+          {saved && (
+            <div style={{ background: "rgba(70,199,147,.1)", border: "0.5px solid rgba(70,199,147,.3)", borderRadius: 10, padding: "10px 14px", fontSize: 13, color: POA.greenText, marginBottom: 10 }}>
+              ✓ Vote settings saved.
+            </div>
+          )}
+          <button style={{ ...PS.btnPrimary, width: "100%" }} disabled={busy || !f.link_url.trim()} onClick={doSave}>
+            {busy ? "Saving…" : "Save vote settings"}
+          </button>
+          <div style={{ fontSize: 11.5, color: POA.textMuted, marginTop: 8, fontStyle: "italic" }}>
+            The voting link opens in a new tab. Use a trusted external voting platform — never collect votes through B4C.
+          </div>
+        </Card>
+      )}
+
+      {/* Member view */}
+      {!voteSettings ? <Spinner /> : !hasVote || !isActive ? (
+        <Card>
+          <div style={{ textAlign: "center", padding: "24px 0" }}>
+            <div style={{ fontSize: 36, marginBottom: 12 }}>🗳️</div>
+            <div style={{ fontWeight: 700, fontSize: 16, color: POA.textPrimary, marginBottom: 6 }}>No active vote</div>
+            <div style={{ fontSize: 13.5, color: POA.textMuted, lineHeight: 1.65 }}>
+              Your board will post a link here when a vote opens. Check back soon.
+            </div>
+          </div>
+        </Card>
+      ) : (
+        <div>
+          {/* Vote status banner */}
+          <div style={{ background: voteOpen ? "rgba(70,199,147,.08)" : "rgba(219,165,37,.08)", border: `0.5px solid ${voteOpen ? "rgba(70,199,147,.25)" : "rgba(219,165,37,.25)"}`, borderRadius: 12, padding: "10px 16px", marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ width: 8, height: 8, borderRadius: "50%", background: voteOpen ? POA.green : POA.accent, flexShrink: 0, animation: voteOpen ? "sos-pulse 2s infinite" : "none" }} />
+            <div style={{ fontSize: 13, fontWeight: 600, color: voteOpen ? POA.green : POA.accent }}>
+              {voteOpen ? "Vote is open" : closeDate && closeDate < now ? "Vote has closed" : "Vote opens soon"}
+            </div>
+            {openDate && <div style={{ fontSize: 11, color: POA.textMuted, marginLeft: "auto" }}>Opens {openDate.toLocaleDateString()}</div>}
+            {closeDate && <div style={{ fontSize: 11, color: POA.textMuted, marginLeft: openDate ? 0 : "auto" }}>Closes {closeDate.toLocaleDateString()}</div>}
+          </div>
+
+          {/* Vote card */}
+          <Card style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".12em", textTransform: "uppercase", color: POA.accent, marginBottom: 8 }}>Active vote</div>
+            <div style={{ fontWeight: 700, fontSize: 20, color: POA.textPrimary, marginBottom: 10 }}>
+              {voteSettings.vote_title || "Association Vote"}
+            </div>
+            {voteSettings.vote_description && (
+              <div style={{ fontSize: 13.5, color: POA.textSecondary, lineHeight: 1.7, marginBottom: 16 }}>
+                {voteSettings.vote_description}
+              </div>
+            )}
+            {voteOpen ? (
+              <a href={voteSettings.vote_link_url} target="_blank" rel="noreferrer"
+                style={{ ...PS.btnPrimary, textDecoration: "none", display: "inline-flex", fontSize: 15, padding: "12px 24px", width: "100%", justifyContent: "center", boxShadow: "0 0 20px rgba(219,165,37,.25)" }}>
+                🗳️ Go vote now →
+              </a>
+            ) : (
+              <button style={{ ...PS.btn, width: "100%", justifyContent: "center", opacity: .5 }} disabled>
+                {closeDate && closeDate < now ? "Voting has closed" : "Voting not yet open"}
+              </button>
+            )}
+          </Card>
+
+          <div style={{ fontSize: 11.5, color: POA.textMuted, textAlign: "center", fontStyle: "italic" }}>
+            You'll be taken to a secure external voting site. Your vote is private.
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -7812,7 +7976,7 @@ function renderScreen(view, { me, org, setView }) {
       case "m_partners": return <TrustedPartners />;
       case "m_community": return <Community me={me} />;
       case "m_benefits": return <Benefits me={me} setView={setView} />;
-      case "m_vote":     return <VoteLink />;
+      case "m_vote":     return <VoteLink me={me} org={org} setView={setView} />;
       case "m_store":    return <Store />;
       case "m_correspondence": return <MemberCorrespondence me={me} />;
       case "m_documents": return <MemberDocuments />;
