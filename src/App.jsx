@@ -184,7 +184,7 @@ const MEMBER_NAV = [
 
 const BOARD_NAV = [
   { id: "b_dash",         label: "Dashboard",        Icon: LayoutDashboard },
-  { id: "b_attendance",   label: "Meeting Attendance",Icon: CalendarCheck },
+  { id: "b_attendance",   label: "Meetings & Events", Icon: CalendarCheck },
   { id: "b_meetings",     label: "Agenda & Minutes",  Icon: ClipboardList },
   { id: "b_stipend",      label: "Stipend Log",       Icon: DollarSign },
   { id: "b_causes",       label: "Causes",            Icon: Heart },
@@ -2160,10 +2160,10 @@ function MeetingAttendance({ me }) {
         <div style={{ ...PS.card, padding: "16px 18px", marginBottom: 14 }}>
           {(() => {
             const roster = detail.assign_all ? members : members.filter(m => (detail.event_assignments || []).some(a => a.member_id === m.id));
-            return <p style={{ ...PS.kicker, marginBottom: 10 }}>Attendance roll ({att.length} / {roster.length}){detail.assign_all ? "" : " · assigned only"}</p>;
+            return <p style={{ ...PS.kicker, marginBottom: 10 }}>Sign-in sheet ({att.length} / {roster.length}){detail.assign_all ? "" : " · assigned only"}</p>;
           })()}
           <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 10 }}>
-            {manage && !detail.done ? "Tap a name to toggle — or use the QR code above for self-serve." : "Attendance record."}
+            {manage && !detail.done ? "Tap a name to mark them signed in, or use the QR code for self-serve." : "Attendance record."}
           </div>
           {(detail.assign_all
             ? members
@@ -2185,7 +2185,7 @@ function MeetingAttendance({ me }) {
                   {m.full_name}{m.id === me.id ? " (you)" : ""}
                 </span>
                 <span style={{ fontSize: 11, fontWeight: 700, color: present ? POA.greenText : POA.redText }}>
-                  {present ? "PRESENT" : "ABSENT"}
+                  {present ? "SIGNED IN" : "NOT SIGNED IN"}
                 </span>
               </div>
             );
@@ -2194,7 +2194,7 @@ function MeetingAttendance({ me }) {
 
         {manage && !detail.done && (
           <button style={{ ...PS.btnPrimary, width: "100%" }} disabled={busy} onClick={() => doComplete(detail)}>
-            <CalendarCheck size={15} /> Mark event done — lock attendance
+            <CalendarCheck size={15} /> Close sign-in sheet
           </button>
         )}
       </div>
@@ -2212,7 +2212,7 @@ function MeetingAttendance({ me }) {
 
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 20 }}>
         <div>
-          <p style={{ ...PS.kicker, marginBottom: 4 }}>Meeting Attendance</p>
+          <p style={{ ...PS.kicker, marginBottom: 4 }}>Meetings & Events</p>
           <h1 style={{ fontFamily: "inherit", fontSize: 24, fontWeight: 700, color: POA.textPrimary, margin: 0 }}>
             {MONTHS[cur.m]} {cur.y}
           </h1>
@@ -2254,9 +2254,9 @@ function MeetingAttendance({ me }) {
             <div>
               <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Attendance tracking</div>
               <select value={newEvt.attendance_mode} onChange={e => setNewEvt({ ...newEvt, attendance_mode: e.target.value })} style={PS.input}>
-                <option value="qr">QR scan (tamper-proof)</option>
-                <option value="manual">Manual roll (board marks)</option>
-                <option value="none">No tracking</option>
+                <option value="qr">QR sign-in (member scans)</option>
+                <option value="manual">Manual sign-in (board marks)</option>
+                <option value="none">No sign-in needed</option>
               </select>
             </div>
             <div style={{ gridColumn: "1 / -1" }}>
@@ -4318,7 +4318,7 @@ function PAOrgConfig() {
     { key: 'm_card', label: 'My Card', group: 'Member' },
     { key: 'm_vote', label: 'VoteLink', group: 'Member' },
     { key: 'm_store', label: 'Store', group: 'Member' },
-    { key: 'b_attendance', label: 'Meeting Attendance', group: 'Board' },
+    { key: 'b_attendance', label: 'Meetings & Events', group: 'Board' },
     { key: 'b_meetings', label: 'Agenda & Minutes', group: 'Board' },
     { key: 'b_stipend', label: 'Stipend Log', group: 'Board' },
     { key: 'b_causes', label: 'Causes', group: 'Board' },
