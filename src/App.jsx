@@ -172,7 +172,7 @@ const MEMBER_NAV = [
   { id: "m_call",     label: "Who to Call",      Icon: Phone },
   { id: "m_ask",      label: "Ask B4C",          Icon: MessageSquare },
   { id: "m_partners", label: "Trusted Partners", Icon: Handshake },
-  { id: "m_value",    label: "My Value",         Icon: TrendingUp },
+  { id: "m_community", label: "Community",        Icon: Users },
   { id: "m_benefits", label: "Benefits",         Icon: Shield },
   { id: "m_events",   label: "Events",           Icon: Calendar },
   { id: "m_card",     label: "My Card",          Icon: CreditCard },
@@ -193,6 +193,7 @@ const BOARD_NAV = [
   { id: "b_building",     label: "POA Building",      Icon: Building2 },
   { id: "b_continuity",   label: "Board Continuity",  Icon: BookOpen },
   { id: "b_correspondence",label: "Correspondence",   Icon: Mail },
+  { id: "b_community",    label: "Community",         Icon: Users },
   { id: "b_members",      label: "Members",           Icon: Users },
   { id: "b_documents",    label: "Documents",         Icon: FileText },
   { id: "b_ledger",       label: "Value Ledger",      Icon: TrendingUp },
@@ -353,11 +354,13 @@ function MemberDash({ me, org, setView }) {
   const [openActions, setOpenActions] = useState(0);
   const [videos, setVideos] = useState([]);
   const [onCall, setOnCall_state] = useState([]);
+  const [activity, setActivity] = useState([]);
 
   useEffect(() => {
     listMeetings().then(ms => setNextMeeting(ms.find(m => m.status === "open") || null));
     getActiveAlert().then(setActiveAlert).catch(() => null);
     getOnCall().then(setOnCall_state).catch(() => null);
+    listActivityLog().then(setActivity).catch(() => null);
     listVideos().then(v => setVideos(v.slice(0, 2))).catch(() => null);
     myActionItems(me.id).then(items => setOpenActions(items.filter(i => i.status === "open").length));
     // attendance this quarter
@@ -594,6 +597,23 @@ function MemberDash({ me, org, setView }) {
           </button>
         ))}
       </div>
+
+      {activity.length > 0 && (
+        <div style={{ marginTop: 18 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".12em", textTransform: "uppercase", color: POA.textMuted, marginBottom: 8 }}>
+            Your union is working
+          </div>
+          <Card>
+            {activity.map((a, i) => (
+              <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: i < activity.length - 1 ? `0.5px solid ${POA.hairline}` : "none" }}>
+                <CheckCircle2 size={14} color={POA.green} style={{ flexShrink: 0 }} />
+                <div style={{ flex: 1, fontSize: 13, color: POA.textSecondary }}>{a.title}</div>
+                <div style={{ fontSize: 11, color: POA.textMuted, flexShrink: 0 }}>{fmtDate(a.created_at)}</div>
+              </div>
+            ))}
+          </Card>
+        </div>
+      )}
     </div>
   );
 }
@@ -2792,6 +2812,87 @@ async function getDocsForAI() {
     .not("extracted_text", "is", null);
   if (error) throw error;
   return data || [];
+}
+async function listCommunityPosts() {
+  const { data, error } = await supabase
+    .from("community_posts")
+    .select("*, members!community_posts_member_id_fkey(full_name, badge), poster:members!community_posts_posted_by_fkey(full_name)")
+    .eq("status", "active")
+    .order("pinned", { ascending: false })
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+async function listPendingPosts() {
+  const { data, error } = await supabase
+    .from("community_posts")
+    .select("*, members!community_posts_member_id_fkey(full_name), poster:members!community_posts_posted_by_fkey(full_name)")
+    .eq("status", "pending")
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+async function createCommunityPost(row) {
+  const { data, error } = await supabase
+    .from("community_posts").insert(row).select().single();
+  if (error) throw error;
+  return data;
+}
+async function approveCommunityPost(id) {
+  const { error } = await supabase
+    .from("community_posts").update({ status: "active" }).eq("id", id);
+  if (error) throw error;
+}
+async function archiveCommunityPost(id) {
+  const { error } = await supabase
+    .from("community_posts").update({ status: "archived" }).eq("id", id);
+  if (error) throw error;
+}
+async function toggleReaction(postId, emoji) {
+  const mid = await supabase.rpc("my_member_id").then(r => r.data);
+  const { data: existing } = await supabase
+    .from("community_reactions")
+    .select("id").eq("post_id", postId).eq("member_id", mid).eq("emoji", emoji).single();
+  if (existing) {
+    await supabase.from("community_reactions").delete().eq("id", existing.id);
+    return false;
+  } else {
+    await supabase.from("community_reactions").insert({ post_id: postId, member_id: mid, emoji });
+    return true;
+  }
+}
+async function getReactions(postIds) {
+  if (!postIds.length) return {};
+  const { data, error } = await supabase
+    .from("community_reactions")
+    .select("post_id, emoji, member_id")
+    .in("post_id", postIds);
+  if (error) throw error;
+  const map = {};
+  (data || []).forEach(r => {
+    if (!map[r.post_id]) map[r.post_id] = {};
+    if (!map[r.post_id][r.emoji]) map[r.post_id][r.emoji] = [];
+    map[r.post_id][r.emoji].push(r.member_id);
+  });
+  return map;
+}
+async function listActivityLog() {
+  const { data, error } = await supabase
+    .from("activity_log")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(8);
+  if (error) throw error;
+  return data || [];
+}
+async function logActivity(deptId, kind, title, linkView) {
+  const { error } = await supabase.from("activity_log").insert({
+    department_id: deptId,
+    kind,
+    title,
+    link_view: linkView || null,
+  });
+  if (error) console.error("Activity log error:", error.message);
 }
 async function listVideos() {
   const { data, error } = await supabase.from("association_videos")
@@ -5698,12 +5799,12 @@ function MemberDocuments() {
 
 const ALL_VIEWS = [
   // member views
-  'm_dash','m_call','m_ask','m_partners','m_value',
+  'm_dash','m_call','m_ask','m_partners','m_community',
   'm_benefits','m_events','m_card','m_vote','m_store','m_correspondence','m_documents',
   // board views
   'b_dash','b_attendance','b_meetings','b_stipend','b_causes',
   'b_fundraising','b_social','b_building','b_continuity',
-  'b_correspondence','b_members','b_ledger','b_documents','b_settings',
+  'b_correspondence','b_community','b_members','b_ledger','b_documents','b_settings',
   // pa views
   'pa_dash','pa_orgs','pa_config','pa_add',
 ];
@@ -5960,6 +6061,397 @@ function OrgSettings({ me, org }) {
   );
 }
 
+const KIND_META = {
+  birthday:     { label: "Birthday",          emoji: "🎂", color: "#F0C84A" },
+  retirement:   { label: "Retirement",         emoji: "🏅", color: "#DBA525" },
+  promotion:    { label: "Promotion",          emoji: "⭐", color: "#46C793" },
+  spotlight:    { label: "Officer Spotlight",  emoji: "🌟", color: "#57B6E0" },
+  memorial:     { label: "In Memoriam",        emoji: "🕯️", color: "#9CA3AF" },
+  new_hire:     { label: "Welcome",            emoji: "👋", color: "#46C793" },
+  family:       { label: "Family News",        emoji: "❤️", color: "#EF6A64" },
+  achievement:  { label: "Achievement",        emoji: "🏆", color: "#DBA525" },
+  announcement: { label: "Announcement",       emoji: "📢", color: "#57B6E0" },
+};
+
+const REACTION_EMOJIS = ["❤️","👏","🎉","🙏"];
+
+function CommunityPostCard({ post, me, onReact, reactions }) {
+  const meta = KIND_META[post.kind] || KIND_META.announcement;
+  const myReactions = reactions || {};
+  const memberId = me.id;
+
+  return (
+    <div style={{ ...PS.card, marginBottom: 12, overflow: "visible" }}>
+      {/* Top row */}
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 10 }}>
+        <div style={{ width: 40, height: 40, borderRadius: 10, background: `${meta.color}18`, border: `1px solid ${meta.color}40`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0 }}>
+          {meta.emoji}
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
+            <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: meta.color }}>{meta.label}</span>
+            {post.pinned && <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 999, background: `${POA.accent}20`, color: POA.accent }}>PINNED</span>}
+          </div>
+          <div style={{ fontWeight: 700, fontSize: 15, color: POA.textPrimary, lineHeight: 1.3 }}>{post.title}</div>
+          {post.members?.full_name && (
+            <div style={{ fontSize: 12, color: POA.textMuted, marginTop: 2 }}>
+              {post.members.full_name}{post.members.badge ? ` · Badge ${post.members.badge}` : ""}
+            </div>
+          )}
+        </div>
+        <div style={{ fontSize: 11, color: POA.textMuted, flexShrink: 0 }}>{fmtDate(post.created_at)}</div>
+      </div>
+
+      {post.body && (
+        <div style={{ fontSize: 13.5, color: POA.textSecondary, lineHeight: 1.7, marginBottom: 12, paddingLeft: 52 }}>
+          {post.body}
+        </div>
+      )}
+
+      {/* Reactions */}
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", paddingLeft: 52 }}>
+        {REACTION_EMOJIS.map(emoji => {
+          const reacted = (myReactions[emoji] || []).includes(memberId);
+          const count = (myReactions[emoji] || []).length;
+          return (
+            <button key={emoji} onClick={() => onReact(post.id, emoji)}
+              style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "4px 10px", borderRadius: 999, border: `1px solid ${reacted ? POA.accent : POA.hairline2}`, background: reacted ? POA.accentSoft : "rgba(255,255,255,.03)", cursor: "pointer", fontSize: 13, color: reacted ? POA.accent : POA.textMuted, fontWeight: reacted ? 700 : 400, transition: ".15s" }}>
+              {emoji}{count > 0 && <span style={{ fontSize: 11 }}>{count}</span>}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function Community({ me }) {
+  const [posts, setPosts]       = useState(null);
+  const [reactions, setReactions] = useState({});
+  const [showSubmit, setShowSubmit] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [err, setErr]           = useState("");
+  const [busy, setBusy]         = useState(false);
+  const [f, setF]               = useState({ kind: "achievement", title: "", body: "" });
+
+  async function load() {
+    const p = await listCommunityPosts();
+    setPosts(p);
+    if (p.length > 0) {
+      const r = await getReactions(p.map(x => x.id));
+      setReactions(r);
+    }
+  }
+  useEffect(() => { load(); }, []);
+
+  async function doReact(postId, emoji) {
+    await toggleReaction(postId, emoji);
+    const r = await getReactions(posts.map(x => x.id));
+    setReactions(r);
+  }
+
+  async function doSubmit() {
+    if (!f.title.trim()) { setErr("Title is required."); return; }
+    setBusy(true); setErr("");
+    try {
+      await createCommunityPost({
+        department_id: me.department_id,
+        kind: f.kind,
+        title: f.title.trim(),
+        body: f.body.trim() || null,
+        posted_by: me.id,
+        status: "pending",
+      });
+      setSubmitted(true);
+      setShowSubmit(false);
+      setF({ kind: "achievement", title: "", body: "" });
+    } catch(e) { setErr(e.message); }
+    finally { setBusy(false); }
+  }
+
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 20 }}>
+        <div>
+          <p style={{ ...PS.kicker, marginBottom: 4 }}>Community</p>
+          <h1 style={{ fontFamily: "inherit", fontSize: 24, fontWeight: 700, color: POA.textPrimary, margin: 0 }}>
+            Your Association Family
+          </h1>
+          <div style={{ fontSize: 13, color: POA.textMuted, marginTop: 4 }}>
+            Birthdays, milestones, spotlights, and the moments that matter.
+          </div>
+        </div>
+        <button style={PS.btn} onClick={() => { setShowSubmit(!showSubmit); setSubmitted(false); }}>
+          <Plus size={13} /> Share a milestone
+        </button>
+      </div>
+
+      {submitted && (
+        <div style={{ background: "rgba(70,199,147,.1)", border: "0.5px solid rgba(70,199,147,.3)", borderRadius: 10, padding: "12px 16px", fontSize: 13, color: POA.greenText, marginBottom: 16 }}>
+          ✓ Submitted! Your board will review and post it shortly.
+        </div>
+      )}
+
+      {showSubmit && (
+        <Card style={{ marginBottom: 20 }}>
+          <SectionTitle>Share a milestone</SectionTitle>
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Type</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 4 }}>
+              {Object.entries(KIND_META).map(([k, v]) => (
+                <button key={k} onClick={() => setF(x => ({ ...x, kind: k }))}
+                  style={{ padding: "5px 11px", borderRadius: 999, border: `1px solid ${f.kind === k ? v.color : POA.hairline}`, background: f.kind === k ? `${v.color}15` : "transparent", color: f.kind === k ? v.color : POA.textMuted, fontSize: 12, fontWeight: f.kind === k ? 700 : 400, cursor: "pointer" }}>
+                  {v.emoji} {v.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Headline</div>
+            <input value={f.title} onChange={e => setF(x => ({ ...x, title: e.target.value }))}
+              style={PS.input} placeholder={
+                f.kind === "birthday" ? "e.g. Happy birthday, Officer Martinez!" :
+                f.kind === "promotion" ? "e.g. Congratulations, Sergeant Chen!" :
+                f.kind === "retirement" ? "e.g. Celebrating 28 years of service — Officer Davis" :
+                "What's the milestone?"
+              } />
+          </div>
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Message (optional)</div>
+            <textarea value={f.body} onChange={e => setF(x => ({ ...x, body: e.target.value }))}
+              style={{ ...PS.textarea, minHeight: 80 }} placeholder="Add a few words to celebrate them…" />
+          </div>
+          <ErrBox msg={err} />
+          <div style={{ display: "flex", gap: 8 }}>
+            <button style={PS.btnPrimary} disabled={busy} onClick={doSubmit}>
+              {busy ? "Submitting…" : "Submit for board review"}
+            </button>
+            <button style={PS.btn} onClick={() => setShowSubmit(false)}>Cancel</button>
+          </div>
+          <div style={{ fontSize: 11.5, color: POA.textMuted, marginTop: 8, fontStyle: "italic" }}>
+            Your board reviews submissions before they post. Usually quick!
+          </div>
+        </Card>
+      )}
+
+      {!posts ? <Spinner /> : posts.length === 0 ? (
+        <Card>
+          <div style={{ textAlign: "center", padding: "20px 0" }}>
+            <div style={{ fontSize: 32, marginBottom: 10 }}>🌟</div>
+            <div style={{ fontWeight: 700, fontSize: 15, color: POA.textPrimary, marginBottom: 6 }}>Nothing posted yet</div>
+            <div style={{ fontSize: 13, color: POA.textMuted }}>Your board will post birthdays, milestones, and spotlights here. You can also submit your own!</div>
+          </div>
+        </Card>
+      ) : posts.map(post => (
+        <CommunityPostCard key={post.id} post={post} me={me}
+          onReact={doReact} reactions={reactions[post.id]} />
+      ))}
+    </div>
+  );
+}
+
+function BoardCommunity({ me }) {
+  const [posts, setPosts]         = useState(null);
+  const [pending, setPending]     = useState([]);
+  const [members, setMembers]     = useState([]);
+  const [tab, setTab]             = useState("feed");
+  const [showAdd, setShowAdd]     = useState(false);
+  const [err, setErr]             = useState("");
+  const [busy, setBusy]           = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [f, setF]                 = useState({
+    kind: "birthday", title: "", body: "", member_id: "", pinned: false,
+  });
+
+  async function load() {
+    const [p, pend, mem] = await Promise.all([
+      listCommunityPosts(), listPendingPosts(), listMembers()
+    ]);
+    setPosts(p); setPending(pend); setMembers(mem);
+  }
+  useEffect(() => { load(); }, []);
+
+  async function draftWithAI() {
+    if (!f.kind || !f.title.trim()) { setErr("Add a headline first so AI has something to work with."); return; }
+    setAiLoading(true); setErr("");
+    try {
+      const member = members.find(m => m.id === f.member_id);
+      const prompt = `Write a warm, brief community post for a police officers' association. Type: ${KIND_META[f.kind]?.label}. Headline: "${f.title}"${member ? `. Officer: ${member.full_name}` : ""}. Keep it genuine, celebratory, and under 60 words. Just the post body, no headline.`;
+      const body = await callClaudeAI("You write warm community posts for police officers' associations. Be genuine, brief, and celebratory. Return only the post body text.", prompt);
+      setF(x => ({ ...x, body }));
+    } catch(e) { setErr("AI draft failed — check ANTHROPIC_API_KEY."); }
+    finally { setAiLoading(false); }
+  }
+
+  async function doPost() {
+    if (!f.title.trim()) { setErr("Headline is required."); return; }
+    setBusy(true); setErr("");
+    try {
+      const member = members.find(m => m.id === f.member_id);
+      await createCommunityPost({
+        department_id: me.department_id,
+        kind: f.kind,
+        title: f.title.trim(),
+        body: f.body.trim() || null,
+        member_id: f.member_id || null,
+        posted_by: me.id,
+        status: "active",
+        pinned: f.pinned,
+      });
+      await logActivity(me.department_id, "community",
+        `${KIND_META[f.kind]?.emoji} ${f.title.trim()}`, "m_community");
+      setF({ kind: "birthday", title: "", body: "", member_id: "", pinned: false });
+      setShowAdd(false);
+      await load();
+    } catch(e) { setErr(e.message); }
+    finally { setBusy(false); }
+  }
+
+  async function doApprove(id) {
+    try { await approveCommunityPost(id); await load(); }
+    catch(e) { setErr(e.message); }
+  }
+
+  async function doArchive(id) {
+    if (!confirm("Archive this post?")) return;
+    try { await archiveCommunityPost(id); await load(); }
+    catch(e) { setErr(e.message); }
+  }
+
+  const TABS = [
+    { id: "feed", label: `Feed${posts ? ` (${posts.length})` : ""}` },
+    { id: "pending", label: `Pending${pending.length ? ` (${pending.length})` : ""}` },
+    { id: "post", label: "New Post" },
+  ];
+
+  return (
+    <div>
+      <PageTitle sub="Community posts, milestones, and member spotlights">Community</PageTitle>
+      <div style={{ display: "flex", gap: 6, marginBottom: 20 }}>
+        {TABS.map(t => (
+          <button key={t.id} onClick={() => { setTab(t.id); setErr(""); }}
+            style={{ ...PS.btn, background: tab === t.id ? POA.accent : POA.btnBg, color: tab === t.id ? "#06090A" : POA.btnText, border: tab === t.id ? "none" : `0.5px solid ${POA.btnBorder}`, fontWeight: tab === t.id ? 700 : 500 }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+      <ErrBox msg={err} />
+
+      {/* FEED */}
+      {tab === "feed" && (
+        <div>
+          {!posts ? <Spinner /> : posts.length === 0 ? (
+            <Card><div style={{ color: POA.textMuted, fontSize: 13.5 }}>No posts yet. Create your first one in New Post.</div></Card>
+          ) : posts.map(post => (
+            <div key={post.id} style={{ position: "relative" }}>
+              <Card style={{ marginBottom: 12 }}>
+                <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 8 }}>
+                  <div style={{ fontSize: 22, flexShrink: 0 }}>{KIND_META[post.kind]?.emoji}</div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: KIND_META[post.kind]?.color, marginBottom: 2 }}>{KIND_META[post.kind]?.label}</div>
+                    <div style={{ fontWeight: 700, fontSize: 14.5, color: POA.textPrimary }}>{post.title}</div>
+                    {post.members?.full_name && <div style={{ fontSize: 12, color: POA.textMuted, marginTop: 1 }}>{post.members.full_name}</div>}
+                    {post.body && <div style={{ fontSize: 13, color: POA.textSecondary, marginTop: 6, lineHeight: 1.6 }}>{post.body}</div>}
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4, flexShrink: 0, alignItems: "flex-end" }}>
+                    <div style={{ fontSize: 11, color: POA.textMuted }}>{fmtDate(post.created_at)}</div>
+                    {post.pinned && <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 7px", borderRadius: 999, background: POA.accentSoft, color: POA.accent }}>PINNED</span>}
+                    <button style={{ ...PS.btn, fontSize: 11, padding: "3px 8px", color: POA.red }}
+                      onClick={() => doArchive(post.id)}>Archive</button>
+                  </div>
+                </div>
+              </Card>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* PENDING */}
+      {tab === "pending" && (
+        <div>
+          {pending.length === 0 ? (
+            <Card><div style={{ color: POA.textMuted, fontSize: 13.5 }}>No pending submissions.</div></Card>
+          ) : pending.map(post => (
+            <Card key={post.id} style={{ marginBottom: 10, borderLeft: `3px solid ${POA.amber}`, borderRadius: "0 13px 13px 0" }}>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                <div style={{ fontSize: 20, flexShrink: 0 }}>{KIND_META[post.kind]?.emoji}</div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: POA.amber, letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 2 }}>{KIND_META[post.kind]?.label} · Pending review</div>
+                  <div style={{ fontWeight: 700, fontSize: 14, color: POA.textPrimary }}>{post.title}</div>
+                  {post.body && <div style={{ fontSize: 13, color: POA.textSecondary, marginTop: 4, lineHeight: 1.6 }}>{post.body}</div>}
+                  <div style={{ fontSize: 11, color: POA.textMuted, marginTop: 4 }}>Submitted by {post.poster?.full_name || "Member"} · {fmtDate(post.created_at)}</div>
+                </div>
+                <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                  <button style={{ ...PS.btnPrimary, fontSize: 12, padding: "6px 12px" }} onClick={() => doApprove(post.id)}>
+                    <CheckCircle2 size={13} /> Approve
+                  </button>
+                  <button style={{ ...PS.btn, fontSize: 12, color: POA.red }} onClick={() => doArchive(post.id)}>
+                    Decline
+                  </button>
+                </div>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* NEW POST */}
+      {tab === "post" && (
+        <Card>
+          <SectionTitle>New community post</SectionTitle>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 }}>
+            {Object.entries(KIND_META).map(([k, v]) => (
+              <button key={k} onClick={() => setF(x => ({ ...x, kind: k }))}
+                style={{ padding: "5px 11px", borderRadius: 999, border: `1px solid ${f.kind === k ? v.color : POA.hairline}`, background: f.kind === k ? `${v.color}15` : "transparent", color: f.kind === k ? v.color : POA.textMuted, fontSize: 12, fontWeight: f.kind === k ? 700 : 400, cursor: "pointer" }}>
+                {v.emoji} {v.label}
+              </button>
+            ))}
+          </div>
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Tag a member (optional)</div>
+            <select value={f.member_id} onChange={e => {
+              const m = members.find(x => x.id === e.target.value);
+              setF(x => ({ ...x, member_id: e.target.value, title: m && !x.title ? `${KIND_META[x.kind]?.label} — ${m.full_name}` : x.title }));
+            }} style={PS.input}>
+              <option value="">— No specific member —</option>
+              {members.map(m => <option key={m.id} value={m.id}>{m.full_name}{m.badge ? ` · ${m.badge}` : ""}</option>)}
+            </select>
+          </div>
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Headline</div>
+            <input value={f.title} onChange={e => setF(x => ({ ...x, title: e.target.value }))}
+              style={PS.input} placeholder="e.g. Happy birthday, Officer Martinez! 🎂" />
+          </div>
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Message</div>
+            <textarea value={f.body} onChange={e => setF(x => ({ ...x, body: e.target.value }))}
+              style={{ ...PS.textarea, minHeight: 90 }} placeholder="Add a personal message…" />
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+            <input type="checkbox" id="pinned" checked={f.pinned}
+              onChange={e => setF(x => ({ ...x, pinned: e.target.checked }))}
+              style={{ width: 16, height: 16, cursor: "pointer" }} />
+            <label htmlFor="pinned" style={{ fontSize: 13, color: POA.textSecondary, cursor: "pointer" }}>
+              Pin to top of Community feed
+            </label>
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button style={PS.btnPrimary} disabled={busy} onClick={doPost}>
+              {busy ? "Posting…" : "Post to community"}
+            </button>
+            <button style={{ ...PS.btn, opacity: aiLoading ? 0.7 : 1 }} disabled={aiLoading} onClick={draftWithAI}>
+              <Sparkles size={13} /> {aiLoading ? "Writing…" : "Draft with AI"}
+            </button>
+          </div>
+          <div style={{ fontSize: 11.5, color: POA.textMuted, marginTop: 8, fontStyle: "italic" }}>
+            Posts go live immediately. Members can react with emoji.
+          </div>
+        </Card>
+      )}
+    </div>
+  );
+}
+
 /* ================================================================
    SCREEN ROUTER
    ================================================================ */
@@ -5972,7 +6464,7 @@ function renderScreen(view, { me, org, setView }) {
       case "m_card":     return <MyCard me={me} org={org} />;
       case "m_events":   return <MemberEvents />;
       case "m_partners": return <TrustedPartners />;
-      case "m_value":    return <MyValue me={me} />;
+      case "m_community": return <Community me={me} />;
       case "m_benefits": return <Benefits me={me} />;
       case "m_vote":     return <VoteLink />;
       case "m_store":    return <Store />;
@@ -5994,6 +6486,7 @@ function renderScreen(view, { me, org, setView }) {
     case "b_building":      return <POABuilding me={me} org={org} />;
     case "b_continuity":    return <BoardContinuity me={me} />;
     case "b_correspondence":return <BoardCorrespondence me={me} />;
+    case "b_community":     return <BoardCommunity me={me} />;
     case "b_ledger":        return <ValueLedger me={me} />;
     case "b_settings":      return <OrgSettings me={me} org={org} />;
     case "pa_dash":         return <PADash />;
