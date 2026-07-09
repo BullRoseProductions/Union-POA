@@ -871,10 +871,22 @@ function WhoToCall({ me }) {
 }
 
 function AskB4C({ me, org }) {
-  const [q, setQ] = useState("");
-  const [msgs, setMsgs] = useState([]);
-  const [busy, setBusy] = useState(false);
+  const [tab, setTab]       = useState("ai");
+  const [q, setQ]           = useState("");
+  const [msgs, setMsgs]     = useState([]);
+  const [busy, setBusy]     = useState(false);
+  const [bq, setBq]         = useState("");
+  const [anon, setAnon]     = useState(false);
+  const [bqBusy, setBqBusy] = useState(false);
+  const [bqSent, setBqSent] = useState(false);
+  const [bqErr, setBqErr]   = useState("");
+  const [faqs, setFaqs]     = useState([]);
+  const [expandedFaq, setExpandedFaq] = useState(null);
   const bottomRef = useRef(null);
+
+  useEffect(() => {
+    listFAQs().then(setFaqs).catch(() => null);
+  }, []);
 
   async function ask() {
     if (!q.trim()) return;
@@ -883,12 +895,11 @@ function AskB4C({ me, org }) {
     setMsgs(m => [...m, { role: "user", text: question }]);
     setBusy(true);
     try {
-      // fetch member-visible docs for grounding
       const docs = await getDocsForAI();
       const docContext = docs.length > 0
         ? `\n\nASSOCIATION DOCUMENTS (answer from these — cite the document name):\n${docs.map(d => `[${d.name} — ${d.category}]\n${d.extracted_text || "(no text extracted yet)"}`).join("\n\n")}`
         : "";
-      const sys = `You are Ask B4C, an AI assistant for the ${org?.name || "police officers' association"}. Answer member questions using ONLY the association's own documents provided below. If the answer isn't in the documents, say so clearly — never make up information or cite things not in the documents. Always cite which document your answer comes from.${docContext}`;
+      const sys = `You are Ask B4C, an AI assistant for the ${org?.name || "police officers' association"}. Answer member questions using ONLY the association's own documents provided below. If the answer isn't in the documents, say so clearly and suggest the member ask the board directly — never make up information. Always cite which document your answer comes from.${docContext}`;
       const res = await fetch("/api/ask-b4c", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -901,32 +912,195 @@ function AskB4C({ me, org }) {
     } finally { setBusy(false); }
   }
 
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs]);
+  async function doSubmitBoardQuestion() {
+    if (!bq.trim()) { setBqErr("Please enter your question."); return; }
+    setBqBusy(true); setBqErr("");
+    try {
+      await submitBoardQuestion(me.department_id, bq.trim(), anon, me.id);
+      setBqSent(true); setBq(""); setAnon(false);
+    } catch(e) { setBqErr(e.message); }
+    finally { setBqBusy(false); }
+  }
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [msgs]);
+
+  const TABS = [
+    { id: "ai",    label: "Ask B4C AI" },
+    { id: "board", label: "Ask the Board" },
+    { id: "faq",   label: `FAQ${faqs.length ? ` (${faqs.length})` : ""}` },
+  ];
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 120px)" }}>
-      <PageTitle sub="Grounded answers from your association's own documents">Ask B4C</PageTitle>
-      <div style={{ flex: 1, overflowY: "auto", marginBottom: 12 }}>
-        {msgs.length === 0 && (
-          <Card><div style={{ fontSize: 13.5, color: POA.textMuted, lineHeight: 1.6 }}>
-            Ask anything about your CBA, bylaws, benefits, or member handbook. B4C answers from your association's own uploaded documents — never fabricates.
-          </div></Card>
-        )}
-        {msgs.map((m, i) => (
-          <div key={i} style={{ marginBottom: 10, display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start" }}>
-            <div style={{ maxWidth: "80%", background: m.role === "user" ? POA.accentSoft : POA.card, border: `0.5px solid ${POA.hairline}`, borderRadius: 12, padding: "10px 14px", fontSize: 13.5, color: POA.textPrimary, lineHeight: 1.6 }}>
-              {m.text}
-            </div>
-          </div>
+      <PageTitle sub="Instant AI answers + direct questions to your board">Ask the POA</PageTitle>
+
+      <div style={{ display: "flex", gap: 6, marginBottom: 16 }}>
+        {TABS.map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)}
+            style={{ ...PS.btn, background: tab === t.id ? POA.accent : POA.btnBg, color: tab === t.id ? "#06090A" : POA.btnText, border: tab === t.id ? "none" : `0.5px solid ${POA.btnBorder}`, fontWeight: tab === t.id ? 700 : 500 }}>
+            {t.label}
+          </button>
         ))}
-        {busy && <div style={{ display: "flex", gap: 8, padding: "10px 14px", color: POA.textMuted, fontSize: 13 }}><Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> Thinking…</div>}
-        <div ref={bottomRef} />
       </div>
-      <div style={{ display: "flex", gap: 8 }}>
-        <input value={q} onChange={e => setQ(e.target.value)} onKeyDown={e => e.key === "Enter" && !busy && ask()}
-          placeholder="Ask about your CBA, benefits, bylaws…" style={{ ...PS.input, flex: 1 }} />
-        <button onClick={ask} disabled={!q.trim() || busy} style={{ ...PS.btnPrimary, padding: "10px 14px" }}><Send size={15} /></button>
-      </div>
+
+      {/* ── AI CHAT ── */}
+      {tab === "ai" && (
+        <>
+          <div style={{ flex: 1, overflowY: "auto", marginBottom: 12 }}>
+            {msgs.length === 0 && (
+              <Card style={{ marginBottom: 10 }}>
+                <div style={{ fontSize: 13.5, color: POA.textMuted, lineHeight: 1.7 }}>
+                  Ask anything about your CBA, bylaws, benefits, or member handbook. B4C answers from your association's own uploaded documents — never fabricates. If your question isn't covered in the documents, use <b style={{ color: POA.accent }}>Ask the Board</b> tab to send it directly.
+                </div>
+              </Card>
+            )}
+            {msgs.length === 0 && (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
+                {[
+                  "What does our CBA say about overtime?",
+                  "How do I file a grievance?",
+                  "What benefits am I entitled to?",
+                  "What's the process for legal defense?",
+                ].map(suggestion => (
+                  <button key={suggestion} onClick={() => { setQ(suggestion); }}
+                    style={{ ...PS.card, padding: "10px 12px", textAlign: "left", cursor: "pointer", fontSize: 12.5, color: POA.textSecondary, border: `0.5px solid ${POA.hairline2}` }}>
+                    {suggestion}
+                  </button>
+                ))}
+              </div>
+            )}
+            {msgs.map((m, i) => (
+              <div key={i} style={{ marginBottom: 10, display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start" }}>
+                <div style={{ maxWidth: "82%", background: m.role === "user"
+                  ? "linear-gradient(135deg, rgba(219,165,37,.2), rgba(219,165,37,.08))"
+                  : "linear-gradient(135deg, #0E1630, #0A1020)",
+                  border: `0.5px solid ${m.role === "user" ? "rgba(219,165,37,.3)" : POA.hairline2}`,
+                  borderRadius: m.role === "user" ? "14px 14px 4px 14px" : "14px 14px 14px 4px",
+                  padding: "10px 14px", fontSize: 13.5, color: POA.textPrimary, lineHeight: 1.65,
+                  boxShadow: "0 2px 8px rgba(0,0,0,.3)" }}>
+                  {m.text}
+                </div>
+              </div>
+            ))}
+            {busy && (
+              <div style={{ display: "flex", gap: 8, padding: "10px 14px", color: POA.textMuted, fontSize: 13 }}>
+                <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> Searching your documents…
+              </div>
+            )}
+            <div ref={bottomRef} />
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <input value={q} onChange={e => setQ(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && !busy && ask()}
+              placeholder="Ask about your CBA, benefits, bylaws…"
+              style={{ ...PS.input, flex: 1 }} />
+            <button onClick={ask} disabled={!q.trim() || busy}
+              style={{ ...PS.btnPrimary, padding: "10px 14px" }}>
+              <Send size={15} />
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* ── ASK THE BOARD ── */}
+      {tab === "board" && (
+        <div style={{ flex: 1, overflowY: "auto" }}>
+          <Card style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 13.5, color: POA.textSecondary, lineHeight: 1.7, marginBottom: 14 }}>
+              Have a question the AI can't answer? Something sensitive about your contract, a grievance, or anything you want your board to address directly? Ask here. Your board will respond — you can choose to stay anonymous.
+            </div>
+
+            {bqSent ? (
+              <div style={{ background: "rgba(70,199,147,.1)", border: "0.5px solid rgba(70,199,147,.3)", borderRadius: 10, padding: "14px 16px" }}>
+                <div style={{ fontWeight: 700, color: POA.green, marginBottom: 4 }}>✓ Question submitted</div>
+                <div style={{ fontSize: 13, color: POA.textSecondary }}>
+                  {anon ? "Your question was submitted anonymously. " : ""}
+                  Your board will review and respond. Check your Correspondence inbox for their reply.
+                </div>
+                <button style={{ ...PS.btn, marginTop: 12 }} onClick={() => setBqSent(false)}>
+                  Ask another question
+                </button>
+              </div>
+            ) : (
+              <>
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Your question</div>
+                  <textarea value={bq} onChange={e => setBq(e.target.value)}
+                    placeholder="What do you want to ask your board? Be as specific as you'd like — your question goes directly to them."
+                    style={{ ...PS.textarea, minHeight: 100 }} />
+                </div>
+
+                {/* Anonymous toggle */}
+                <div style={{ background: anon ? "rgba(219,165,37,.08)" : "rgba(255,255,255,.03)", border: `1px solid ${anon ? "rgba(219,165,37,.25)" : POA.hairline}`, borderRadius: 10, padding: "12px 14px", marginBottom: 14, cursor: "pointer" }}
+                  onClick={() => setAnon(v => !v)}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <div style={{ width: 20, height: 20, borderRadius: 6, border: `2px solid ${anon ? POA.accent : POA.hairline2}`, background: anon ? POA.accent : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: ".15s" }}>
+                      {anon && <CheckCircle2 size={12} color="#06090A" />}
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 13.5, fontWeight: 600, color: anon ? POA.accent : POA.textPrimary }}>
+                        Ask anonymously
+                      </div>
+                      <div style={{ fontSize: 11.5, color: POA.textMuted, marginTop: 1 }}>
+                        {anon
+                          ? "Your board will see the question but not who sent it. Truly anonymous — no ID stored."
+                          : "Your name will be attached to this question so the board can follow up with you directly."}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {bqErr && <ErrBox msg={bqErr} />}
+                <button style={{ ...PS.btnPrimary, width: "100%" }}
+                  disabled={bqBusy || !bq.trim()} onClick={doSubmitBoardQuestion}>
+                  <Send size={14} /> {bqBusy ? "Submitting…" : anon ? "Submit anonymously" : "Submit question"}
+                </button>
+                <div style={{ fontSize: 11.5, color: POA.textMuted, marginTop: 8, textAlign: "center", fontStyle: "italic" }}>
+                  {anon ? "Your identity is not stored. The board cannot trace this question back to you." : "Your board will reply in your Correspondence inbox."}
+                </div>
+              </>
+            )}
+          </Card>
+        </div>
+      )}
+
+      {/* ── FAQ ── */}
+      {tab === "faq" && (
+        <div style={{ flex: 1, overflowY: "auto" }}>
+          {faqs.length === 0 ? (
+            <Card>
+              <div style={{ textAlign: "center", padding: "16px 0" }}>
+                <div style={{ fontSize: 28, marginBottom: 8 }}>❓</div>
+                <div style={{ fontWeight: 700, fontSize: 14, color: POA.textPrimary, marginBottom: 4 }}>No FAQs yet</div>
+                <div style={{ fontSize: 13, color: POA.textMuted }}>
+                  When your board answers a question and marks it as a FAQ, it appears here for all members to read.
+                </div>
+              </div>
+            </Card>
+          ) : faqs.map(faq => (
+            <Card key={faq.id} style={{ marginBottom: 10, cursor: "pointer" }}
+              onClick={() => setExpandedFaq(expandedFaq === faq.id ? null : faq.id)}>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                <div style={{ fontSize: 18, flexShrink: 0 }}>❓</div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 700, fontSize: 14, color: POA.textPrimary }}>{faq.subject}</div>
+                  {expandedFaq === faq.id && faq.body && (
+                    <div style={{ fontSize: 13.5, color: POA.textSecondary, lineHeight: 1.65, marginTop: 8, borderTop: `0.5px solid ${POA.hairline}`, paddingTop: 8 }}>
+                      {faq.body}
+                    </div>
+                  )}
+                  <div style={{ fontSize: 11, color: POA.textMuted, marginTop: 6 }}>{fmtDate(faq.created_at)}</div>
+                </div>
+                <div style={{ color: POA.textMuted, fontSize: 16, flexShrink: 0 }}>
+                  {expandedFaq === faq.id ? "▲" : "▼"}
+                </div>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -2861,6 +3035,49 @@ async function replyToMessage(threadId, body) {
   if (error) throw error;
   return data;
 }
+async function submitBoardQuestion(deptId, question, anonymous, memberId) {
+  const { data, error } = await supabase
+    .from("correspondence")
+    .insert({
+      department_id: deptId,
+      kind: "board_question",
+      subject: question.slice(0, 80),
+      body: question,
+      member_id: anonymous ? null : memberId,
+      audience: "all",
+      status: "active",
+    })
+    .select().single();
+  if (error) throw error;
+  return data;
+}
+async function listFAQs() {
+  const { data, error } = await supabase
+    .from("correspondence")
+    .select("*")
+    .eq("kind", "faq")
+    .eq("status", "active")
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+async function listBoardQuestions() {
+  const { data, error } = await supabase
+    .from("correspondence")
+    .select("*, sender:members!correspondence_member_id_fkey(full_name)")
+    .eq("kind", "board_question")
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  // fetch replies separately to avoid self-referencing join
+  const ids = (data || []).map(m => m.id);
+  if (ids.length === 0) return data || [];
+  const { data: replies } = await supabase
+    .from("correspondence").select("*").eq("kind", "reply").in("thread_id", ids);
+  return (data || []).map(m => ({
+    ...m,
+    replies: (replies || []).filter(r => r.thread_id === m.id),
+  }));
+}
 async function getValueLedger(start, end) {
   const { data, error } = await supabase.rpc("get_value_ledger", {
     p_start: start,
@@ -3855,11 +4072,11 @@ function BoardCorrespondence({ me, members }) {
   const [selectedMsg, setSelectedMsg] = useState(null);
 
   async function load() {
-    const [ann, msgs, act] = await Promise.all([
-      listAnnouncements(), listMessages(), getActiveAlert()
+    const [ann, msgs, act, bqs] = await Promise.all([
+      listAnnouncements(), listMessages(), getActiveAlert(), listBoardQuestions()
     ]);
     setAnnouncements(ann);
-    setMessages(msgs);
+    setMessages([...msgs, ...bqs].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
     setAlert(act);
   }
   useEffect(() => { load(); }, []);
@@ -3904,19 +4121,43 @@ function BoardCorrespondence({ me, members }) {
       setReplyText(r => ({ ...r, [threadId]: "" }));
       await load();
       if (selectedMsg?.id === threadId) {
-        const updated = await listMessages();
-        setMessages(updated);
-        setSelectedMsg(updated.find(m => m.id === threadId) || null);
+        const [msgs, bqs] = await Promise.all([listMessages(), listBoardQuestions()]);
+        setSelectedMsg([...msgs, ...bqs].find(m => m.id === threadId) || null);
       }
+    } catch(e) { setErr(e.message); }
+    finally { setBusy(false); }
+  }
+
+  async function doPostFaq() {
+    const answer = replyText[selectedMsg.id];
+    if (!answer?.trim()) { setErr("Write the answer in the reply box first, then post it as a FAQ."); return; }
+    if (!confirm("Post this Q&A as a public FAQ visible to all members?")) return;
+    setBusy(true); setErr("");
+    try {
+      const { error } = await supabase.from("correspondence").insert({
+        department_id: me.department_id,
+        kind: "faq",
+        subject: selectedMsg.subject,
+        body: answer.trim(),
+        audience: "all",
+        status: "active",
+        posted_by: me.id,
+      });
+      if (error) throw error;
+      await load();
     } catch(e) { setErr(e.message); }
     finally { setBusy(false); }
   }
 
   const TABS = [
     { id: "inbox", label: "Inbox" },
+    { id: "questions", label: `Questions${messages?.filter(m => m.kind === "board_question").length ? ` (${messages.filter(m => m.kind === "board_question").length})` : ""}` },
     { id: "announce", label: "Post Announcement" },
     { id: "alert", label: "🚨 Alert" },
   ];
+
+  // inbox = member messages; questions = board-question submissions
+  const inboxItems = (messages || []).filter(m => m.kind === (tab === "questions" ? "board_question" : "message"));
 
   return (
     <div>
@@ -3943,25 +4184,30 @@ function BoardCorrespondence({ me, members }) {
           <button key={t.id} onClick={() => setTab(t.id)}
             style={{ ...PS.btn, background: tab === t.id ? POA.accent : POA.btnBg, color: tab === t.id ? "#fff" : POA.btnText, border: tab === t.id ? "none" : `0.5px solid ${POA.btnBorder}` }}>
             {t.label}
-            {t.id === "inbox" && messages && messages.length > 0 && (
-              <span style={{ background: POA.accentSoft, color: POA.accent, borderRadius: 999, padding: "1px 7px", fontSize: 11, fontWeight: 700 }}>{messages.length}</span>
+            {t.id === "inbox" && messages && messages.filter(m => m.kind === "message").length > 0 && (
+              <span style={{ background: POA.accentSoft, color: POA.accent, borderRadius: 999, padding: "1px 7px", fontSize: 11, fontWeight: 700 }}>{messages.filter(m => m.kind === "message").length}</span>
             )}
           </button>
         ))}
       </div>
 
-      {/* INBOX */}
-      {tab === "inbox" && (
+      {/* INBOX + QUESTIONS */}
+      {(tab === "inbox" || tab === "questions") && (
         <div>
-          {!messages ? <Spinner /> : messages.length === 0 ? (
-            <Card><div style={{ color: POA.textMuted, fontSize: 13.5 }}>No messages from members yet.</div></Card>
+          {!messages ? <Spinner /> : inboxItems.length === 0 ? (
+            <Card><div style={{ color: POA.textMuted, fontSize: 13.5 }}>
+              {tab === "questions" ? "No questions from members yet." : "No messages from members yet."}
+            </div></Card>
           ) : selectedMsg ? (
             <div>
-              <button onClick={() => setSelectedMsg(null)} style={{ ...PS.btn, marginBottom: 16 }}><ArrowLeft size={13} /> Inbox</button>
+              <button onClick={() => setSelectedMsg(null)} style={{ ...PS.btn, marginBottom: 16 }}><ArrowLeft size={13} /> Back</button>
               <Card>
                 <div style={{ fontWeight: 700, fontSize: 15, color: POA.textPrimary, marginBottom: 4 }}>{selectedMsg.subject}</div>
-                <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 10 }}>
-                  From {selectedMsg.sender?.full_name || "Member"} · {fmtDate(selectedMsg.created_at)}
+                <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}>
+                  <span>From {selectedMsg.sender?.full_name || (selectedMsg.kind === "board_question" ? "Anonymous" : "Member")} · {fmtDate(selectedMsg.created_at)}</span>
+                  {selectedMsg.kind === "board_question" && !selectedMsg.sender && (
+                    <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 7px", borderRadius: 999, background: POA.accentSoft, color: POA.accent, letterSpacing: ".05em" }}>ANONYMOUS</span>
+                  )}
                 </div>
                 <div style={{ fontSize: 13.5, color: POA.textSecondary, lineHeight: 1.65, marginBottom: 14 }}>{selectedMsg.body}</div>
                 {(selectedMsg.replies || []).map(r => (
@@ -3975,19 +4221,30 @@ function BoardCorrespondence({ me, members }) {
                 <label className="fl" style={{ fontSize: 12, color: POA.textMuted, marginBottom: 6, display: "block" }}>Reply</label>
                 <textarea value={replyText[selectedMsg.id] || ""} onChange={e => setReplyText(r => ({ ...r, [selectedMsg.id]: e.target.value }))}
                   placeholder="Type your reply…" style={{ ...PS.textarea, minHeight: 100 }} />
-                <button style={{ ...PS.btnPrimary, marginTop: 8 }} disabled={busy || !replyText[selectedMsg.id]?.trim()} onClick={() => doReply(selectedMsg.id)}>
-                  <Send size={14} /> Send reply
-                </button>
+                <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                  <button style={PS.btnPrimary} disabled={busy || !replyText[selectedMsg.id]?.trim()} onClick={() => doReply(selectedMsg.id)}>
+                    <Send size={14} /> Send reply
+                  </button>
+                  <button style={PS.btn} disabled={busy || !replyText[selectedMsg.id]?.trim()} onClick={doPostFaq}>
+                    <MessageSquare size={13} /> Post as FAQ
+                  </button>
+                </div>
+                <div style={{ fontSize: 11, color: POA.textMuted, marginTop: 8, fontStyle: "italic" }}>
+                  "Post as FAQ" publishes this question and your answer to the member FAQ — visible to everyone.
+                </div>
               </div>
             </div>
           ) : (
-            messages.map(m => (
+            inboxItems.map(m => (
               <Card key={m.id} style={{ cursor: "pointer" }} onClick={() => setSelectedMsg(m)}>
                 <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: 700, fontSize: 14, color: POA.textPrimary }}>{m.subject || "Message"}</div>
-                    <div style={{ fontSize: 12, color: POA.textMuted, marginTop: 2 }}>
-                      {m.sender?.full_name || "Member"} · {fmtDate(m.created_at)}
+                    <div style={{ fontSize: 12, color: POA.textMuted, marginTop: 2, display: "flex", alignItems: "center", gap: 6 }}>
+                      <span>{m.sender?.full_name || (m.kind === "board_question" ? "Anonymous" : "Member")} · {fmtDate(m.created_at)}</span>
+                      {m.kind === "board_question" && !m.sender && (
+                        <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 999, background: POA.accentSoft, color: POA.accent, letterSpacing: ".05em" }}>ANON</span>
+                      )}
                     </div>
                     <div style={{ fontSize: 13, color: POA.textMuted, marginTop: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.body}</div>
                   </div>
