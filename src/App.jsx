@@ -5708,6 +5708,23 @@ const ALL_VIEWS = [
   'pa_dash','pa_orgs','pa_config','pa_add',
 ];
 
+function OrgSettingsField({ label, k, placeholder, type = "text", value, onChange, isAdmin }) {
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>{label}</div>
+      {isAdmin ? (
+        <input type={type} value={value || ""} placeholder={placeholder}
+          onChange={e => onChange(k, e.target.value)}
+          style={PS.input} />
+      ) : (
+        <div style={{ fontSize: 13.5, color: POA.textPrimary, padding: '9px 12px', background: 'rgba(0,0,0,.2)', borderRadius: 8, border: `0.5px solid ${POA.hairline}` }}>
+          {value || <span style={{ color: POA.textMuted, fontStyle: 'italic' }}>Not set</span>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function OrgSettings({ me, org }) {
   const isAdmin = canAdmin(me.access);
   const [tab, setTab] = useState(isAdmin ? "identity" : "brand");
@@ -5765,20 +5782,7 @@ function OrgSettings({ me, org }) {
     { id: "support", label: "Support & Privacy" },
   ];
 
-  const Field = ({ label, k, placeholder, type = "text" }) => (
-    <div style={{ marginBottom: 12 }}>
-      <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>{label}</div>
-      {isAdmin ? (
-        <input type={type} value={settings[k] || ""} placeholder={placeholder}
-          onChange={e => setSettings(s => ({ ...s, [k]: e.target.value }))}
-          style={PS.input} />
-      ) : (
-        <div style={{ fontSize: 13.5, color: POA.textPrimary, padding: "9px 12px", background: "rgba(0,0,0,.2)", borderRadius: 8, border: `0.5px solid ${POA.hairline}` }}>
-          {settings[k] || <span style={{ color: POA.textMuted, fontStyle: "italic" }}>Not set</span>}
-        </div>
-      )}
-    </div>
-  );
+  const onFieldChange = (k, v) => setSettings(s => ({ ...s, [k]: v }));
 
   return (
     <div>
@@ -5800,23 +5804,24 @@ function OrgSettings({ me, org }) {
             <SectionTitle>Association identity</SectionTitle>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
               <div style={{ gridColumn: "1 / -1" }}>
-                <Field label="Full association name" k="org_name" placeholder="Fort Worth Police Officers Association" />
+                <OrgSettingsField label="Full association name" k="org_name" placeholder="Fort Worth Police Officers Association" value={settings.org_name || org?.name || ""} onChange={onFieldChange} isAdmin={isAdmin} />
+                <div style={{ fontSize: 11.5, color: POA.textMuted, marginTop: -6, marginBottom: 12, fontStyle: "italic" }}>This updates the display name in B4C — your department record name is managed separately.</div>
               </div>
-              <Field label="Short name / abbreviation" k="org_short_name" placeholder="FWPOA" />
-              <Field label="Type label" k="org_type_label" placeholder="Association" />
+              <OrgSettingsField label="Short name / abbreviation" k="org_short_name" placeholder="FWPOA" value={settings.org_short_name} onChange={onFieldChange} isAdmin={isAdmin} />
+              <OrgSettingsField label="Type label" k="org_type_label" placeholder="Association" value={settings.org_type_label} onChange={onFieldChange} isAdmin={isAdmin} />
               <div style={{ gridColumn: "1 / -1" }}>
-                <Field label="Headquarters address" k="org_address" placeholder="123 Main St, Fort Worth, TX 76101" />
+                <OrgSettingsField label="Headquarters address" k="org_address" placeholder="123 Main St, Fort Worth, TX 76101" value={settings.org_address} onChange={onFieldChange} isAdmin={isAdmin} />
               </div>
-              <Field label="Phone number" k="org_phone" placeholder="(817) 555-0100" type="tel" />
-              <Field label="Website" k="org_website" placeholder="https://fwpoa.org" type="url" />
-              <Field label="Year founded" k="org_founded" placeholder="1968" />
-              <Field label="Building / space name" k="building_name" placeholder="POA Building" />
+              <OrgSettingsField label="Phone number" k="org_phone" placeholder="(817) 555-0100" type="tel" value={settings.org_phone} onChange={onFieldChange} isAdmin={isAdmin} />
+              <OrgSettingsField label="Website" k="org_website" placeholder="https://fwpoa.org" type="url" value={settings.org_website} onChange={onFieldChange} isAdmin={isAdmin} />
+              <OrgSettingsField label="Year founded" k="org_founded" placeholder="1968" value={settings.org_founded} onChange={onFieldChange} isAdmin={isAdmin} />
+              <OrgSettingsField label="Building / space name" k="building_name" placeholder="POA Building" value={settings.building_name} onChange={onFieldChange} isAdmin={isAdmin} />
             </div>
           </Card>
 
           <Card style={{ marginBottom: 16 }}>
             <SectionTitle>Branding</SectionTitle>
-            <Field label="Logo URL (link to your logo image)" k="org_logo_url" placeholder="https://fwpoa.org/logo.png" type="url" />
+            <OrgSettingsField label="Logo URL (link to your logo image)" k="org_logo_url" placeholder="https://fwpoa.org/logo.png" type="url" value={settings.org_logo_url} onChange={onFieldChange} isAdmin={isAdmin} />
             {settings.org_logo_url && (
               <div style={{ marginBottom: 12 }}>
                 <img src={settings.org_logo_url} alt="Logo preview"
@@ -5871,7 +5876,7 @@ function OrgSettings({ me, org }) {
               ].map(({ label, k }) => (
                 <div key={k}>
                   <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: POA.textMuted, marginBottom: 3 }}>{label}</div>
-                  <div style={{ fontSize: 13.5, color: POA.textPrimary }}>{settings[k] || <span style={{ color: POA.textMuted, fontStyle: "italic" }}>Not set</span>}</div>
+                  <div style={{ fontSize: 13.5, color: POA.textPrimary }}>{(k === "org_name" ? (settings.org_name || org?.name) : settings[k]) || <span style={{ color: POA.textMuted, fontStyle: "italic" }}>Not set</span>}</div>
                 </div>
               ))}
             </div>
