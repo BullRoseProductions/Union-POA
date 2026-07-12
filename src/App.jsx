@@ -6699,11 +6699,11 @@ function vimeoEmbedUrl(url) {
 
 // Calls Claude through the /api/claude serverless proxy (mirrors /api/draft-minutes).
 // The ANTHROPIC_API_KEY lives server-side only — never shipped in the browser bundle.
-async function callClaudeAI(systemPrompt, userContent) {
+async function callClaudeAI(systemPrompt, userContent, temperature) {
   const res = await fetch("/api/claude", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ system: systemPrompt, content: userContent }),
+    body: JSON.stringify({ system: systemPrompt, content: userContent, ...(temperature != null ? { temperature } : {}) }),
   });
   if (!res.ok) throw new Error(await res.text());
   const data = await res.json().catch(() => ({}));
@@ -7516,12 +7516,12 @@ function Fundraising({ me, org }) {
     const previouslyShown = shownIdeas.length > 0 ? shownIdeas.join(', ') : 'none';
     const user = `[Request ID: ${seed}] Association: ${org?.name || 'POA'}\nGoal: ${goalAmt || 'not specified'}\nEffort level: ${effortLevel}\nTarget date: ${targetDate || 'flexible'}\nWhat they're raising for: ${detail}\nRecently run — do NOT suggest these again: ${recent}\nAlready shown in this session — do NOT repeat these: ${previouslyShown}\nIdea inspiration (use as creative springboard, do NOT copy verbatim — invent fresh variations): \n${sampleIdeas}`;
     try {
-      const raw = await callClaudeAI(BRAINSTORM_SYS, user);
+      const raw = await callClaudeAI(BRAINSTORM_SYS, user, 1.0);
       const clean = raw.replace(/```json|```/g, "").trim();
       const parsed = JSON.parse(clean);
       if (!Array.isArray(parsed)) throw new Error("bad format");
       setIdeas(parsed); setPhase("ideas");
-      setShownIdeas(prev => [...prev, ...parsed.map(i => i.name)]);
+      setShownIdeas(prev => [...prev, ...parsed.map(i => i.name)].slice(-40));
     } catch { setErr("Couldn't brainstorm ideas right now — check ANTHROPIC_API_KEY in Vercel."); }
     finally { setLoading(false); }
   }
