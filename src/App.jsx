@@ -1834,59 +1834,250 @@ function BoardDash({ me, org, setView }) {
   );
 }
 
-function AgendaMinutes({ me }) {
-  const [meetings, setMeetings] = useState(null);
-  const [detail, setDetail]     = useState(null);
-  const [editing, setEditing]   = useState(false);
-  const [draft, setDraft]       = useState("");
-  const [err, setErr]           = useState("");
-  const [busy, setBusy]         = useState(false);
+function AgendaMinutes({ me, org }) {
+  const today = new Date();
+  const [tab, setTab]           = useState("agenda");
+  const [members, setMembers]   = useState([]);
+  const [meetings, setMeetings] = useState([]);
+  const [causes, setCauses]     = useState([]);
+  const [actions, setActions]   = useState([]);
+  const [announcements, setAnnouncements] = useState([]);
+
+  // Agenda builder state
+  const [agTitle, setAgTitle]   = useState("General Membership Meeting");
+  const [agDate, setAgDate]     = useState("");
+  const [agTopics, setAgTopics] = useState("");
+  const [agLoading, setAgLoading] = useState(false);
+  const [agOut, setAgOut]       = useState("");
+  const [agErr, setAgErr]       = useState("");
+  const [agSaveTitle, setAgSaveTitle] = useState("");
+  const [agSaving, setAgSaving] = useState(false);
+  const [agDrafts, setAgDrafts] = useState([]);
+  const [agOpen, setAgOpen]     = useState(null);
+  const [agEditing, setAgEditing] = useState(false);
+  const [agEditBuf, setAgEditBuf] = useState("");
+
+  // Minutes drafter state
+  const [mnMeeting, setMnMeeting] = useState("");
+  const [mnDate, setMnDate]       = useState("");
+  const [mnNotes, setMnNotes]     = useState("");
+  const [mnLoading, setMnLoading] = useState(false);
+  const [mnOut, setMnOut]         = useState("");
+  const [mnErr, setMnErr]         = useState("");
+  const [mnSaveTitle, setMnSaveTitle] = useState("");
+  const [mnSaving, setMnSaving]   = useState(false);
+  const [mnDrafts, setMnDrafts]   = useState([]);
+  const [mnOpen, setMnOpen]       = useState(null);
+  const [mnEditing, setMnEditing] = useState(false);
+  const [mnEditBuf, setMnEditBuf] = useState("");
+
+  // Import minutes state
+  const [importTitle, setImportTitle] = useState("");
+  const [importText, setImportText]   = useState("");
+  const [importing, setImporting]     = useState(false);
+
+  // Action items state
+  const [allActions, setAllActions] = useState([]);
   const [addingAction, setAddingAction] = useState(false);
-  const [newAction, setNewAction]       = useState({ title: "", member_id: "", due_date: "" });
-  const [members, setMembers]           = useState([]);
-  const [aiDrafting, setAiDrafting]     = useState(false);
-  const [aiDraft, setAiDraft]           = useState("");
-  const [addingAgenda, setAddingAgenda] = useState(false);
-  const [newAgenda, setNewAgenda]       = useState({ title: "", notes: "" });
+  const [newAction, setNewAction] = useState({ title: "", member_id: "", due_date: "" });
+  const [actionBusy, setActionBusy] = useState(false);
 
   useEffect(() => {
-    listMeetings().then(setMeetings);
-    listMembers().then(setMembers);
-  }, []);
+    Promise.all([
+      listMembers(),
+      listMeetings(),
+      listCauses(),
+      myActionItems(me.id),
+      listAnnouncements(),
+    ]).then(([mem, mtg, cau, act, ann]) => {
+      setMembers(mem);
+      setMeetings(mtg);
+      setCauses(cau);
+      setActions(act);
+      setAnnouncements(ann);
+    }).catch(() => null);
+    loadAgDrafts();
+    loadMnDrafts();
+    loadAllActions();
+  }, [me.id]);
 
-  async function load(id) {
-    const m = await getMeeting(id);
-    setDetail(m);
-    setDraft(m.minutes_body || "");
+  async function loadAgDrafts() {
+    const { data } = await supabase.from("ai_outputs")
+      .select("*").eq("feature", "agenda").is("deleted_at", null)
+      .order("created_at", { ascending: false });
+    setAgDrafts(data || []);
+  }
+
+  async function loadMnDrafts() {
+    const { data } = await supabase.from("ai_outputs")
+      .select("*").eq("feature", "minutes").is("deleted_at", null)
+      .order("created_at", { ascending: false });
+    setMnDrafts(data || []);
+  }
+
+  async function loadAllActions() {
+    const { data } = await supabase.from("action_items")
+      .select("*, members!action_items_owner_member_id_fkey(full_name)")
+      .eq("department_id", me.department_id)
+      .order("created_at", { ascending: false });
+    setAllActions(data || []);
+  }
+
+  // ── AGENDA BUILDER ──
+  async function generateAgenda() {
+    setAgLoading(true); setAgErr(""); setAgOut("");
+    try {
+      const upcomingMeetings = meetings.filter(m => m.status === "open").slice(0, 3)
+        .map(m => `${m.title} on ${fmtDate(m.scheduled_at)}`).join("; ") || "none";
+      const activeCauses = causes.filter(c => c.status === "active").slice(0, 4)
+        .map(c => c.name).join("; ") || "none";
+      const openActions = actions.filter(a => a.status === "open").slice(0, 5)
+        .map(a => `${a.title}${a.due_date ? ` (due ${fmtShort(a.due_date)})` : ""}`).join("; ") || "none";
+      const recentAnn = announcements.slice(0, 3)
+        .map(a => a.subject).join("; ") || "none";
+
+      const sys = `You draft professional meeting agendas for a police officers' association. Produce a clear, structured agenda the president or secretary can run the meeting from. Use standard POA meeting structure: Call to Order, Roll Call/Attendance, Approval of Previous Minutes, Officer Reports, Committee Reports, Old Business, New Business, Good of the Order, Adjournment. Slot the provided real association data into the most appropriate sections. Name specifics — the cause, the action item, the topic — so it reads like this association's real meeting. NEVER invent details not provided. If a topic is listed, include it as-is without adding fabricated details. Under 450 words. Professional and concise.`;
+
+      const prompt = `Association: ${org?.name || "Police Officers Association"}
+Meeting: ${agTitle}${agDate ? ` on ${agDate}` : ""}
+Additional topics from president: ${agTopics.trim() || "none"}
+
+REAL ASSOCIATION CONTEXT — use only these facts:
+Upcoming scheduled meetings: ${upcomingMeetings}
+Active causes/fundraisers: ${activeCauses}
+Open action items: ${openActions}
+Recent announcements: ${recentAnn}
+
+Draft a professional meeting agenda using this real data.`;
+
+      const text = await callClaudeAI(sys, prompt);
+      setAgOut(text);
+      setAgSaveTitle(agTitle.slice(0, 60) || `Agenda · ${fmtShort(today.toISOString())}`);
+    } catch(e) { setAgErr("Couldn't draft the agenda. Check ANTHROPIC_API_KEY."); }
+    finally { setAgLoading(false); }
+  }
+
+  async function saveAgenda() {
+    if (!agOut || !agSaveTitle.trim()) return;
+    setAgSaving(true);
+    try {
+      await supabase.from("ai_outputs").insert({
+        department_id: me.department_id,
+        feature: "agenda",
+        title: agSaveTitle.trim(),
+        ai_text: agOut,
+        created_by: me.id,
+      });
+      await loadAgDrafts();
+    } catch(e) { setAgErr(e.message); }
+    finally { setAgSaving(false); }
+  }
+
+  async function saveAgEdit() {
+    if (!agEditBuf.trim()) return;
+    try {
+      await supabase.from("ai_outputs")
+        .update({ current_text: agEditBuf, edited_by: me.id, edited_at: new Date().toISOString() })
+        .eq("id", agOpen.id);
+      const updated = { ...agOpen, current_text: agEditBuf };
+      setAgOpen(updated);
+      setAgEditing(false);
+      await loadAgDrafts();
+    } catch(e) { setAgErr(e.message); }
+  }
+
+  async function deleteAgDraft(id) {
+    if (!confirm("Delete this agenda?")) return;
+    await supabase.from("ai_outputs").update({ deleted_at: new Date().toISOString() }).eq("id", id);
+    await loadAgDrafts();
+    if (agOpen?.id === id) setAgOpen(null);
+  }
+
+  // ── MINUTES DRAFTER ──
+  async function generateMinutes() {
+    setMnLoading(true); setMnErr(""); setMnOut("");
+    try {
+      const sys = `You draft professional meeting minutes for a police officers' association. Turn rough notes into clean, formal minutes. Format with: Meeting called to order, Attendance (leave blank for secretary to fill), then one section per agenda item or topic discussed, Action Items summary, and Adjournment. Use [brackets] for items that need real details the secretary must fill in. Professional, factual, under 500 words. End with Secretary signature line.`;
+      const prompt = `Association: ${org?.name || "Police Officers Association"}
+Meeting: ${mnMeeting || "General Membership Meeting"}${mnDate ? ` — ${mnDate}` : ""}
+
+Rough notes from the meeting:
+${mnNotes.trim() || "No notes provided — create a template with all sections using [brackets] for the secretary to fill in."}
+
+Draft professional minutes from these notes.`;
+
+      const text = await callClaudeAI(sys, prompt);
+      setMnOut(text);
+      setMnSaveTitle((mnMeeting || "Minutes").slice(0, 60) + (mnDate ? ` · ${mnDate}` : ""));
+    } catch(e) { setMnErr("Couldn't draft minutes. Check ANTHROPIC_API_KEY."); }
+    finally { setMnLoading(false); }
   }
 
   async function saveMinutes() {
-    setBusy(true); setErr("");
-    try { await fileMinutes(detail.id, draft); setEditing(false); await load(detail.id); }
-    catch (e) { setErr(e.message); }
-    finally { setBusy(false); }
+    if (!mnOut || !mnSaveTitle.trim()) return;
+    setMnSaving(true);
+    try {
+      await supabase.from("ai_outputs").insert({
+        department_id: me.department_id,
+        feature: "minutes",
+        title: mnSaveTitle.trim(),
+        ai_text: mnOut,
+        created_by: me.id,
+      });
+      await loadMnDrafts();
+    } catch(e) { setMnErr(e.message); }
+    finally { setMnSaving(false); }
   }
 
-  async function doComplete() {
-    if (!confirm("Mark this meeting completed? This starts the 14-day archive grace period.")) return;
-    setBusy(true); setErr("");
-    try { await completeMeeting(detail.id); await load(detail.id); }
-    catch (e) { setErr(e.message); }
-    finally { setBusy(false); }
+  async function saveImportedMinutes() {
+    if (!importText.trim() || !importTitle.trim()) return;
+    setImporting(true);
+    try {
+      await supabase.from("ai_outputs").insert({
+        department_id: me.department_id,
+        feature: "minutes",
+        title: importTitle.trim(),
+        ai_text: importText.trim(),
+        created_by: me.id,
+      });
+      setImportTitle(""); setImportText("");
+      await loadMnDrafts();
+    } catch(e) { setMnErr(e.message); }
+    finally { setImporting(false); }
   }
 
-  async function toggleAction(item) {
-    setErr("");
-    try { await setActionStatus(item.id, item.status === "done" ? "open" : "done"); await load(detail.id); }
-    catch (e) { setErr(e.message); }
+  async function saveMnEdit() {
+    if (!mnEditBuf.trim()) return;
+    try {
+      await supabase.from("ai_outputs")
+        .update({ current_text: mnEditBuf, edited_by: me.id, edited_at: new Date().toISOString() })
+        .eq("id", mnOpen.id);
+      setMnOpen({ ...mnOpen, current_text: mnEditBuf });
+      setMnEditing(false);
+      await loadMnDrafts();
+    } catch(e) { setMnErr(e.message); }
+  }
+
+  async function deleteMnDraft(id) {
+    if (!confirm("Delete these minutes?")) return;
+    await supabase.from("ai_outputs").update({ deleted_at: new Date().toISOString() }).eq("id", id);
+    await loadMnDrafts();
+    if (mnOpen?.id === id) setMnOpen(null);
+  }
+
+  // ── ACTION ITEMS ──
+  async function toggleActionItem(item) {
+    await supabase.from("action_items")
+      .update({ status: item.status === "done" ? "open" : "done" })
+      .eq("id", item.id);
+    await loadAllActions();
   }
 
   async function doAddAction() {
     if (!newAction.title.trim()) return;
-    setBusy(true); setErr("");
+    setActionBusy(true);
     try {
       await supabase.from("action_items").insert({
-        meeting_id: detail.id,
         department_id: me.department_id,
         title: newAction.title.trim(),
         owner_member_id: newAction.member_id || null,
@@ -1895,225 +2086,393 @@ function AgendaMinutes({ me }) {
       });
       setNewAction({ title: "", member_id: "", due_date: "" });
       setAddingAction(false);
-      await load(detail.id);
-    } catch(e) { setErr(e.message); }
-    finally { setBusy(false); }
+      await loadAllActions();
+    } catch(e) { setMnErr(e.message); }
+    finally { setActionBusy(false); }
   }
 
-  async function doAddAgenda() {
-    if (!newAgenda.title.trim()) return;
-    setBusy(true); setErr("");
-    try {
-      const pos = (detail.agenda_items || []).length + 1;
-      await supabase.from("agenda_items").insert({
-        meeting_id: detail.id,
-        title: newAgenda.title.trim(),
-        notes: newAgenda.notes.trim() || null,
-        position: pos,
-      });
-      setNewAgenda({ title: "", notes: "" });
-      setAddingAgenda(false);
-      await load(detail.id);
-    } catch(e) { setErr(e.message); }
-    finally { setBusy(false); }
-  }
+  const openActions2  = allActions.filter(a => a.status === "open");
+  const doneActions   = allActions.filter(a => a.status === "done");
 
-  async function draftMinutesAI() {
-    setAiDrafting(true); setErr("");
-    try {
-      const agendaText = (detail.agenda_items || [])
-        .map(a => `${a.position}. ${a.title}${a.notes ? ` — ${a.notes}` : ""}`)
-        .join("\n") || "No agenda items recorded.";
-      const sys = `You draft professional meeting minutes for a police officers' association. You write clear, factual minutes from the agenda provided. Format with standard sections: Call to Order, Attendance, Agenda Items (one section per item), Action Items, Adjournment. Keep it factual, professional, and under 400 words. End with a line for Secretary signature.`;
-      const prompt = `Meeting: ${detail.title}\nDate: ${fmtDate(detail.scheduled_at)}\nLocation: ${detail.location || "Not specified"}\n\nAgenda:\n${agendaText}\n\nDraft professional minutes for this meeting. Note that actual votes, discussions, and decisions will need to be filled in by the secretary — use [brackets] for items that need real details added.`;
-      const text = await callClaudeAI(sys, prompt);
-      setAiDraft(text);
-      setDraft(text);
-      setEditing(true);
-    } catch(e) { setErr("AI draft failed — check ANTHROPIC_API_KEY."); }
-    finally { setAiDrafting(false); }
-  }
-
-  if (!meetings) return <Spinner />;
-
-  if (detail) {
-    const actions = detail.action_items || [];
-    return (
-      <div>
-        <button onClick={() => { setDetail(null); setEditing(false); }} style={{ ...PS.btn, marginBottom: 16 }}>
-          <ArrowLeft size={13} /> Back to meetings
-        </button>
-        <ErrBox msg={err} />
-        <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 18 }}>
-          <div style={{ flex: 1 }}>
-            <p style={PS.kicker}>{detail.kind} meeting</p>
-            <h2 style={{ fontFamily: "inherit", fontSize: 22, fontWeight: 700, color: POA.textPrimary, margin: "4px 0" }}>{detail.title}</h2>
-            <div style={{ fontSize: 13, color: POA.textMuted }}>{fmtDate(detail.scheduled_at)}{detail.location ? ` · ${detail.location}` : ""}</div>
-          </div>
-          <span style={{ fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 999, background: POA.accentSoft, color: POA.accent, flexShrink: 0 }}>{detail.status}</span>
-        </div>
-
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8, marginTop: 18 }}>
-          <p style={{ ...PS.kicker, margin: 0 }}>Agenda</p>
-          {canManage(me.access) && detail.status === "open" && (
-            <button style={PS.btn} onClick={() => setAddingAgenda(v => !v)}>
-              <Plus size={12} /> Add item
-            </button>
-          )}
-        </div>
-        {addingAgenda && (
-          <Card style={{ marginBottom: 10 }}>
-            <div style={{ marginBottom: 8 }}>
-              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Agenda item</div>
-              <input value={newAgenda.title} onChange={e => setNewAgenda(x => ({ ...x, title: e.target.value }))}
-                style={PS.input} placeholder="e.g. CBA update, treasurer report, new business" />
-            </div>
-            <div style={{ marginBottom: 10 }}>
-              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Notes (optional)</div>
-              <input value={newAgenda.notes} onChange={e => setNewAgenda(x => ({ ...x, notes: e.target.value }))}
-                style={PS.input} placeholder="Any context or supporting notes" />
-            </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button style={PS.btnPrimary} disabled={busy || !newAgenda.title.trim()} onClick={doAddAgenda}>Add</button>
-              <button style={PS.btn} onClick={() => setAddingAgenda(false)}>Cancel</button>
-            </div>
-          </Card>
-        )}
-        {(detail.agenda_items || []).length === 0
-          ? <Card><div style={{ color: POA.textMuted, fontSize: 13.5 }}>No agenda items.</div></Card>
-          : (detail.agenda_items || []).map(a => (
-            <Card key={a.id}>
-              <div style={{ fontWeight: 600, color: POA.textPrimary }}>{a.position}. {a.title}</div>
-              {a.notes && <div style={{ fontSize: 12.5, color: POA.textMuted, marginTop: 4 }}>{a.notes}</div>}
-            </Card>
-          ))
-        }
-
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8, marginTop: 18 }}>
-          <p style={{ ...PS.kicker, margin: 0 }}>Minutes</p>
-          {!editing && canManage(me.access) && (
-            <div style={{ display: "flex", gap: 6 }}>
-              <button style={PS.btn} disabled={aiDrafting} onClick={draftMinutesAI}>
-                <Sparkles size={12} /> {aiDrafting ? "Drafting…" : "Draft with AI"}
-              </button>
-              <button style={PS.btn} onClick={() => setEditing(true)}>
-                <Pencil size={12} /> {detail.minutes_body ? "Revise" : "File minutes"}
-              </button>
-            </div>
-          )}
-        </div>
-
-        {editing ? (
-          <>
-            <textarea value={draft} onChange={e => setDraft(e.target.value)}
-              placeholder="Type rough notes — AI can help draft, but a human files." style={PS.textarea} />
-            <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-              <button style={PS.btnPrimary} disabled={busy} onClick={saveMinutes}>{busy ? "Filing…" : "File minutes"}</button>
-              <button style={PS.btn} onClick={() => setEditing(false)}>Cancel</button>
-            </div>
-            <div style={{ fontSize: 11.5, color: POA.textMuted, marginTop: 8, fontStyle: "italic" }}>
-              Filing bumps the version and re-stamps the time on the server. AI drafts; a human files.
-            </div>
-          </>
-        ) : detail.minutes_body ? (
-          <>
-            <div style={{ background: POA.sidebar, border: `0.5px solid ${POA.hairline}`, borderLeft: `3px solid ${POA.accent}`, borderRadius: "0 10px 10px 0", padding: "14px 16px", fontSize: 13.5, color: POA.textSecondary, lineHeight: 1.65, whiteSpace: "pre-wrap" }}>
-              {detail.minutes_body}
-            </div>
-            <div style={{ fontSize: 11.5, color: POA.green, marginTop: 6 }}>
-              v{detail.minutes_version} · filed {fmtDate(detail.minutes_filed_at)}
-            </div>
-          </>
-        ) : (
-          <Card><div style={{ color: POA.textMuted, fontSize: 13.5 }}>Minutes not filed yet.</div></Card>
-        )}
-
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8, marginTop: 18 }}>
-          <p style={{ ...PS.kicker, margin: 0 }}>Action items</p>
-          {canManage(me.access) && (
-            <button style={PS.btn} onClick={() => setAddingAction(v => !v)}>
-              <Plus size={12} /> Add item
-            </button>
-          )}
-        </div>
-        {addingAction && (
-          <Card style={{ marginBottom: 10 }}>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
-              <div style={{ gridColumn: "1 / -1" }}>
-                <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Action item</div>
-                <input value={newAction.title} onChange={e => setNewAction(x => ({ ...x, title: e.target.value }))}
-                  style={PS.input} placeholder="e.g. President to follow up with city on contract" />
-              </div>
-              <div>
-                <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Assign to</div>
-                <select value={newAction.member_id} onChange={e => setNewAction(x => ({ ...x, member_id: e.target.value }))} style={PS.input}>
-                  <option value="">— Unassigned —</option>
-                  {members.map(m => <option key={m.id} value={m.id}>{m.full_name}</option>)}
-                </select>
-              </div>
-              <div>
-                <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Due date</div>
-                <input type="date" value={newAction.due_date} onChange={e => setNewAction(x => ({ ...x, due_date: e.target.value }))} style={PS.input} />
-              </div>
-            </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button style={PS.btnPrimary} disabled={busy || !newAction.title.trim()} onClick={doAddAction}>Add</button>
-              <button style={PS.btn} onClick={() => setAddingAction(false)}>Cancel</button>
-            </div>
-          </Card>
-        )}
-        {actions.length === 0
-          ? <Card><div style={{ color: POA.textMuted, fontSize: 13.5 }}>No action items from this meeting.</div></Card>
-          : actions.map(a => {
-            const over = isOverdue(a.due_date, a.status);
-            return (
-              <div key={a.id} style={{ ...PS.card, padding: "12px 14px", marginBottom: 8, display: "flex", alignItems: "flex-start", gap: 11 }}>
-                <button onClick={() => toggleAction(a)}
-                  style={{ width: 20, height: 20, borderRadius: 6, border: `1.5px solid ${a.status === "done" ? POA.green : POA.accentDim}`, background: a.status === "done" ? POA.green : "transparent", flexShrink: 0, marginTop: 2, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  {a.status === "done" && <CheckCircle2 size={12} color="#052b1e" />}
-                </button>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13.5, fontWeight: 600, color: a.status === "done" ? POA.textMuted : POA.textPrimary, textDecoration: a.status === "done" ? "line-through" : "none" }}>{a.title}</div>
-                  <div style={{ fontSize: 12, color: POA.textMuted, marginTop: 3 }}>
-                    {a.members?.full_name || "Unassigned"}{a.due_date ? ` · due ${fmtShort(a.due_date)}` : ""}
-                  </div>
-                </div>
-                {over && <span style={{ fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 999, background: "rgba(240,180,74,.14)", color: POA.amber, flexShrink: 0 }}>Overdue</span>}
-              </div>
-            );
-          })
-        }
-
-        {canManage(me.access) && detail.status === "open" && (
-          <button style={{ ...PS.btnPrimary, marginTop: 16, width: "100%" }} disabled={busy} onClick={doComplete}>
-            Complete meeting
-          </button>
-        )}
-        {detail.status === "completed" && detail.archive_after && (
-          <div style={{ fontSize: 12, color: POA.textMuted, marginTop: 10, fontStyle: "italic" }}>
-            Completed · archives after {fmtDate(detail.archive_after)} (14-day grace)
-          </div>
-        )}
-      </div>
-    );
-  }
+  // ── RENDER ──
+  const TABS = [
+    { id: "agenda",   label: "Agenda" },
+    { id: "minutes",  label: "Minutes" },
+    { id: "actions",  label: `Action Items${openActions2.length ? ` (${openActions2.length})` : ""}` },
+  ];
 
   return (
     <div>
-      <PageTitle sub="Agendas, filed minutes, and action items — the proof spine">Agenda & Minutes</PageTitle>
-      {meetings.length === 0 && <Card><div style={{ color: POA.textMuted }}>No meetings yet.</div></Card>}
-      {meetings.map(m => (
-        <Card key={m.id} style={{ cursor: "pointer" }} onClick={() => load(m.id)}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 700, color: POA.textPrimary }}>{m.title}</div>
-              <div style={{ fontSize: 12.5, color: POA.textMuted, marginTop: 2 }}>{fmtDate(m.scheduled_at)}{m.location ? ` · ${m.location}` : ""}</div>
+      <p style={{ ...PS.kicker, marginBottom: 4 }}>Agenda & Minutes</p>
+      <h1 style={{ fontFamily: "inherit", fontSize: 24, fontWeight: 700, color: POA.textPrimary, margin: "0 0 4px" }}>
+        Meetings
+      </h1>
+      <div style={{ fontSize: 13, color: POA.textMuted, marginBottom: 20 }}>
+        Draft agendas before the meeting · file minutes after · track action items.
+      </div>
+
+      {/* Tabs */}
+      <div style={{ display: "flex", gap: 6, marginBottom: 20 }}>
+        {TABS.map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)}
+            style={{ ...PS.btn, background: tab === t.id ? POA.accent : POA.btnBg, color: tab === t.id ? "#06090A" : POA.btnText, border: tab === t.id ? "none" : `0.5px solid ${POA.btnBorder}`, fontWeight: tab === t.id ? 700 : 500 }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── AGENDA TAB ── */}
+      {tab === "agenda" && (
+        <div>
+          {/* AI Agenda Builder */}
+          <div style={{ background: "linear-gradient(135deg, rgba(219,165,37,.08), rgba(219,165,37,.02))", border: `0.5px solid rgba(219,165,37,.25)`, borderLeft: `3px solid ${POA.accent}`, borderRadius: "0 13px 13px 0", padding: "18px 20px", marginBottom: 20, boxShadow: "0 0 20px rgba(219,165,37,.05)" }}>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".14em", textTransform: "uppercase", color: POA.accent, marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}>
+              <Sparkles size={12} /> AI AGENDA BUILDER
             </div>
-            <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 999, background: POA.accentSoft, color: POA.accent }}>{m.status}</span>
-            <ChevronRight size={15} color={POA.textMuted} />
+            <div style={{ fontWeight: 700, fontSize: 17, color: POA.textPrimary, marginBottom: 4 }}>Draft an agenda from your real association data</div>
+            <div style={{ fontSize: 13, color: POA.textMuted, marginBottom: 16, lineHeight: 1.5 }}>
+              Pulled live from your association — references only what's real, nothing invented.
+            </div>
+
+            <div style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
+              <div style={{ flex: 1, minWidth: 180 }}>
+                <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Meeting</div>
+                <input value={agTitle} onChange={e => setAgTitle(e.target.value)} style={PS.input} />
+              </div>
+              <div style={{ minWidth: 140 }}>
+                <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Date</div>
+                <input value={agDate} onChange={e => setAgDate(e.target.value)} placeholder="e.g. Jul 12, 2026" style={PS.input} />
+              </div>
+            </div>
+
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>
+                Additional topics <span style={{ color: POA.textMuted, fontWeight: 400 }}>— optional, your own items to add</span>
+              </div>
+              <textarea value={agTopics} onChange={e => setAgTopics(e.target.value)}
+                style={{ ...PS.textarea, minHeight: 60 }}
+                placeholder="e.g. CBA ratification vote, scholarship applications, officer recognition" />
+            </div>
+
+            {/* Context panel */}
+            <div style={{ background: "rgba(0,0,0,.25)", border: `0.5px solid ${POA.hairline}`, borderRadius: 10, padding: "12px 14px", marginBottom: 14 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".12em", textTransform: "uppercase", color: POA.textMuted, marginBottom: 8 }}>Context we'll use</div>
+              {[
+                { label: `Meetings — ${meetings.filter(m => m.status === "open").length} upcoming`, items: meetings.filter(m => m.status === "open").slice(0,3).map(m => m.title + " · " + fmtDate(m.scheduled_at)) },
+                { label: `Active causes — ${causes.filter(c => c.status === "active").length}`, items: causes.filter(c => c.status === "active").slice(0,3).map(c => c.name) },
+                { label: `Open action items — ${actions.filter(a => a.status === "open").length}`, items: actions.filter(a => a.status === "open").slice(0,3).map(a => a.title) },
+                { label: `Recent announcements — ${announcements.length}`, items: announcements.slice(0,2).map(a => a.subject) },
+              ].map(({ label, items }) => (
+                <div key={label} style={{ marginBottom: 8 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: POA.accent, letterSpacing: ".08em", textTransform: "uppercase", marginBottom: 3 }}>{label}</div>
+                  {items.length === 0
+                    ? <div style={{ fontSize: 12, color: POA.textMuted }}>None.</div>
+                    : items.map((item, i) => <div key={i} style={{ fontSize: 12, color: POA.textSecondary, padding: "1px 0" }}>· {item}</div>)
+                  }
+                </div>
+              ))}
+            </div>
+
+            <button style={{ ...PS.btnPrimary, opacity: agLoading ? 0.7 : 1 }} disabled={agLoading} onClick={generateAgenda}>
+              {agLoading ? <><Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> Drafting…</> : <><Sparkles size={14} /> Generate agenda</>}
+            </button>
+            {agErr && <ErrBox msg={agErr} />}
+
+            {agOut && (
+              <>
+                <div style={{ background: "rgba(0,0,0,.3)", border: `0.5px solid ${POA.hairline}`, borderRadius: 10, padding: "14px 16px", marginTop: 14, fontSize: 13.5, color: POA.textSecondary, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>
+                  {agOut}
+                </div>
+                <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginTop: 10, flexWrap: "wrap" }}>
+                  <div style={{ flex: 1, minWidth: 180 }}>
+                    <div style={{ fontSize: 11, color: POA.textMuted, marginBottom: 4 }}>Save as</div>
+                    <input value={agSaveTitle} onChange={e => setAgSaveTitle(e.target.value)} style={PS.input} placeholder="Agenda title" />
+                  </div>
+                  <button style={{ ...PS.btn, opacity: (agSaving || !agSaveTitle.trim()) ? 0.6 : 1 }} disabled={agSaving || !agSaveTitle.trim()} onClick={saveAgenda}>
+                    {agSaving ? "Saving…" : <><FileText size={13} /> Save agenda</>}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
-        </Card>
-      ))}
+
+          {/* Saved agendas */}
+          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".14em", textTransform: "uppercase", color: POA.textMuted, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
+            <FileText size={12} /> Saved agendas
+          </div>
+          <Card>
+            {agDrafts.length === 0
+              ? <div style={{ fontSize: 13, color: POA.textMuted, padding: "8px 0" }}>No saved agendas yet.</div>
+              : agDrafts.map(d => (
+                <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderBottom: `0.5px solid ${POA.hairline}` }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 600, color: POA.textPrimary }}>{d.title || "Untitled agenda"}</div>
+                    <div style={{ fontSize: 11.5, color: POA.textMuted }}>{fmtDate(d.edited_at || d.created_at)}{d.edited_by ? " · edited" : ""}</div>
+                  </div>
+                  <button style={{ ...PS.btn, padding: "5px 9px", fontSize: 11.5 }} onClick={() => { setAgOpen(d); setAgEditing(false); }}>Open</button>
+                  {canAdmin(me.access) && (
+                    <button style={{ ...PS.btn, padding: "5px 8px", fontSize: 11.5, color: POA.red }} onClick={() => deleteAgDraft(d.id)}>
+                      <X size={13} />
+                    </button>
+                  )}
+                </div>
+              ))
+            }
+          </Card>
+
+          {/* Agenda modal */}
+          {agOpen && (
+            <div onClick={() => { setAgOpen(null); setAgEditing(false); }}
+              style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.7)", zIndex: 60, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 16px", overflowY: "auto" }}>
+              <div onClick={e => e.stopPropagation()}
+                style={{ background: "linear-gradient(135deg, #0E1630, #0A1020)", border: `0.5px solid ${POA.hairline2}`, borderRadius: 16, maxWidth: 720, width: "100%", padding: "20px 22px", boxShadow: "0 20px 60px rgba(0,0,0,.6)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 14 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".12em", textTransform: "uppercase", color: POA.accent }}>{agOpen.title || "Agenda"}</div>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    {!agEditing && <button style={{ ...PS.btn, padding: "5px 10px" }} onClick={() => { setAgEditBuf(agOpen.current_text || agOpen.ai_text || ""); setAgEditing(true); }}><Pencil size={13} /> Edit</button>}
+                    <button style={{ ...PS.btn, padding: "5px 10px" }} onClick={() => { setAgOpen(null); setAgEditing(false); }}><X size={13} /></button>
+                  </div>
+                </div>
+                {agEditing ? (
+                  <>
+                    <textarea value={agEditBuf} onChange={e => setAgEditBuf(e.target.value)}
+                      style={{ ...PS.textarea, minHeight: 300, width: "100%", fontFamily: "inherit" }} />
+                    <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 10 }}>
+                      <button style={PS.btn} onClick={() => setAgEditing(false)}>Cancel</button>
+                      <button style={PS.btnPrimary} onClick={saveAgEdit}><FileText size={13} /> Save changes</button>
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ fontSize: 13.5, color: POA.textSecondary, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>
+                    {agOpen.current_text || agOpen.ai_text}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── MINUTES TAB ── */}
+      {tab === "minutes" && (
+        <div>
+          {/* AI Minutes Drafter */}
+          <div style={{ background: "linear-gradient(135deg, rgba(219,165,37,.08), rgba(219,165,37,.02))", border: `0.5px solid rgba(219,165,37,.25)`, borderLeft: `3px solid ${POA.accent}`, borderRadius: "0 13px 13px 0", padding: "18px 20px", marginBottom: 16, boxShadow: "0 0 20px rgba(219,165,37,.05)" }}>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".14em", textTransform: "uppercase", color: POA.accent, marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}>
+              <Sparkles size={12} /> AI MINUTES DRAFTER
+            </div>
+            <div style={{ fontWeight: 700, fontSize: 17, color: POA.textPrimary, marginBottom: 4 }}>Turn rough notes into clean minutes</div>
+            <div style={{ fontSize: 13, color: POA.textMuted, marginBottom: 16, lineHeight: 1.5 }}>
+              Jot down what happened — AI drafts professional minutes. A human always reviews and files.
+            </div>
+
+            <div style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
+              <div style={{ flex: 1, minWidth: 180 }}>
+                <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Meeting</div>
+                <input value={mnMeeting} onChange={e => setMnMeeting(e.target.value)} placeholder="e.g. General Membership Meeting" style={PS.input} />
+              </div>
+              <div style={{ minWidth: 140 }}>
+                <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Date</div>
+                <input value={mnDate} onChange={e => setMnDate(e.target.value)} placeholder="e.g. Jul 12, 2026" style={PS.input} />
+              </div>
+            </div>
+
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Rough notes from the meeting</div>
+              <textarea value={mnNotes} onChange={e => setMnNotes(e.target.value)}
+                style={{ ...PS.textarea, minHeight: 100 }}
+                placeholder="Who was there, what came up, what was decided, what people agreed to do..." />
+            </div>
+
+            <button style={{ ...PS.btnPrimary, opacity: mnLoading ? 0.7 : 1 }} disabled={mnLoading} onClick={generateMinutes}>
+              {mnLoading ? <><Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> Drafting…</> : <><Sparkles size={14} /> Draft the minutes</>}
+            </button>
+            {mnErr && <ErrBox msg={mnErr} />}
+
+            {mnOut && (
+              <>
+                <div style={{ background: "rgba(0,0,0,.3)", border: `0.5px solid ${POA.hairline}`, borderRadius: 10, padding: "14px 16px", marginTop: 14, fontSize: 13.5, color: POA.textSecondary, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>
+                  {mnOut}
+                </div>
+                <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginTop: 10, flexWrap: "wrap" }}>
+                  <div style={{ flex: 1, minWidth: 180 }}>
+                    <div style={{ fontSize: 11, color: POA.textMuted, marginBottom: 4 }}>Save as</div>
+                    <input value={mnSaveTitle} onChange={e => setMnSaveTitle(e.target.value)} style={PS.input} placeholder="Minutes title" />
+                  </div>
+                  <button style={{ ...PS.btn, opacity: (mnSaving || !mnSaveTitle.trim()) ? 0.6 : 1 }} disabled={mnSaving || !mnSaveTitle.trim()} onClick={saveMinutes}>
+                    {mnSaving ? "Saving…" : <><FileText size={13} /> Save minutes</>}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Import minutes */}
+          <div style={{ ...PS.card, padding: "16px 18px", marginBottom: 20 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".14em", textTransform: "uppercase", color: POA.textMuted, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
+              <FileText size={12} /> Import minutes — written outside B4C
+            </div>
+            <div style={{ fontSize: 12.5, color: POA.textMuted, marginBottom: 12, lineHeight: 1.55 }}>
+              Bring in minutes from Word, Google Docs, or typed elsewhere. Saved as <strong style={{ color: POA.textSecondary }}>Imported — not AI-generated</strong>.
+            </div>
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Title</div>
+              <input value={importTitle} onChange={e => setImportTitle(e.target.value)}
+                style={PS.input} placeholder="e.g. General Meeting — Jul 12, 2026" />
+            </div>
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Minutes text</div>
+              <textarea value={importText} onChange={e => setImportText(e.target.value)}
+                style={{ ...PS.textarea, minHeight: 100 }} placeholder="Paste the full minutes here..." />
+            </div>
+            <button style={{ ...PS.btnPrimary, opacity: (importing || !importTitle.trim() || !importText.trim()) ? 0.6 : 1 }}
+              disabled={importing || !importTitle.trim() || !importText.trim()} onClick={saveImportedMinutes}>
+              {importing ? "Saving…" : <><FileText size={13} /> Save imported minutes</>}
+            </button>
+          </div>
+
+          {/* Saved minutes */}
+          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".14em", textTransform: "uppercase", color: POA.textMuted, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
+            <FileText size={12} /> Saved minutes
+          </div>
+          <Card>
+            {mnDrafts.length === 0
+              ? <div style={{ fontSize: 13, color: POA.textMuted, padding: "8px 0" }}>No saved minutes yet.</div>
+              : mnDrafts.map(d => (
+                <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderBottom: `0.5px solid ${POA.hairline}` }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 600, color: POA.textPrimary }}>{d.title || "Untitled minutes"}</div>
+                    <div style={{ fontSize: 11.5, color: POA.textMuted }}>{fmtDate(d.edited_at || d.created_at)}{d.edited_by ? " · edited" : ""}</div>
+                  </div>
+                  <button style={{ ...PS.btn, padding: "5px 9px", fontSize: 11.5 }} onClick={() => { setMnOpen(d); setMnEditing(false); }}>Open</button>
+                  {canAdmin(me.access) && (
+                    <button style={{ ...PS.btn, padding: "5px 8px", fontSize: 11.5, color: POA.red }} onClick={() => deleteMnDraft(d.id)}>
+                      <X size={13} />
+                    </button>
+                  )}
+                </div>
+              ))
+            }
+          </Card>
+
+          {/* Minutes modal */}
+          {mnOpen && (
+            <div onClick={() => { setMnOpen(null); setMnEditing(false); }}
+              style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.7)", zIndex: 60, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 16px", overflowY: "auto" }}>
+              <div onClick={e => e.stopPropagation()}
+                style={{ background: "linear-gradient(135deg, #0E1630, #0A1020)", border: `0.5px solid ${POA.hairline2}`, borderRadius: 16, maxWidth: 720, width: "100%", padding: "20px 22px", boxShadow: "0 20px 60px rgba(0,0,0,.6)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 14 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".12em", textTransform: "uppercase", color: POA.accent }}>{mnOpen.title || "Minutes"}</div>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    {!mnEditing && <button style={{ ...PS.btn, padding: "5px 10px" }} onClick={() => { setMnEditBuf(mnOpen.current_text || mnOpen.ai_text || ""); setMnEditing(true); }}><Pencil size={13} /> Edit</button>}
+                    <button style={{ ...PS.btn, padding: "5px 10px" }} onClick={() => { setMnOpen(null); setMnEditing(false); }}><X size={13} /></button>
+                  </div>
+                </div>
+                {mnEditing ? (
+                  <>
+                    <textarea value={mnEditBuf} onChange={e => setMnEditBuf(e.target.value)}
+                      style={{ ...PS.textarea, minHeight: 300, width: "100%", fontFamily: "inherit" }} />
+                    <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 10 }}>
+                      <button style={PS.btn} onClick={() => setMnEditing(false)}>Cancel</button>
+                      <button style={PS.btnPrimary} onClick={saveMnEdit}><FileText size={13} /> Save changes</button>
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ fontSize: 13.5, color: POA.textSecondary, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>
+                    {mnOpen.current_text || mnOpen.ai_text}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── ACTION ITEMS TAB ── */}
+      {tab === "actions" && (
+        <div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+            <div style={{ fontSize: 13, color: POA.textMuted }}>{openActions2.length} open · {doneActions.length} completed</div>
+            <button style={PS.btn} onClick={() => setAddingAction(v => !v)}>
+              <Plus size={13} /> Add action item
+            </button>
+          </div>
+
+          {addingAction && (
+            <Card style={{ marginBottom: 14 }}>
+              <SectionTitle>New action item</SectionTitle>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Action item</div>
+                  <input value={newAction.title} onChange={e => setNewAction(x => ({ ...x, title: e.target.value }))}
+                    style={PS.input} placeholder="e.g. President to follow up on contract negotiation" />
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Assign to</div>
+                  <select value={newAction.member_id} onChange={e => setNewAction(x => ({ ...x, member_id: e.target.value }))} style={PS.input}>
+                    <option value="">— Unassigned —</option>
+                    {members.map(m => <option key={m.id} value={m.id}>{m.full_name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Due date</div>
+                  <input type="date" value={newAction.due_date} onChange={e => setNewAction(x => ({ ...x, due_date: e.target.value }))} style={PS.input} />
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button style={PS.btnPrimary} disabled={actionBusy || !newAction.title.trim()} onClick={doAddAction}>Add</button>
+                <button style={PS.btn} onClick={() => setAddingAction(false)}>Cancel</button>
+              </div>
+            </Card>
+          )}
+
+          {allActions.length === 0 ? (
+            <Card><div style={{ color: POA.textMuted, fontSize: 13.5 }}>No action items yet. Add one above or extract from minutes.</div></Card>
+          ) : (
+            <>
+              {openActions2.length > 0 && (
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: POA.amber, marginBottom: 8 }}>Open</div>
+                  {openActions2.map(a => {
+                    const over = a.due_date && new Date(a.due_date) < today && a.status !== "done";
+                    return (
+                      <div key={a.id} style={{ ...PS.card, padding: "12px 14px", marginBottom: 8, display: "flex", alignItems: "flex-start", gap: 10 }}>
+                        <button onClick={() => toggleActionItem(a)}
+                          style={{ width: 20, height: 20, borderRadius: 6, border: `1.5px solid ${POA.accentDim}`, background: "transparent", flexShrink: 0, marginTop: 2, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }} />
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 13.5, fontWeight: 600, color: POA.textPrimary }}>{a.title}</div>
+                          <div style={{ fontSize: 12, color: POA.textMuted, marginTop: 3 }}>
+                            {a.members?.full_name || "Unassigned"}{a.due_date ? ` · due ${fmtShort(a.due_date)}` : ""}
+                          </div>
+                        </div>
+                        {over && <span style={{ fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 999, background: "rgba(240,180,74,.14)", color: POA.amber, flexShrink: 0 }}>Overdue</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {doneActions.length > 0 && (
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: POA.green, marginBottom: 8 }}>Completed</div>
+                  {doneActions.map(a => (
+                    <div key={a.id} style={{ ...PS.card, padding: "11px 14px", marginBottom: 6, display: "flex", alignItems: "center", gap: 10, opacity: .65 }}>
+                      <button onClick={() => toggleActionItem(a)}
+                        style={{ width: 20, height: 20, borderRadius: 6, border: `1.5px solid ${POA.green}`, background: POA.green, flexShrink: 0, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <CheckCircle2 size={12} color="#052b1e" />
+                      </button>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 13, color: POA.textMuted, textDecoration: "line-through" }}>{a.title}</div>
+                        <div style={{ fontSize: 11, color: POA.textMuted }}>{a.members?.full_name || "Unassigned"}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -8883,7 +9242,7 @@ function renderScreen(view, { me, org, setView }) {
   }
   switch (view) {
     case "b_dash":          return <BoardDash me={me} org={org} setView={setView} />;
-    case "b_meetings":      return <AgendaMinutes me={me} />;
+    case "b_meetings":      return <AgendaMinutes me={me} org={org} />;
     case "b_causes":        return <CausesBoard me={me} />;
     case "b_members":       return <MembersBoard me={me} />;
     case "b_documents":     return <BoardDocuments me={me} />;
