@@ -2180,8 +2180,8 @@ Draft professional minutes from these notes.`;
 
             {agOut && (
               <>
-                <div style={{ background: "rgba(0,0,0,.3)", border: `0.5px solid ${POA.hairline}`, borderRadius: 10, padding: "14px 16px", marginTop: 14, fontSize: 13.5, color: POA.textSecondary, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>
-                  {agOut}
+                <div style={{ background: "rgba(0,0,0,.3)", border: `0.5px solid ${POA.hairline}`, borderRadius: 10, padding: "14px 16px", marginTop: 14 }}>
+                  <FundraisingPlanDisplay text={agOut} />
                 </div>
                 <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginTop: 10, flexWrap: "wrap" }}>
                   <div style={{ flex: 1, minWidth: 180 }}>
@@ -2243,9 +2243,7 @@ Draft professional minutes from these notes.`;
                     </div>
                   </>
                 ) : (
-                  <div style={{ fontSize: 13.5, color: POA.textSecondary, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>
-                    {agOpen.current_text || agOpen.ai_text}
-                  </div>
+                  <FundraisingPlanDisplay text={agOpen.current_text || agOpen.ai_text} />
                 )}
               </div>
             </div>
@@ -2291,8 +2289,8 @@ Draft professional minutes from these notes.`;
 
             {mnOut && (
               <>
-                <div style={{ background: "rgba(0,0,0,.3)", border: `0.5px solid ${POA.hairline}`, borderRadius: 10, padding: "14px 16px", marginTop: 14, fontSize: 13.5, color: POA.textSecondary, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>
-                  {mnOut}
+                <div style={{ background: "rgba(0,0,0,.3)", border: `0.5px solid ${POA.hairline}`, borderRadius: 10, padding: "14px 16px", marginTop: 14 }}>
+                  <FundraisingPlanDisplay text={mnOut} />
                 </div>
                 <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginTop: 10, flexWrap: "wrap" }}>
                   <div style={{ flex: 1, minWidth: 180 }}>
@@ -2378,9 +2376,7 @@ Draft professional minutes from these notes.`;
                     </div>
                   </>
                 ) : (
-                  <div style={{ fontSize: 13.5, color: POA.textSecondary, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>
-                    {mnOpen.current_text || mnOpen.ai_text}
-                  </div>
+                  <FundraisingPlanDisplay text={mnOpen.current_text || mnOpen.ai_text} />
                 )}
               </div>
             </div>
