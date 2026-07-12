@@ -7435,6 +7435,7 @@ function Fundraising({ me, org }) {
   const [effortLevel, setEffortLevel] = useState("Medium");
   const [targetDate, setTargetDate] = useState("");
   const [ideas, setIdeas]           = useState([]);
+  const [shownIdeas, setShownIdeas] = useState([]);
   const [chosenIdea, setChosenIdea] = useState(null);
   const [out, setOut]               = useState("");
   const [planReview, setPlanReview] = useState(null);
@@ -7508,16 +7509,19 @@ function Fundraising({ me, org }) {
     if (!detail.trim()) { setErr("Tell us what you're raising for first."); return; }
     setLoading(true); setLoadingLabel("Brainstorming ideas…"); setErr(""); setIdeas([]); setOut("");
     // shuffle and sample 12 random ideas as inspiration — different each call
+    const seed = Math.floor(Math.random() * 999999);
     const shuffled = [...POA_IDEA_BANK].sort(() => Math.random() - 0.5).slice(0, 12);
-    const sampleIdeas = shuffled.map(i => `${i.title}: ${i.pitch}`).join("\n");
-    const recent = log.slice(0, 8).map(e => `${e.name}${e.event_when ? ` (${e.event_when})` : ""}`).join("; ") || "none yet";
-    const user = `Association: ${org?.name || "POA"}\nGoal: ${goalAmt || "not specified"}\nEffort level: ${effortLevel}\nTarget date: ${targetDate || "flexible"}\nWhat they're raising for: ${detail}\nRecently run — do NOT suggest these again: ${recent}\nIdea inspiration (use as creative springboard, do NOT copy verbatim — invent fresh variations): \n${sampleIdeas}`;
+    const sampleIdeas = shuffled.map(i => `${i.title}: ${i.pitch}`).join('\n');
+    const recent = log.slice(0, 8).map(e => `${e.name}${e.event_when ? ` (${e.event_when})` : ''}`).join('; ') || 'none yet';
+    const previouslyShown = shownIdeas.length > 0 ? shownIdeas.join(', ') : 'none';
+    const user = `[Request ID: ${seed}] Association: ${org?.name || 'POA'}\nGoal: ${goalAmt || 'not specified'}\nEffort level: ${effortLevel}\nTarget date: ${targetDate || 'flexible'}\nWhat they're raising for: ${detail}\nRecently run — do NOT suggest these again: ${recent}\nAlready shown in this session — do NOT repeat these: ${previouslyShown}\nIdea inspiration (use as creative springboard, do NOT copy verbatim — invent fresh variations): \n${sampleIdeas}`;
     try {
       const raw = await callClaudeAI(BRAINSTORM_SYS, user);
       const clean = raw.replace(/```json|```/g, "").trim();
       const parsed = JSON.parse(clean);
       if (!Array.isArray(parsed)) throw new Error("bad format");
       setIdeas(parsed); setPhase("ideas");
+      setShownIdeas(prev => [...prev, ...parsed.map(i => i.name)]);
     } catch { setErr("Couldn't brainstorm ideas right now — check ANTHROPIC_API_KEY in Vercel."); }
     finally { setLoading(false); }
   }
@@ -7652,7 +7656,7 @@ function Fundraising({ me, org }) {
     catch(e) { setErr(e.message); }
   }
 
-  function startOver() { setPhase("input"); setIdeas([]); setChosenIdea(null); setOut(""); setErr(""); setPlanReview(null); }
+  function startOver() { setPhase("input"); setIdeas([]); setShownIdeas([]); setChosenIdea(null); setOut(""); setErr(""); setPlanReview(null); }
 
   return (
     <div>
