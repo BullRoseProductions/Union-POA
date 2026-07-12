@@ -2629,20 +2629,43 @@ function CausesBoard({ me }) {
 
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 18 }}>
-        <PageTitle sub="C4K · ATO and every cause your association stands behind" />
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20 }}>
+        <div>
+          <p style={{ ...PS.kicker, marginBottom: 4 }}>Causes</p>
+          <h1 style={{ fontFamily: 'inherit', fontSize: 24, fontWeight: 700, color: POA.textPrimary, margin: 0 }}>
+            Association Causes
+          </h1>
+          <div style={{ fontSize: 13, color: POA.textMuted, marginTop: 4 }}>
+            C4K, ATO, and every cause your association stands behind.
+          </div>
+        </div>
         <button style={PS.btn} onClick={() => setAdding(!adding)}><Plus size={13} /> Add cause</button>
       </div>
-      <PageTitle sub="C4K · ATO and every cause your association stands behind">Causes</PageTitle>
       <ErrBox msg={err} />
       {adding && (
         <Card>
-          {["name","tagline","external_url","goal_amount"].map(k => (
-            <div key={k} style={{ marginBottom: 10 }}>
-              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4, textTransform: "capitalize" }}>{k.replace(/_/g," ")}</div>
-              <input value={f[k] || ""} onChange={e => setF({ ...f, [k]: e.target.value })} style={PS.input} />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Cause name</div>
+              <input value={f.name} onChange={e => setF({ ...f, name: e.target.value })} style={PS.input} placeholder='e.g. Cops 4 Kids' />
             </div>
-          ))}
+            <div style={{ gridColumn: '1 / -1' }}>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Tagline (optional)</div>
+              <input value={f.tagline} onChange={e => setF({ ...f, tagline: e.target.value })} style={PS.input} placeholder='e.g. Supporting kids in our community' />
+            </div>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Description (optional)</div>
+              <textarea value={f.description} onChange={e => setF({ ...f, description: e.target.value })} style={{ ...PS.textarea, minHeight: 70 }} placeholder='What is this cause about? How can members help?' />
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Goal amount (optional)</div>
+              <input value={f.goal_amount} onChange={e => setF({ ...f, goal_amount: e.target.value })} style={PS.input} placeholder='e.g. 10000' inputMode='numeric' />
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>External link (optional)</div>
+              <input value={f.external_url} onChange={e => setF({ ...f, external_url: e.target.value })} style={PS.input} placeholder='https://...' type='url' />
+            </div>
+          </div>
           <div style={{ display: "flex", gap: 8 }}>
             <button style={PS.btnPrimary} onClick={create}>Save</button>
             <button style={PS.btn} onClick={() => setAdding(false)}>Cancel</button>
