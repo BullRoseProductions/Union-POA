@@ -1841,8 +1841,18 @@ function AgendaMinutes({ me }) {
   const [draft, setDraft]       = useState("");
   const [err, setErr]           = useState("");
   const [busy, setBusy]         = useState(false);
+  const [addingAction, setAddingAction] = useState(false);
+  const [newAction, setNewAction]       = useState({ title: "", member_id: "", due_date: "" });
+  const [members, setMembers]           = useState([]);
+  const [aiDrafting, setAiDrafting]     = useState(false);
+  const [aiDraft, setAiDraft]           = useState("");
+  const [addingAgenda, setAddingAgenda] = useState(false);
+  const [newAgenda, setNewAgenda]       = useState({ title: "", notes: "" });
 
-  useEffect(() => { listMeetings().then(setMeetings); }, []);
+  useEffect(() => {
+    listMeetings().then(setMeetings);
+    listMembers().then(setMembers);
+  }, []);
 
   async function load(id) {
     const m = await getMeeting(id);
@@ -1871,6 +1881,59 @@ function AgendaMinutes({ me }) {
     catch (e) { setErr(e.message); }
   }
 
+  async function doAddAction() {
+    if (!newAction.title.trim()) return;
+    setBusy(true); setErr("");
+    try {
+      await supabase.from("action_items").insert({
+        meeting_id: detail.id,
+        department_id: me.department_id,
+        title: newAction.title.trim(),
+        owner_member_id: newAction.member_id || null,
+        due_date: newAction.due_date || null,
+        status: "open",
+      });
+      setNewAction({ title: "", member_id: "", due_date: "" });
+      setAddingAction(false);
+      await load(detail.id);
+    } catch(e) { setErr(e.message); }
+    finally { setBusy(false); }
+  }
+
+  async function doAddAgenda() {
+    if (!newAgenda.title.trim()) return;
+    setBusy(true); setErr("");
+    try {
+      const pos = (detail.agenda_items || []).length + 1;
+      await supabase.from("agenda_items").insert({
+        meeting_id: detail.id,
+        title: newAgenda.title.trim(),
+        notes: newAgenda.notes.trim() || null,
+        position: pos,
+      });
+      setNewAgenda({ title: "", notes: "" });
+      setAddingAgenda(false);
+      await load(detail.id);
+    } catch(e) { setErr(e.message); }
+    finally { setBusy(false); }
+  }
+
+  async function draftMinutesAI() {
+    setAiDrafting(true); setErr("");
+    try {
+      const agendaText = (detail.agenda_items || [])
+        .map(a => `${a.position}. ${a.title}${a.notes ? ` — ${a.notes}` : ""}`)
+        .join("\n") || "No agenda items recorded.";
+      const sys = `You draft professional meeting minutes for a police officers' association. You write clear, factual minutes from the agenda provided. Format with standard sections: Call to Order, Attendance, Agenda Items (one section per item), Action Items, Adjournment. Keep it factual, professional, and under 400 words. End with a line for Secretary signature.`;
+      const prompt = `Meeting: ${detail.title}\nDate: ${fmtDate(detail.scheduled_at)}\nLocation: ${detail.location || "Not specified"}\n\nAgenda:\n${agendaText}\n\nDraft professional minutes for this meeting. Note that actual votes, discussions, and decisions will need to be filled in by the secretary — use [brackets] for items that need real details added.`;
+      const text = await callClaudeAI(sys, prompt);
+      setAiDraft(text);
+      setDraft(text);
+      setEditing(true);
+    } catch(e) { setErr("AI draft failed — check ANTHROPIC_API_KEY."); }
+    finally { setAiDrafting(false); }
+  }
+
   if (!meetings) return <Spinner />;
 
   if (detail) {
@@ -1890,7 +1953,32 @@ function AgendaMinutes({ me }) {
           <span style={{ fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 999, background: POA.accentSoft, color: POA.accent, flexShrink: 0 }}>{detail.status}</span>
         </div>
 
-        <SectionTitle>Agenda</SectionTitle>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8, marginTop: 18 }}>
+          <p style={{ ...PS.kicker, margin: 0 }}>Agenda</p>
+          {canManage(me.access) && detail.status === "open" && (
+            <button style={PS.btn} onClick={() => setAddingAgenda(v => !v)}>
+              <Plus size={12} /> Add item
+            </button>
+          )}
+        </div>
+        {addingAgenda && (
+          <Card style={{ marginBottom: 10 }}>
+            <div style={{ marginBottom: 8 }}>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Agenda item</div>
+              <input value={newAgenda.title} onChange={e => setNewAgenda(x => ({ ...x, title: e.target.value }))}
+                style={PS.input} placeholder="e.g. CBA update, treasurer report, new business" />
+            </div>
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Notes (optional)</div>
+              <input value={newAgenda.notes} onChange={e => setNewAgenda(x => ({ ...x, notes: e.target.value }))}
+                style={PS.input} placeholder="Any context or supporting notes" />
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button style={PS.btnPrimary} disabled={busy || !newAgenda.title.trim()} onClick={doAddAgenda}>Add</button>
+              <button style={PS.btn} onClick={() => setAddingAgenda(false)}>Cancel</button>
+            </div>
+          </Card>
+        )}
         {(detail.agenda_items || []).length === 0
           ? <Card><div style={{ color: POA.textMuted, fontSize: 13.5 }}>No agenda items.</div></Card>
           : (detail.agenda_items || []).map(a => (
@@ -1904,9 +1992,14 @@ function AgendaMinutes({ me }) {
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8, marginTop: 18 }}>
           <p style={{ ...PS.kicker, margin: 0 }}>Minutes</p>
           {!editing && canManage(me.access) && (
-            <button style={PS.btn} onClick={() => setEditing(true)}>
-              <Pencil size={12} /> {detail.minutes_body ? "Revise" : "File minutes"}
-            </button>
+            <div style={{ display: "flex", gap: 6 }}>
+              <button style={PS.btn} disabled={aiDrafting} onClick={draftMinutesAI}>
+                <Sparkles size={12} /> {aiDrafting ? "Drafting…" : "Draft with AI"}
+              </button>
+              <button style={PS.btn} onClick={() => setEditing(true)}>
+                <Pencil size={12} /> {detail.minutes_body ? "Revise" : "File minutes"}
+              </button>
+            </div>
           )}
         </div>
 
@@ -1937,7 +2030,38 @@ function AgendaMinutes({ me }) {
 
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8, marginTop: 18 }}>
           <p style={{ ...PS.kicker, margin: 0 }}>Action items</p>
+          {canManage(me.access) && (
+            <button style={PS.btn} onClick={() => setAddingAction(v => !v)}>
+              <Plus size={12} /> Add item
+            </button>
+          )}
         </div>
+        {addingAction && (
+          <Card style={{ marginBottom: 10 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Action item</div>
+                <input value={newAction.title} onChange={e => setNewAction(x => ({ ...x, title: e.target.value }))}
+                  style={PS.input} placeholder="e.g. President to follow up with city on contract" />
+              </div>
+              <div>
+                <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Assign to</div>
+                <select value={newAction.member_id} onChange={e => setNewAction(x => ({ ...x, member_id: e.target.value }))} style={PS.input}>
+                  <option value="">— Unassigned —</option>
+                  {members.map(m => <option key={m.id} value={m.id}>{m.full_name}</option>)}
+                </select>
+              </div>
+              <div>
+                <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Due date</div>
+                <input type="date" value={newAction.due_date} onChange={e => setNewAction(x => ({ ...x, due_date: e.target.value }))} style={PS.input} />
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button style={PS.btnPrimary} disabled={busy || !newAction.title.trim()} onClick={doAddAction}>Add</button>
+              <button style={PS.btn} onClick={() => setAddingAction(false)}>Cancel</button>
+            </div>
+          </Card>
+        )}
         {actions.length === 0
           ? <Card><div style={{ color: POA.textMuted, fontSize: 13.5 }}>No action items from this meeting.</div></Card>
           : actions.map(a => {
