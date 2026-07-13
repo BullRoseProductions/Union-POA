@@ -6724,7 +6724,7 @@ function SocialMedia({ me, org }) {
   const [selCat, setSelCat]     = useState(null);
   const [postDay, setPostDay]   = useState(today.getDate());
   const [postText, setPostText] = useState("");
-  const [newCat, setNewCat]     = useState({ label: "", color: "#9B6BE6", default_text: "" });
+  const [newCat, setNewCat]     = useState({ label: "", color: POA.accent, default_text: "" });
   const [newVid, setNewVid]     = useState({ title: "", description: "", vimeo_url: "", series_name: "" });
   const [caption, setCaption]   = useState("");
   const [captionTopic, setCaptionTopic] = useState("");
@@ -6782,7 +6782,7 @@ function SocialMedia({ me, org }) {
         is_default: false,
         sort_order: sortOrder,
       });
-      setNewCat({ label: "", color: "#9B6BE6", default_text: "" });
+      setNewCat({ label: "", color: POA.accent, default_text: "" });
       setShowAddCat(false);
       await loadAll();
     } catch(e) { setErr(e.message); }
