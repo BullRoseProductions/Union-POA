@@ -6926,7 +6926,7 @@ function SocialMedia({ me, org }) {
             {Array.from({ length: cells.length / 7 }, (_, w) => (
               <div key={w} style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 2, marginBottom: 2 }}>
                 {cells.slice(w * 7, w * 7 + 7).map((d, i) => (
-                  <div key={i} style={{ minHeight: 64, background: isToday(d) ? "rgba(155,107,230,.12)" : "transparent", border: `0.5px solid ${isToday(d) ? POA.accent : POA.hairline}`, borderRadius: 7, padding: "4px 5px" }}>
+                  <div key={i} style={{ minHeight: 64, background: isToday(d) ? POA.accentSoft : "transparent", border: `0.5px solid ${isToday(d) ? POA.accent : POA.hairline}`, borderRadius: 7, padding: "4px 5px" }}>
                     {d && (
                       <>
                         <div style={{ fontSize: 11, fontWeight: isToday(d) ? 700 : 400, color: isToday(d) ? POA.accent : POA.textMuted, marginBottom: 3 }}>{d}</div>
