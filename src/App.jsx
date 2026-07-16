@@ -5419,7 +5419,10 @@ function POABuilding({ me, org }) {
       setBf({ title: "", booking_date: "", start_time: "", end_time: "", notes: "" });
       setShowBook(false);
       await load();
-    } catch(e) { setErr(e.message); }
+    } catch(e) {
+      console.error("Space booking failed:", { message: e?.message, details: e?.details, hint: e?.hint, code: e?.code, error: e });
+      setErr(e?.message || e?.details || e?.hint || (e?.code ? `Booking failed (code ${e.code}).` : "Booking failed — check the console for details."));
+    }
     finally { setBusy(false); }
   }
 
