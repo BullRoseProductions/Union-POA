@@ -2705,6 +2705,13 @@ function MembersBoard({ me }) {
   ]);
   const [ocBusy, setOcBusy]           = useState(false);
   const [ocErr, setOcErr]             = useState("");
+  const [selected, setSelected] = useState(null);
+  const [editing, setEditing]   = useState(false);
+  const [ef, setEf]             = useState({});
+  const [editBusy, setEditBusy] = useState(false);
+  const [editErr, setEditErr]   = useState('');
+  const [adding, setAdding]     = useState(false);
+  const [af, setAf]             = useState({ full_name: '', email: '', badge: '', district: '', phone: '', access: ['Member'], standing: 'Good', status: 'active' });
 
   useEffect(() => { listMembers().then(setMembers); }, []);
 
@@ -2745,11 +2752,204 @@ function MembersBoard({ me }) {
     finally { setOcBusy(false); }
   }
 
+  async function saveEdit() {
+    setEditBusy(true); setEditErr('');
+    try {
+      await supabase.from('members').update({
+        full_name: ef.full_name,
+        badge: ef.badge || null,
+        district: ef.district || null,
+        phone: ef.phone || null,
+        standing: ef.standing,
+        status: ef.status,
+        dues_paid_through: ef.dues_paid_through || null,
+        member_since: ef.member_since || null,
+        availability_note: ef.availability_note || null,
+        preferred_contact: ef.preferred_contact || null,
+      }).eq('id', selected.id);
+      await listMembers().then(setMembers);
+      setSelected(prev => ({ ...prev, ...ef }));
+      setEditing(false);
+    } catch(e) { setEditErr(e.message); }
+    finally { setEditBusy(false); }
+  }
+
+  async function doAddMember() {
+    setEditBusy(true); setEditErr('');
+    try {
+      await supabase.from('members').insert({
+        department_id: me.department_id,
+        full_name: af.full_name.trim(),
+        email: af.email.trim(),
+        badge: af.badge || null,
+        district: af.district || null,
+        phone: af.phone || null,
+        standing: af.standing,
+        status: af.status,
+        access: af.access,
+      });
+      await listMembers().then(setMembers);
+      setAdding(false);
+      setAf({ full_name: '', email: '', badge: '', district: '', phone: '', access: ['Member'], standing: 'Good', status: 'active' });
+    } catch(e) { setEditErr(e.message); }
+    finally { setEditBusy(false); }
+  }
+
   if (!members) return <Spinner />;
+
+  if (selected) {
+    return (
+      <div>
+        <button onClick={() => { setSelected(null); setEditing(false); }} style={{ ...PS.btn, marginBottom: 16 }}>
+          <ArrowLeft size={13} /> Members
+        </button>
+        {editErr && <ErrBox msg={editErr} />}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 20 }}>
+          <div style={{ width: 52, height: 52, borderRadius: '50%', background: POA.accentSoft, color: POA.accent, display: 'grid', placeItems: 'center', fontWeight: 700, fontSize: 18, flexShrink: 0 }}>{initials(selected.full_name)}</div>
+          <div>
+            <h2 style={{ fontFamily: 'inherit', fontSize: 22, fontWeight: 700, color: POA.textPrimary, margin: 0 }}>{selected.full_name}</h2>
+            <div style={{ fontSize: 13, color: POA.textMuted }}>{selected.email}</div>
+          </div>
+          {canManage(me.access) && !editing && (
+            <button style={{ ...PS.btn, marginLeft: 'auto' }} onClick={() => { setEf({ full_name: selected.full_name, badge: selected.badge || '', district: selected.district || '', phone: selected.phone || '', standing: selected.standing || 'Good', status: selected.status || 'active', dues_paid_through: selected.dues_paid_through || '', member_since: selected.member_since || '', availability_note: selected.availability_note || '', preferred_contact: selected.preferred_contact || '' }); setEditing(true); }}>
+              <Pencil size={12} /> Edit
+            </button>
+          )}
+        </div>
+
+        {editing ? (
+          <Card>
+            <SectionTitle>Edit member</SectionTitle>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+              <div style={{ gridColumn: '1 / -1' }}>
+                <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Full name</div>
+                <input value={ef.full_name} onChange={e => setEf(x => ({ ...x, full_name: e.target.value }))} style={PS.input} />
+              </div>
+              <div>
+                <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Badge #</div>
+                <input value={ef.badge} onChange={e => setEf(x => ({ ...x, badge: e.target.value }))} style={PS.input} placeholder='e.g. 4471' />
+              </div>
+              <div>
+                <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>District</div>
+                <input value={ef.district} onChange={e => setEf(x => ({ ...x, district: e.target.value }))} style={PS.input} placeholder='e.g. 4' />
+              </div>
+              <div>
+                <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Phone</div>
+                <input value={ef.phone} onChange={e => setEf(x => ({ ...x, phone: e.target.value }))} style={PS.input} placeholder='(817) 555-0100' type='tel' />
+              </div>
+              <div>
+                <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Standing</div>
+                <select value={ef.standing} onChange={e => setEf(x => ({ ...x, standing: e.target.value }))} style={PS.input}>
+                  <option>Good</option>
+                  <option>Probationary</option>
+                  <option>Suspended</option>
+                  <option>Lapsed</option>
+                </select>
+              </div>
+              <div>
+                <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Status</div>
+                <select value={ef.status} onChange={e => setEf(x => ({ ...x, status: e.target.value }))} style={PS.input}>
+                  <option value='active'>Active</option>
+                  <option value='inactive'>Inactive</option>
+                  <option value='retired'>Retired</option>
+                </select>
+              </div>
+              <div>
+                <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Dues paid through</div>
+                <input type='date' value={ef.dues_paid_through} onChange={e => setEf(x => ({ ...x, dues_paid_through: e.target.value }))} style={PS.input} />
+              </div>
+              <div>
+                <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Member since</div>
+                <input type='date' value={ef.member_since} onChange={e => setEf(x => ({ ...x, member_since: e.target.value }))} style={PS.input} />
+              </div>
+              <div style={{ gridColumn: '1 / -1' }}>
+                <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Availability note</div>
+                <input value={ef.availability_note} onChange={e => setEf(x => ({ ...x, availability_note: e.target.value }))} style={PS.input} placeholder='e.g. Available Mon-Thu after 5pm' />
+              </div>
+              <div style={{ gridColumn: '1 / -1' }}>
+                <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Preferred contact</div>
+                <select value={ef.preferred_contact} onChange={e => setEf(x => ({ ...x, preferred_contact: e.target.value }))} style={PS.input}>
+                  <option value=''>— No preference —</option>
+                  <option value='phone'>Phone</option>
+                  <option value='text'>Text</option>
+                  <option value='email'>Email</option>
+                </select>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button style={PS.btnPrimary} disabled={editBusy} onClick={saveEdit}>{editBusy ? 'Saving…' : 'Save changes'}</button>
+              <button style={PS.btn} onClick={() => setEditing(false)}>Cancel</button>
+            </div>
+          </Card>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            {[
+              { label: 'Badge', value: selected.badge || '—' },
+              { label: 'District', value: selected.district || '—' },
+              { label: 'Phone', value: selected.phone || '—' },
+              { label: 'Standing', value: selected.standing || 'Good' },
+              { label: 'Status', value: selected.status || 'active' },
+              { label: 'Dues paid through', value: selected.dues_paid_through ? new Date(selected.dues_paid_through).toLocaleDateString(undefined, { month: 'long', year: 'numeric' }) : '—' },
+              { label: 'Member since', value: selected.member_since ? new Date(selected.member_since).toLocaleDateString(undefined, { month: 'long', year: 'numeric' }) : '—' },
+              { label: 'Preferred contact', value: selected.preferred_contact || '—' },
+            ].map(({ label, value }) => (
+              <Card key={label}>
+                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: POA.textMuted, marginBottom: 4 }}>{label}</div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: POA.textPrimary }}>{value}</div>
+              </Card>
+            ))}
+            {selected.availability_note && (
+              <Card style={{ gridColumn: '1 / -1' }}>
+                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: POA.textMuted, marginBottom: 4 }}>Availability</div>
+                <div style={{ fontSize: 13.5, color: POA.textSecondary }}>{selected.availability_note}</div>
+              </Card>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   const filtered = members.filter(m => !q || m.full_name?.toLowerCase().includes(q.toLowerCase()) || m.email?.toLowerCase().includes(q.toLowerCase()));
   return (
     <div>
       <PageTitle sub={isDeptAdmin(me.access) ? "Full roster — you can add and edit members" : "Your association's full roster"}>Members</PageTitle>
+
+      {canAdmin(me.access) && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 14 }}>
+          <button style={PS.btn} onClick={() => setAdding(v => !v)}><Plus size={13} /> Add member</button>
+        </div>
+      )}
+      {adding && canAdmin(me.access) && (
+        <Card style={{ marginBottom: 14 }}>
+          <SectionTitle>Add member</SectionTitle>
+          {editErr && <ErrBox msg={editErr} />}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Full name</div>
+              <input value={af.full_name} onChange={e => setAf(x => ({ ...x, full_name: e.target.value }))} style={PS.input} placeholder='Officer full name' />
+            </div>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Email</div>
+              <input type='email' value={af.email} onChange={e => setAf(x => ({ ...x, email: e.target.value }))} style={PS.input} placeholder='officer@fwpd.gov' />
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Badge #</div>
+              <input value={af.badge} onChange={e => setAf(x => ({ ...x, badge: e.target.value }))} style={PS.input} placeholder='e.g. 4471' />
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>District</div>
+              <input value={af.district} onChange={e => setAf(x => ({ ...x, district: e.target.value }))} style={PS.input} placeholder='e.g. 4' />
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button style={PS.btnPrimary} disabled={editBusy || !af.full_name.trim() || !af.email.trim()} onClick={doAddMember}>
+              {editBusy ? 'Adding…' : 'Add member'}
+            </button>
+            <button style={PS.btn} onClick={() => setAdding(false)}>Cancel</button>
+          </div>
+        </Card>
+      )}
 
       {/* On-call management card */}
       <Card style={{ marginBottom: 18, borderLeft: `3px solid ${POA.red}`, borderRadius: "0 14px 14px 0" }}>
@@ -2827,7 +3027,7 @@ function MembersBoard({ me }) {
 
       <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search name or email…" style={{ ...PS.input, marginBottom: 14 }} />
       {filtered.map(m => (
-        <Card key={m.id}>
+        <Card key={m.id} style={{ cursor: 'pointer', marginBottom: 8 }} onClick={() => { setSelected(m); setEditing(false); }}>
           <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
             <div style={{ width: 36, height: 36, borderRadius: "50%", background: POA.accentSoft, color: POA.accent, display: "grid", placeItems: "center", fontWeight: 700, fontSize: 13, flexShrink: 0 }}>{initials(m.full_name)}</div>
             <div style={{ flex: 1 }}>
