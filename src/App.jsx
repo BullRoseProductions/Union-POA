@@ -294,8 +294,8 @@ function PageTitle({ children, sub }) {
     {sub && <div style={{ fontSize: 13.5, color: POA.textMuted }}>{sub}</div>}
   </div>;
 }
-function Card({ children, style }) {
-  return <div style={{ ...PS.card, padding: "16px 18px", marginBottom: 10, ...style }}>{children}</div>;
+function Card({ children, style, onClick }) {
+  return <div style={{ ...PS.card, padding: "16px 18px", marginBottom: 10, ...style }} onClick={onClick}>{children}</div>;
 }
 function StatRow({ stats }) {
   return <div style={{ display: "grid", gridTemplateColumns: `repeat(${stats.length}, 1fr)`, gap: 10, marginBottom: 18 }}>
