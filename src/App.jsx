@@ -3048,7 +3048,7 @@ function MembersBoard({ me }) {
 
       <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search name or email…" style={{ ...PS.input, marginBottom: 14 }} />
       {filtered.map(m => (
-        <Card key={m.id} style={{ cursor: 'pointer', marginBottom: 8 }} onClick={() => { setSelected(m); setEditing(false); }}>
+        <Card key={m.id} style={{ cursor: 'pointer', marginBottom: 8 }} onClick={() => { alert(m.full_name); setSelected(m); setEditing(false); }}>
           <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
             <div style={{ width: 36, height: 36, borderRadius: "50%", background: POA.accentSoft, color: POA.accent, display: "grid", placeItems: "center", fontWeight: 700, fontSize: 13, flexShrink: 0 }}>{initials(m.full_name)}</div>
             <div style={{ flex: 1 }}>
