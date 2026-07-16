@@ -2810,7 +2810,7 @@ function MembersBoard({ me }) {
             <h2 style={{ fontFamily: 'inherit', fontSize: 22, fontWeight: 700, color: POA.textPrimary, margin: 0 }}>{selected.full_name}</h2>
             <div style={{ fontSize: 13, color: POA.textMuted }}>{selected.email}</div>
           </div>
-          {canManage(me.access) && !editing && (
+          {!editing && (
             <button style={{ ...PS.btn, marginLeft: 'auto' }} onClick={() => { setEf({ full_name: selected.full_name, badge: selected.badge || '', district: selected.district || '', phone: selected.phone || '', standing: selected.standing || 'Good', status: selected.status || 'active', dues_paid_through: selected.dues_paid_through || '', member_since: selected.member_since || '', availability_note: selected.availability_note || '', preferred_contact: selected.preferred_contact || '' }); setEditing(true); }}>
               <Pencil size={12} /> Edit
             </button>
@@ -2879,6 +2879,21 @@ function MembersBoard({ me }) {
             <div style={{ display: 'flex', gap: 8 }}>
               <button style={PS.btnPrimary} disabled={editBusy} onClick={saveEdit}>{editBusy ? 'Saving…' : 'Save changes'}</button>
               <button style={PS.btn} onClick={() => setEditing(false)}>Cancel</button>
+              <button style={{ ...PS.btn, color: POA.red, marginLeft: 'auto' }}
+                disabled={editBusy}
+                onClick={async () => {
+                  if (!confirm(selected.status === 'active' ? 'Deactivate this member?' : 'Reactivate this member?')) return;
+                  setEditBusy(true);
+                  try {
+                    await supabase.from('members').update({ status: selected.status === 'active' ? 'inactive' : 'active' }).eq('id', selected.id);
+                    await listMembers().then(setMembers);
+                    setSelected(prev => ({ ...prev, status: prev.status === 'active' ? 'inactive' : 'active' }));
+                    setEditing(false);
+                  } catch(e) { setEditErr(e.message); }
+                  finally { setEditBusy(false); }
+                }}>
+                {selected.status === 'active' ? 'Deactivate' : 'Reactivate'}
+              </button>
             </div>
           </Card>
         ) : (
