@@ -9530,21 +9530,21 @@ export default function App() {
     }
   }, [me]);
 
-  // which console to show — board users can toggle to preview the member view (viewAs); null = role default
-  const curViewAs  = me ? (viewAs || (isBoard(me.access) ? "board" : "member")) : null;
   const isPA = me ? hasAny(me.access, ["ProjectAdmin"]) : false;
-  const activeView = view || (me ? (isPA ? "pa_dash" : curViewAs === "board" ? "b_dash" : "m_dash") : null);
+  // which console to show — PA toggles pa/board/member; board users toggle board/member (viewAs); null = role default
+  const curViewAs  = me ? (viewAs || (isPA ? "pa" : isBoard(me.access) ? "board" : "member")) : null;
+  const activeView = view || (me ? (curViewAs === "pa" ? "pa_dash" : curViewAs === "board" ? "b_dash" : "m_dash") : null);
 
   // build dynamic nav from org_features
   const filteredMemberNav = MEMBER_NAV.filter(n => features[n.id] !== false);
   const filteredBoardNav  = BOARD_NAV.filter(n => features[n.id] !== false);
-  // PA gets the board nav here; the PA_NAV section is rendered separately below the divider
-  const nav = !me ? [] : (isPA || curViewAs === "board") ? filteredBoardNav : filteredMemberNav;
+  // PA + board modes get the board nav here; the PA_NAV section is rendered separately below the divider (PA mode only)
+  const nav = !me ? [] : (curViewAs === "pa" || curViewAs === "board") ? filteredBoardNav : filteredMemberNav;
 
   // only mount screens the current user can actually reach (state-preserving keep-alive)
   const mountedViews = ALL_VIEWS.filter(viewId => {
-    if (isPA) return true; // PA sees everything
-    if (viewId.startsWith('pa_')) return false; // non-PA never mounts PA screens
+    if (curViewAs === 'pa') return true; // PA mode sees everything (pa + board + shared)
+    if (viewId.startsWith('pa_')) return false; // board/member modes never mount PA screens
     if (curViewAs === 'board') return viewId === 'm_vote' || !viewId.startsWith('m_'); // board view: board screens + shared VoteLink
     if (curViewAs === 'member') return !viewId.startsWith('b_'); // member view: member + no board
     return true;
@@ -9597,16 +9597,16 @@ export default function App() {
           <div style={{ fontSize: 8, letterSpacing: '.2em', textTransform: 'uppercase', color: POA.textMuted, fontWeight: 600 }}>Before the Call</div>
           <div style={{ fontSize: 13.5, fontWeight: 700, color: POA.textPrimary, marginTop: 8 }}>{org?.name || "POA"}</div>
           <div style={{ fontSize: 11, color: POA.textMuted }}>{orgSettings.org_short_name || ""}</div>
-          <div style={{ fontSize: 11, color: POA.textMuted, marginTop: 2 }}>{curViewAs === "board" ? "Board Console" : "Member Hub"}</div>
+          <div style={{ fontSize: 11, color: POA.textMuted, marginTop: 2 }}>{curViewAs === "pa" ? "PA Console" : curViewAs === "board" ? "Board Console" : "Member Hub"}</div>
         </div>
 
-        {/* View-as toggle — board users can preview the member experience */}
+        {/* View-as toggle — board users preview member; PA switches pa/board/member */}
         {isBoard(me.access) && (
           <div style={{ padding: "12px 14px", borderBottom: `0.5px solid ${POA.hairline}`, display: "flex", gap: 6 }}>
-            {[
-              { key: "member", label: "Member" },
-              { key: "board",  label: "Board" },
-            ].map(opt => {
+            {(isPA
+              ? [{ key: "member", label: "Member" }, { key: "board", label: "Board" }, { key: "pa", label: "PA" }]
+              : [{ key: "member", label: "Member" }, { key: "board", label: "Board" }]
+            ).map(opt => {
               const on = curViewAs === opt.key;
               return (
                 <button key={opt.key}
@@ -9631,7 +9631,7 @@ export default function App() {
               </button>
             );
           })}
-          {isPA && (
+          {curViewAs === "pa" && (
             <>
               <div style={{ margin: "12px 0 6px", padding: "0 10px", fontSize: 10, fontWeight: 700, letterSpacing: ".14em", textTransform: "uppercase", color: POA.accentDim }}>
                 Project Admin
