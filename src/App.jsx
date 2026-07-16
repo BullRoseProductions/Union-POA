@@ -2941,6 +2941,11 @@ function MembersBoard({ me }) {
               <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>District</div>
               <input value={af.district} onChange={e => setAf(x => ({ ...x, district: e.target.value }))} style={PS.input} placeholder='e.g. 4' />
             </div>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Phone</div>
+              <input value={af.phone || ''} onChange={e => setAf(x => ({ ...x, phone: e.target.value }))}
+                style={PS.input} placeholder='(817) 555-0100' type='tel' />
+            </div>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <button style={PS.btnPrimary} disabled={editBusy || !af.full_name.trim() || !af.email.trim()} onClick={doAddMember}>
