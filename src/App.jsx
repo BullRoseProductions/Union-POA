@@ -1,3 +1,4 @@
+// B4C Union POA — build 2026-07-16
 // build-kick
 import React, { useState, useEffect, useRef } from "react";
 import {
