@@ -9516,7 +9516,11 @@ export default function App() {
   const [ready, setReady]       = useState(false);
   const [me, setMe]             = useState(undefined);
   const [org, setOrg]           = useState(null);
-  const [view, setView]         = useState(null); // null = use default for role
+  const [view, setViewRaw]      = useState(() => { try { return sessionStorage.getItem('b4c_last_view') || null; } catch { return null; } }); // null = role default; restored from sessionStorage
+  function setView(v) {
+    try { if (v) sessionStorage.setItem('b4c_last_view', v); else sessionStorage.removeItem('b4c_last_view'); } catch {}
+    setViewRaw(v);
+  }
   const [sideOpen, setSideOpen] = useState(false);
   const [viewAs, setViewAs]     = useState(null); // 'board' | 'member' — board users can preview the member view; null = role default
   const [features, setFeatures] = useState({});
@@ -9540,7 +9544,7 @@ export default function App() {
 
   useEffect(() => {
     if (!session) { setMe(undefined); return; }
-    getMe().then(m => { setMe(m); setView(null); }).catch(() => setMe(null));
+    getMe().then(m => { setMe(m); }).catch(() => setMe(null)); // view is restored from sessionStorage + clamped below
   }, [session]);
 
   useEffect(() => {
@@ -9554,7 +9558,6 @@ export default function App() {
   const isPA = me ? hasAny(me.access, ["ProjectAdmin"]) : false;
   // which console to show — PA toggles pa/board/member; board users toggle board/member (viewAs); null = role default
   const curViewAs  = me ? (viewAs || (isPA ? "pa" : isBoard(me.access) ? "board" : "member")) : null;
-  const activeView = view || (me ? (curViewAs === "pa" ? "pa_dash" : curViewAs === "board" ? "b_dash" : "m_dash") : null);
 
   // build dynamic nav from org_features
   const filteredMemberNav = MEMBER_NAV.filter(n => features[n.id] !== false);
@@ -9570,6 +9573,10 @@ export default function App() {
     if (curViewAs === 'member') return !viewId.startsWith('b_'); // member view: member + no board
     return true;
   });
+
+  // restored view (from sessionStorage) if the current user/mode can reach it, else the role/mode default
+  const roleDefault = me ? (curViewAs === "pa" ? "pa_dash" : curViewAs === "board" ? "b_dash" : "m_dash") : null;
+  const activeView  = (view && mountedViews.includes(view)) ? view : roleDefault;
 
   if (!ready) return <Loading />;
   if (!session) return <Login />;
