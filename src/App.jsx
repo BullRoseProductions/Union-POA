@@ -4860,6 +4860,11 @@ function BoardContinuity({ me }) {
   const [err, setErr]             = useState("");
   const [busy, setBusy]           = useState(false);
   const [expandedId, setExpandedId] = useState(null);
+  const [generating, setGenerating]   = useState(null); // position being packaged
+  const [packageOut, setPackageOut]   = useState('');
+  const [packageBusy, setPackageBusy] = useState(false);
+  const [packageErr, setPackageErr]   = useState('');
+  const [savingPkg, setSavingPkg]     = useState(false);
 
   const blank = { title: "", holder_member_id: "", holder_name: "", term_start: "", term_end: "", status: "active", succession_notes: "", sort: 0 };
   const [f, setF] = useState(blank);
@@ -4925,6 +4930,45 @@ function BoardContinuity({ me }) {
     if (!confirm("Archive this position? It won't show on the board roster but stays in history.")) return;
     try { await archiveBoardPosition(id); await load(); }
     catch(e) { setErr(e.message); }
+  }
+
+  async function generatePackage(position) {
+    setPackageBusy(true); setPackageErr(''); setPackageOut('');
+    try {
+      const holder = position.holder_member_id
+        ? members.find(m => m.id === position.holder_member_id)
+        : null;
+      const sys = `You write professional board member onboarding packages for a police officers' association. Write a clear, practical handoff document for an incoming officer taking over a board position. Format with sections: Role Overview, Key Responsibilities, Ongoing Commitments, Important Contacts, Succession Notes (from outgoing officer), and First 30 Days. Professional tone, actionable, under 600 words.`;
+      const prompt = `Association: ${me.department_id}
+Position: ${position.title}
+${holder ? `Outgoing officer: ${holder.full_name}` : ''}
+Term: ${position.term_start ? `Started ${fmtShort(position.term_start)}` : 'Unknown start'}${position.term_end ? `, ending ${fmtShort(position.term_end)}` : ''}
+Status: ${position.status}
+
+Succession notes from outgoing officer:
+${position.succession_notes || 'No succession notes recorded. Use general best practices for this role.'}
+
+Write a comprehensive onboarding package for the incoming ${position.title}.`;
+      const text = await callClaudeAI(sys, prompt);
+      setPackageOut(text);
+    } catch(e) { setPackageErr('Could not generate package. Check ANTHROPIC_API_KEY.'); }
+    finally { setPackageBusy(false); }
+  }
+
+  async function savePackage(position) {
+    if (!packageOut) return;
+    setSavingPkg(true);
+    try {
+      await supabase.from('ai_outputs').insert({
+        department_id: me.department_id,
+        feature: 'continuity',
+        title: `${position.title} — Onboarding Package`,
+        ai_text: packageOut,
+        created_by: me.id,
+      });
+      setGenerating(null); setPackageOut('');
+    } catch(e) { setPackageErr(e.message); }
+    finally { setSavingPkg(false); }
   }
 
   const statusColor = { active: POA.accent, vacant: POA.amber, emeritus: POA.textMuted };
@@ -5051,7 +5095,8 @@ function BoardContinuity({ me }) {
           : (p.holder_name || null);
         const expanded = expandedId === p.id;
         return (
-          <Card key={p.id} style={{ marginBottom: 10 }}>
+          <React.Fragment key={p.id}>
+          <Card style={{ marginBottom: 10 }}>
             <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
               <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: 700, fontSize: 15, color: POA.textPrimary, marginBottom: 3 }}>
@@ -5077,6 +5122,12 @@ function BoardContinuity({ me }) {
                     <Pencil size={11} />
                   </button>
                 )}
+                {manage && (p.holder_member_id || p.holder_name) && generating !== p.id && (
+                  <button style={{ ...PS.btn, fontSize: 11, padding: '4px 10px' }}
+                    onClick={() => { setGenerating(p.id); setPackageOut(''); setPackageErr(''); }}>
+                    <Sparkles size={11} /> Onboarding package
+                  </button>
+                )}
               </div>
             </div>
             {p.succession_notes && (
@@ -5094,6 +5145,58 @@ function BoardContinuity({ me }) {
               </>
             )}
           </Card>
+          {generating === p.id && (
+            <Card style={{ marginBottom: 10, borderLeft: `3px solid ${POA.accent}`, borderRadius: '0 13px 13px 0' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.12em', textTransform: 'uppercase', color: POA.accent, marginBottom: 2 }}>
+                    <Sparkles size={11} style={{ verticalAlign: '-1px' }} /> Onboarding package
+                  </div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: POA.textPrimary }}>{p.title}</div>
+                </div>
+                <button style={PS.btn} onClick={() => { setGenerating(null); setPackageOut(''); }}>
+                  <X size={13} />
+                </button>
+              </div>
+              {packageErr && <ErrBox msg={packageErr} />}
+              {!packageOut ? (
+                <div>
+                  <div style={{ fontSize: 13, color: POA.textMuted, marginBottom: 12, lineHeight: 1.6 }}>
+                    AI will draft an onboarding package using the succession notes for this position. The incoming officer gets a practical guide to hit the ground running.
+                  </div>
+                  <button style={PS.btnPrimary} disabled={packageBusy} onClick={() => generatePackage(p)}>
+                    {packageBusy ? <><Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> Generating…</> : <><Sparkles size={13} /> Generate package</>}
+                  </button>
+                  {!p.succession_notes && (
+                    <div style={{ fontSize: 11.5, color: POA.amber, marginTop: 8, fontStyle: 'italic' }}>
+                      Tip: Add succession notes to this position first for a more personalized package.
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div>
+                  <div style={{ background: 'rgba(0,0,0,.25)', border: `0.5px solid ${POA.hairline}`, borderRadius: 10, padding: '14px 16px', marginBottom: 12 }}>
+                    <FundraisingPlanDisplay text={packageOut} />
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button style={PS.btnPrimary} disabled={savingPkg} onClick={() => savePackage(p)}>
+                      {savingPkg ? 'Saving…' : <><FileText size={13} /> Save to Documents</>}
+                    </button>
+                    <button style={PS.btn} onClick={() => generatePackage(p)}>
+                      <Sparkles size={13} /> Regenerate
+                    </button>
+                    <button style={{ ...PS.btn, marginLeft: 'auto' }} onClick={() => { setGenerating(null); setPackageOut(''); }}>
+                      Discard
+                    </button>
+                  </div>
+                  <div style={{ fontSize: 11.5, color: POA.textMuted, marginTop: 8, fontStyle: 'italic' }}>
+                    Saved packages appear in Agenda & Minutes under saved documents.
+                  </div>
+                </div>
+              )}
+            </Card>
+          )}
+          </React.Fragment>
         );
       })}
     </div>
