@@ -978,13 +978,26 @@ function WhoToCall({ me }) {
                   </div>
                   {(() => {
                     const linkedMember = c.member_id ? (members || []).find(m => m.id === c.member_id) : null;
-                    const avail = linkedMember?.availability_note;
-                    return avail ? (
-                      <div style={{ fontSize: 12, color: POA.textMuted, marginTop: 8, padding: '6px 10px', background: 'rgba(70,199,147,.06)', border: '0.5px solid rgba(70,199,147,.2)', borderRadius: 8 }}>
-                        <span style={{ fontSize: 10, fontWeight: 700, color: POA.green, textTransform: 'uppercase', letterSpacing: '.1em', marginRight: 6 }}>Available</span>
-                        {avail}
+                    if (!linkedMember?.availability_note) return null;
+                    let avail = null;
+                    try { avail = JSON.parse(linkedMember.availability_note); } catch { return null; }
+                    const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+                    const TIMES = { morning: 'mornings', afternoon: 'afternoons', evening: 'evenings' };
+                    const parts = DAYS.filter(d => avail.schedule?.[d]?.length > 0)
+                      .map(d => `${d} ${avail.schedule[d].map(t => TIMES[t]).join(' & ')}`);
+                    const blocked = (avail.blocked || []).filter(d => d >= new Date().toISOString().split('T')[0]);
+                    if (parts.length === 0 && blocked.length === 0) return null;
+                    return (
+                      <div style={{ fontSize: 12, color: POA.textMuted, marginTop: 8, padding: '8px 12px', background: 'rgba(70,199,147,.06)', border: '0.5px solid rgba(70,199,147,.2)', borderRadius: 8 }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: POA.green, textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 4 }}>Availability</div>
+                        {parts.length > 0 && <div style={{ marginBottom: 3 }}>{parts.join(' · ')}</div>}
+                        {blocked.length > 0 && (
+                          <div style={{ color: POA.red, fontSize: 11 }}>
+                            Unavailable: {blocked.map(d => new Date(d + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' })).join(', ')}
+                          </div>
+                        )}
                       </div>
-                    ) : null;
+                    );
                   })()}
                   <button style={{ ...PS.btn, width: '100%', justifyContent: 'center', marginTop: 8, fontSize: 12 }}
                     onClick={() => { setRequesting(c); setRf({ subject: '', body: '', phone: me.phone || '' }); setReqErr(''); }}>
@@ -9654,9 +9667,9 @@ function MyProfile({ me }) {
   const [replyText, setReplyText]   = useState('');
   const [replyBusy, setReplyBusy]   = useState(false);
   const [f, setF] = useState({
-    availability_note: me.availability_note || '',
     preferred_contact: me.preferred_contact || '',
     phone: me.phone || '',
+    availability: me.availability_note ? (() => { try { return JSON.parse(me.availability_note); } catch { return { schedule: {}, blocked: [] }; } })() : { schedule: {}, blocked: [] },
   });
 
   useEffect(() => {
@@ -9682,7 +9695,7 @@ function MyProfile({ me }) {
     setSaving(true); setErr(''); setSaved(false);
     try {
       await supabase.from('members').update({
-        availability_note: f.availability_note.trim() || null,
+        availability_note: JSON.stringify(f.availability),
         preferred_contact: f.preferred_contact || null,
         phone: f.phone.trim() || null,
       }).eq('id', me.id);
@@ -9723,6 +9736,15 @@ function MyProfile({ me }) {
     finally { setReplyBusy(false); }
   }
 
+  function formatAvailability(avail) {
+    if (!avail?.schedule) return null;
+    const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+    const TIMES = { morning: 'mornings', afternoon: 'afternoons', evening: 'evenings' };
+    const parts = DAYS.filter(d => avail.schedule[d]?.length > 0)
+      .map(d => `${d} ${avail.schedule[d].map(t => TIMES[t]).join(' & ')}`);
+    return parts.length > 0 ? parts.join(', ') : null;
+  }
+
   const pendingRequests = requests.filter(r => !r.status || r.status === 'pending');
   const handledRequests = requests.filter(r => r.status && r.status !== 'pending');
   const today = new Date();
@@ -9750,15 +9772,71 @@ function MyProfile({ me }) {
         </div>
       )}
 
-      {/* Availability settings */}
       <Card style={{ marginBottom: 14 }}>
         <SectionTitle>My availability</SectionTitle>
-        <div style={{ marginBottom: 10 }}>
-          <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Availability note</div>
-          <input value={f.availability_note} onChange={e => setF(x => ({ ...x, availability_note: e.target.value }))}
-            style={PS.input} placeholder='e.g. Available Mon–Thu after 5pm, call or text first' />
-          <div style={{ fontSize: 11, color: POA.textMuted, marginTop: 4 }}>Members see this when they view your contact card.</div>
+        <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 12 }}>
+          Members see these times when they request a meeting with you.
         </div>
+
+        {/* Weekly schedule */}
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: POA.textMuted, marginBottom: 8 }}>Weekly availability</div>
+          {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(day => (
+            <div key={day} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, padding: '8px 12px', background: 'rgba(255,255,255,.03)', border: `0.5px solid ${POA.hairline}`, borderRadius: 8 }}>
+              <div style={{ width: 36, fontSize: 12, fontWeight: 700, color: POA.textPrimary }}>{day}</div>
+              {['morning','afternoon','evening'].map(time => {
+                const selected = (f.availability.schedule[day] || []).includes(time);
+                return (
+                  <button key={time}
+                    onClick={() => {
+                      const current = f.availability.schedule[day] || [];
+                      const updated = selected ? current.filter(t => t !== time) : [...current, time];
+                      setF(x => ({ ...x, availability: { ...x.availability, schedule: { ...x.availability.schedule, [day]: updated } } }));
+                    }}
+                    style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6, border: `0.5px solid ${selected ? POA.accent : POA.hairline2}`, background: selected ? POA.accentSoft : 'transparent', color: selected ? POA.accent : POA.textMuted, cursor: 'pointer', fontWeight: selected ? 700 : 400 }}>
+                    {time.charAt(0).toUpperCase() + time.slice(1)}
+                  </button>
+                );
+              })}
+              {(f.availability.schedule[day] || []).length > 0 && (
+                <button onClick={() => setF(x => ({ ...x, availability: { ...x.availability, schedule: { ...x.availability.schedule, [day]: [] } } }))}
+                  style={{ marginLeft: 'auto', fontSize: 11, color: POA.textMuted, background: 'none', border: 'none', cursor: 'pointer' }}>
+                  Clear
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Blocked dates */}
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: POA.textMuted, marginBottom: 8 }}>Blocked dates</div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+            {(f.availability.blocked || []).map((date, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'rgba(239,106,100,.1)', border: '0.5px solid rgba(239,106,100,.3)', borderRadius: 6, padding: '3px 10px', fontSize: 12, color: POA.red }}>
+                {new Date(date + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                <button onClick={() => setF(x => ({ ...x, availability: { ...x.availability, blocked: x.availability.blocked.filter((_, j) => j !== i) } }))}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: POA.red, fontSize: 14, lineHeight: 1, padding: '0 2px' }}>×</button>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input type='date' id='block-date-input' style={{ ...PS.input, flex: 1 }}
+              min={new Date().toISOString().split('T')[0]} />
+            <button style={PS.btn} onClick={() => {
+              const input = document.getElementById('block-date-input');
+              if (!input?.value) return;
+              if (!(f.availability.blocked || []).includes(input.value)) {
+                setF(x => ({ ...x, availability: { ...x.availability, blocked: [...(x.availability.blocked || []), input.value].sort() } }));
+              }
+              input.value = '';
+            }}>
+              <Plus size={13} /> Block date
+            </button>
+          </div>
+        </div>
+
+        {/* Preferred contact */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
           <div>
             <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Preferred contact</div>
@@ -9775,7 +9853,8 @@ function MyProfile({ me }) {
               style={PS.input} placeholder='(817) 555-0100' type='tel' />
           </div>
         </div>
-        <button style={{ ...PS.btnPrimary }} disabled={saving} onClick={saveProfile}>
+
+        <button style={PS.btnPrimary} disabled={saving} onClick={saveProfile}>
           {saving ? 'Saving…' : 'Save profile'}
         </button>
       </Card>
