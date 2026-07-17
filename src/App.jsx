@@ -2877,7 +2877,6 @@ function MembersBoard({ me }) {
         status: ef.status,
         dues_paid_through: ef.dues_paid_through || null,
         member_since: ef.member_since || null,
-        availability_note: ef.availability_note || null,
         preferred_contact: ef.preferred_contact || null,
       }).eq('id', selected.id);
       await listMembers().then(setMembers);
@@ -2976,8 +2975,23 @@ function MembersBoard({ me }) {
                 <input type='date' value={ef.member_since} onChange={e => setEf(x => ({ ...x, member_since: e.target.value }))} style={PS.input} />
               </div>
               <div style={{ gridColumn: '1 / -1' }}>
-                <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Availability note</div>
-                <input value={ef.availability_note} onChange={e => setEf(x => ({ ...x, availability_note: e.target.value }))} style={PS.input} placeholder='e.g. Available Mon-Thu after 5pm' />
+                <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Availability</div>
+                <div style={{ ...PS.input, background: 'rgba(255,255,255,.03)', color: POA.textMuted, fontSize: 12, fontStyle: 'italic', cursor: 'default' }}>
+                  {(() => {
+                    if (!selected?.availability_note) return 'Not set — officer manages this in My Profile';
+                    try {
+                      const avail = JSON.parse(selected.availability_note);
+                      const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+                      const TIMES = { morning: 'mornings', afternoon: 'afternoons', evening: 'evenings' };
+                      const parts = DAYS.filter(d => avail.schedule?.[d]?.length > 0)
+                        .map(d => `${d} ${avail.schedule[d].map(t => TIMES[t]).join(' & ')}`);
+                      return parts.length > 0 ? parts.join(' · ') : 'No schedule set';
+                    } catch { return selected.availability_note || 'Not set'; }
+                  })()}
+                </div>
+                <div style={{ fontSize: 11, color: POA.textMuted, marginTop: 4, fontStyle: 'italic' }}>
+                  Officers set their own availability in My Profile.
+                </div>
               </div>
               <div style={{ gridColumn: '1 / -1' }}>
                 <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Preferred contact</div>
