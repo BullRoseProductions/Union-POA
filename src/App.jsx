@@ -8,7 +8,7 @@ import {
   BookOpen, Mail, Users, BarChart3, LogOut, Menu, X, ChevronRight, ChevronDown, ChevronUp,
   Sparkles, CheckCircle2, Clock, Loader2, Send, Building2,
   Plus, Pencil, Trash2, ArrowLeft, RefreshCw, FileText, QrCode, Settings, Upload,
-  KeyRound, Play,
+  KeyRound, Play, UserCircle,
 } from "lucide-react";
 import { supabase } from "./lib/supabase";
 import { QRCodeCanvas } from "qrcode.react";
@@ -186,6 +186,7 @@ const MEMBER_NAV = [
 
 const BOARD_NAV = [
   { id: "b_dash",         label: "Dashboard",        Icon: LayoutDashboard },
+  { id: "b_profile",      label: "My Profile",       Icon: UserCircle },
   { id: "b_attendance",   label: "Meetings & Events", Icon: CalendarCheck },
   { id: "b_meetings",     label: "Agenda & Minutes",  Icon: ClipboardList },
   { id: "b_stipend",      label: "Stipend Log",       Icon: DollarSign },
@@ -8675,7 +8676,7 @@ const ALL_VIEWS = [
   'm_dash','m_call','m_ask','m_partners','m_community',
   'm_benefits','m_events','m_card','m_vote','m_store','m_booking','m_correspondence','m_documents',
   // board views
-  'b_dash','b_attendance','b_meetings','b_stipend','b_causes',
+  'b_dash','b_profile','b_attendance','b_meetings','b_stipend','b_causes',
   'b_fundraising','b_social','b_building','b_continuity',
   'b_correspondence','b_community','b_members','b_ledger','b_documents','b_settings',
   // pa views
@@ -9545,6 +9546,254 @@ function EventSpaceBooking({ me }) {
 /* ================================================================
    SCREEN ROUTER
    ================================================================ */
+function MyProfile({ me }) {
+  const [saving, setSaving]     = useState(false);
+  const [saved, setSaved]       = useState(false);
+  const [err, setErr]           = useState('');
+  const [actions, setActions]   = useState([]);
+  const [requests, setRequests] = useState([]);
+  const [responding, setResponding] = useState(null);
+  const [replyText, setReplyText]   = useState('');
+  const [replyBusy, setReplyBusy]   = useState(false);
+  const [f, setF] = useState({
+    availability_note: me.availability_note || '',
+    preferred_contact: me.preferred_contact || '',
+    phone: me.phone || '',
+  });
+
+  useEffect(() => {
+    // Load my open action items
+    supabase.from('action_items')
+      .select('*, members!action_items_owner_member_id_fkey(full_name)')
+      .eq('department_id', me.department_id)
+      .eq('owner_member_id', me.id)
+      .eq('status', 'open')
+      .order('due_date', { ascending: true, nullsFirst: false })
+      .then(({ data }) => setActions(data || []));
+
+    // Load meeting requests addressed to me
+    supabase.from('correspondence')
+      .select('*, members!correspondence_member_id_fkey(full_name, phone)')
+      .eq('department_id', me.department_id)
+      .eq('kind', 'meeting_request')
+      .eq('assigned_to', me.id)
+      .order('created_at', { ascending: false })
+      .then(({ data }) => setRequests(data || []));
+  }, [me.id]);
+
+  async function saveProfile() {
+    setSaving(true); setErr(''); setSaved(false);
+    try {
+      await supabase.from('members').update({
+        availability_note: f.availability_note.trim() || null,
+        preferred_contact: f.preferred_contact || null,
+        phone: f.phone.trim() || null,
+      }).eq('id', me.id);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch(e) { setErr(e.message); }
+    finally { setSaving(false); }
+  }
+
+  async function doRespond(req, status) {
+    setReplyBusy(true);
+    try {
+      // Update the request status
+      await supabase.from('correspondence').update({ status }).eq('id', req.id);
+      // Send reply back to member
+      const replyBody = status === 'confirmed'
+        ? `Your meeting request has been accepted. ${replyText ? replyText : 'I\'ll be in touch to confirm the details.'}`
+        : status === 'proposed'
+        ? replyText || 'That time doesn\'t work for me — let me suggest an alternative.'
+        : replyText || 'I\'m unable to meet at this time. Please reach out again if you need assistance.';
+      await supabase.from('correspondence').insert({
+        department_id: me.department_id,
+        member_id: req.member_id,
+        kind: 'reply',
+        subject: `Re: ${req.subject}`,
+        body: replyBody,
+        created_by: me.id,
+      });
+      setResponding(null); setReplyText('');
+      // Reload requests
+      const { data } = await supabase.from('correspondence')
+        .select('*, members!correspondence_member_id_fkey(full_name, phone)')
+        .eq('department_id', me.department_id)
+        .eq('kind', 'meeting_request')
+        .eq('assigned_to', me.id)
+        .order('created_at', { ascending: false });
+      setRequests(data || []);
+    } catch(e) { setErr(e.message); }
+    finally { setReplyBusy(false); }
+  }
+
+  const pendingRequests = requests.filter(r => !r.status || r.status === 'pending');
+  const handledRequests = requests.filter(r => r.status && r.status !== 'pending');
+  const today = new Date();
+  const isOverdue = d => d && new Date(d) < today;
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20 }}>
+        <div>
+          <p style={{ ...PS.kicker, marginBottom: 4 }}>My Profile</p>
+          <h1 style={{ fontFamily: 'inherit', fontSize: 24, fontWeight: 700, color: POA.textPrimary, margin: 0 }}>
+            {me.full_name}
+          </h1>
+          <div style={{ fontSize: 13, color: POA.textMuted, marginTop: 4 }}>
+            {(me.access || []).filter(r => r !== 'Member' && r !== 'ProjectAdmin').join(' · ')}
+            {me.badge ? ` · Badge ${me.badge}` : ''}
+          </div>
+        </div>
+      </div>
+
+      <ErrBox msg={err} />
+      {saved && (
+        <div style={{ background: 'rgba(70,199,147,.1)', border: '0.5px solid rgba(70,199,147,.3)', borderRadius: 10, padding: '10px 14px', fontSize: 13, color: POA.greenText, marginBottom: 14 }}>
+          ✓ Profile saved.
+        </div>
+      )}
+
+      {/* Availability settings */}
+      <Card style={{ marginBottom: 14 }}>
+        <SectionTitle>My availability</SectionTitle>
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Availability note</div>
+          <input value={f.availability_note} onChange={e => setF(x => ({ ...x, availability_note: e.target.value }))}
+            style={PS.input} placeholder='e.g. Available Mon–Thu after 5pm, call or text first' />
+          <div style={{ fontSize: 11, color: POA.textMuted, marginTop: 4 }}>Members see this when they view your contact card.</div>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
+          <div>
+            <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Preferred contact</div>
+            <select value={f.preferred_contact} onChange={e => setF(x => ({ ...x, preferred_contact: e.target.value }))} style={PS.input}>
+              <option value=''>— No preference —</option>
+              <option value='phone'>Phone call</option>
+              <option value='text'>Text message</option>
+              <option value='email'>Email</option>
+            </select>
+          </div>
+          <div>
+            <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Phone number</div>
+            <input value={f.phone} onChange={e => setF(x => ({ ...x, phone: e.target.value }))}
+              style={PS.input} placeholder='(817) 555-0100' type='tel' />
+          </div>
+        </div>
+        <button style={{ ...PS.btnPrimary }} disabled={saving} onClick={saveProfile}>
+          {saving ? 'Saving…' : 'Save profile'}
+        </button>
+      </Card>
+
+      {/* Meeting requests */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+        <p style={{ ...PS.kicker, margin: 0 }}>
+          Meeting requests {pendingRequests.length > 0 && (
+            <span style={{ background: POA.red, color: '#fff', fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 999, marginLeft: 6 }}>{pendingRequests.length}</span>
+          )}
+        </p>
+      </div>
+
+      {requests.length === 0 ? (
+        <Card style={{ marginBottom: 14 }}>
+          <div style={{ color: POA.textMuted, fontSize: 13.5 }}>No meeting requests yet.</div>
+        </Card>
+      ) : (
+        <>
+          {pendingRequests.map(req => (
+            <Card key={req.id} style={{ marginBottom: 10, borderLeft: `3px solid ${POA.amber}`, borderRadius: '0 13px 13px 0' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, marginBottom: 8 }}>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 14, color: POA.textPrimary }}>{req.members?.full_name || 'Member'}</div>
+                  <div style={{ fontSize: 12, color: POA.textMuted, marginTop: 2 }}>
+                    {req.members?.phone && `${req.members.phone} · `}
+                    {fmtDate(req.created_at)}
+                  </div>
+                </div>
+                <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 999, background: 'rgba(240,180,74,.14)', color: POA.amber }}>Pending</span>
+              </div>
+              <div style={{ fontWeight: 600, fontSize: 13.5, color: POA.textPrimary, marginBottom: 4 }}>{req.subject}</div>
+              {req.body && <div style={{ fontSize: 13, color: POA.textSecondary, lineHeight: 1.6, marginBottom: 12 }}>{req.body}</div>}
+
+              {responding === req.id ? (
+                <div>
+                  <textarea value={replyText} onChange={e => setReplyText(e.target.value)}
+                    style={{ ...PS.textarea, minHeight: 70, marginBottom: 8 }}
+                    placeholder={
+                      responding === req.id + '_propose'
+                        ? 'Suggest an alternate time — e.g. "Friday after 6pm works for me, text me to confirm."'
+                        : responding === req.id + '_decline'
+                        ? 'Optional note — e.g. "Please reach out to the VP for this type of concern."'
+                        : 'Optional message to send with your confirmation…'
+                    } />
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button style={{ ...PS.btnPrimary, fontSize: 12 }} disabled={replyBusy}
+                      onClick={() => doRespond(req, responding.startsWith(req.id + '_propose') ? 'proposed' : responding.startsWith(req.id + '_decline') ? 'declined' : 'confirmed')}>
+                      {replyBusy ? 'Sending…' : 'Send reply'}
+                    </button>
+                    <button style={{ ...PS.btn, fontSize: 12 }} onClick={() => { setResponding(null); setReplyText(''); }}>Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  <button style={{ ...PS.btnPrimary, fontSize: 12, background: 'rgba(70,199,147,.15)', color: POA.green, border: '0.5px solid rgba(70,199,147,.3)' }}
+                    onClick={() => setResponding(req.id)}>
+                    <CheckCircle2 size={12} /> Accept
+                  </button>
+                  <button style={{ ...PS.btn, fontSize: 12 }}
+                    onClick={() => setResponding(req.id + '_propose')}>
+                    <Clock size={12} /> Propose alternate time
+                  </button>
+                  <button style={{ ...PS.btn, fontSize: 12, color: POA.red }}
+                    onClick={() => setResponding(req.id + '_decline')}>
+                    Decline
+                  </button>
+                </div>
+              )}
+            </Card>
+          ))}
+
+          {handledRequests.length > 0 && (
+            <div style={{ marginTop: 8 }}>
+              <p style={{ ...PS.kicker, margin: '0 0 8px' }}>Handled</p>
+              {handledRequests.map(req => (
+                <div key={req.id} style={{ ...PS.card, padding: '11px 14px', marginBottom: 6, opacity: .65, display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 600, fontSize: 13, color: POA.textPrimary }}>{req.subject}</div>
+                    <div style={{ fontSize: 11, color: POA.textMuted }}>{req.members?.full_name} · {fmtDate(req.created_at)}</div>
+                  </div>
+                  <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: POA.accentSoft, color: POA.accent }}>{req.status}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* My open action items */}
+      <p style={{ ...PS.kicker, margin: '16px 0 8px' }}>My open action items ({actions.length})</p>
+      {actions.length === 0 ? (
+        <Card>
+          <div style={{ color: POA.textMuted, fontSize: 13.5 }}>No open action items assigned to you.</div>
+        </Card>
+      ) : actions.map(a => (
+        <div key={a.id} style={{ ...PS.card, padding: '12px 14px', marginBottom: 8, display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 600, fontSize: 13.5, color: POA.textPrimary }}>{a.title}</div>
+            {a.due_date && (
+              <div style={{ fontSize: 12, color: isOverdue(a.due_date) ? POA.red : POA.textMuted, marginTop: 3 }}>
+                Due {fmtShort(a.due_date)}
+              </div>
+            )}
+          </div>
+          {isOverdue(a.due_date) && (
+            <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 999, background: 'rgba(240,180,74,.14)', color: POA.amber, flexShrink: 0 }}>Overdue</span>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function renderScreen(view, { me, org, setView }) {
   if (view.startsWith("m_")) {
     switch (view) {
@@ -9566,6 +9815,7 @@ function renderScreen(view, { me, org, setView }) {
   }
   switch (view) {
     case "b_dash":          return <BoardDash me={me} org={org} setView={setView} />;
+    case "b_profile":       return <MyProfile me={me} />;
     case "b_meetings":      return <AgendaMinutes me={me} org={org} />;
     case "b_causes":        return <CausesBoard me={me} />;
     case "b_members":       return <MembersBoard me={me} />;
