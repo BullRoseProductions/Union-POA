@@ -9686,6 +9686,7 @@ function MyProfile({ me }) {
   const [responding, setResponding] = useState(null);
   const [replyText, setReplyText]   = useState('');
   const [replyBusy, setReplyBusy]   = useState(false);
+  const [newBlockDate, setNewBlockDate] = useState('');
   const [f, setF] = useState({
     preferred_contact: me.preferred_contact || '',
     phone: me.phone || '',
@@ -9873,16 +9874,18 @@ function MyProfile({ me }) {
             ))}
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
-            <input type='date' id='block-date-input' style={{ ...PS.input, flex: 1 }}
-              min={new Date().toISOString().split('T')[0]} />
-            <button style={PS.btn} onClick={() => {
-              const input = document.getElementById('block-date-input');
-              if (!input?.value) return;
-              if (!(f.availability.blocked || []).includes(input.value)) {
-                setF(x => ({ ...x, availability: { ...x.availability, blocked: [...(x.availability.blocked || []), input.value].sort() } }));
-              }
-              input.value = '';
-            }}>
+            <input type='date' value={newBlockDate}
+              min={new Date().toISOString().split('T')[0]}
+              onChange={e => setNewBlockDate(e.target.value)}
+              style={{ ...PS.input, flex: 1 }} />
+            <button style={PS.btn} disabled={!newBlockDate}
+              onClick={() => {
+                if (!newBlockDate) return;
+                if (!(f.availability.blocked || []).includes(newBlockDate)) {
+                  setF(x => ({ ...x, availability: { ...x.availability, blocked: [...(x.availability.blocked || []), newBlockDate].sort() } }));
+                }
+                setNewBlockDate('');
+              }}>
               <Plus size={13} /> Block date
             </button>
           </div>
