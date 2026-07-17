@@ -988,7 +988,10 @@ function WhoToCall({ me }) {
                         const slots = avail.schedule[d].slots || [{ start: avail.schedule[d].start, end: avail.schedule[d].end }];
                         return `${d} ${slots.map(s => `${fmt(s.start)}–${fmt(s.end)}`).join(', ')}`;
                       });
-                    const blocked = (avail.blocked || []).filter(d => d >= new Date().toISOString().split('T')[0]);
+                    const blocked = (avail.blocked || []).filter(entry => {
+                      const end = entry.includes('/') ? entry.split('/')[1] : entry;
+                      return end >= new Date().toISOString().split('T')[0];
+                    });
                     if (parts.length === 0 && blocked.length === 0) return null;
                     return (
                       <div style={{ fontSize: 12, color: POA.textMuted, marginTop: 8, padding: '8px 12px', background: 'rgba(70,199,147,.06)', border: '0.5px solid rgba(70,199,147,.2)', borderRadius: 8 }}>
@@ -996,7 +999,11 @@ function WhoToCall({ me }) {
                         {parts.length > 0 && <div style={{ marginBottom: 3 }}>{parts.join(' · ')}</div>}
                         {blocked.length > 0 && (
                           <div style={{ color: POA.red, fontSize: 11 }}>
-                            Unavailable: {blocked.map(d => new Date(d + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' })).join(', ')}
+                            Unavailable: {blocked.map(entry => {
+                              const [start, end] = entry.includes('/') ? entry.split('/') : [entry, null];
+                              const fmtD = d => new Date(d + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+                              return end ? `${fmtD(start)}–${fmtD(end)}` : fmtD(start);
+                            }).join(', ')}
                           </div>
                         )}
                       </div>
@@ -9686,7 +9693,8 @@ function MyProfile({ me }) {
   const [responding, setResponding] = useState(null);
   const [replyText, setReplyText]   = useState('');
   const [replyBusy, setReplyBusy]   = useState(false);
-  const [newBlockDate, setNewBlockDate] = useState('');
+  const [blockStart, setBlockStart] = useState('');
+  const [blockEnd, setBlockEnd]     = useState('');
   const [f, setF] = useState({
     preferred_contact: me.preferred_contact || '',
     phone: me.phone || '',
@@ -9865,29 +9873,43 @@ function MyProfile({ me }) {
         <div style={{ marginBottom: 14 }}>
           <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: POA.textMuted, marginBottom: 8 }}>Blocked dates</div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
-            {(f.availability.blocked || []).map((date, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'rgba(239,106,100,.1)', border: '0.5px solid rgba(239,106,100,.3)', borderRadius: 6, padding: '3px 10px', fontSize: 12, color: POA.red }}>
-                {new Date(date + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                <button onClick={() => setF(x => ({ ...x, availability: { ...x.availability, blocked: x.availability.blocked.filter((_, j) => j !== i) } }))}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: POA.red, fontSize: 14, lineHeight: 1, padding: '0 2px' }}>×</button>
-              </div>
-            ))}
+            {(f.availability.blocked || []).map((entry, i) => {
+              const [start, end] = entry.includes('/') ? entry.split('/') : [entry, null];
+              const fmtD = d => new Date(d + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+              const label = end ? `${fmtD(start)} – ${fmtD(end)}` : fmtD(start);
+              return (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'rgba(239,106,100,.1)', border: '0.5px solid rgba(239,106,100,.3)', borderRadius: 6, padding: '3px 10px', fontSize: 12, color: POA.red }}>
+                  {label}
+                  <button onClick={() => setF(x => ({ ...x, availability: { ...x.availability, blocked: x.availability.blocked.filter((_, j) => j !== i) } }))}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: POA.red, fontSize: 14, lineHeight: 1, padding: '0 2px' }}>×</button>
+                </div>
+              );
+            })}
           </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <input type='date' value={newBlockDate}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr auto', gap: 8, alignItems: 'center' }}>
+            <input type='date' value={blockStart}
               min={new Date().toISOString().split('T')[0]}
-              onChange={e => setNewBlockDate(e.target.value)}
-              style={{ ...PS.input, flex: 1 }} />
-            <button style={PS.btn} disabled={!newBlockDate}
+              onChange={e => { setBlockStart(e.target.value); if (blockEnd && e.target.value > blockEnd) setBlockEnd(''); }}
+              style={{ ...PS.input, fontSize: 13 }} />
+            <span style={{ fontSize: 12, color: POA.textMuted, textAlign: 'center' }}>to</span>
+            <input type='date' value={blockEnd}
+              min={blockStart || new Date().toISOString().split('T')[0]}
+              onChange={e => setBlockEnd(e.target.value)}
+              style={{ ...PS.input, fontSize: 13 }} />
+            <button style={PS.btn} disabled={!blockStart}
               onClick={() => {
-                if (!newBlockDate) return;
-                if (!(f.availability.blocked || []).includes(newBlockDate)) {
-                  setF(x => ({ ...x, availability: { ...x.availability, blocked: [...(x.availability.blocked || []), newBlockDate].sort() } }));
+                const end = blockEnd || blockStart;
+                const entry = blockStart === end ? blockStart : `${blockStart}/${end}`;
+                if (!(f.availability.blocked || []).includes(entry)) {
+                  setF(x => ({ ...x, availability: { ...x.availability, blocked: [...(x.availability.blocked || []), entry].sort() } }));
                 }
-                setNewBlockDate('');
+                setBlockStart(''); setBlockEnd('');
               }}>
-              <Plus size={13} /> Block date
+              <Plus size={13} /> Block
             </button>
+          </div>
+          <div style={{ fontSize: 11, color: POA.textMuted, marginTop: 4 }}>
+            Pick one date or a start and end date to block a range.
           </div>
         </div>
 
