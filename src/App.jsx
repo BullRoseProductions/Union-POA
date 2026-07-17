@@ -4865,6 +4865,8 @@ function BoardContinuity({ me }) {
   const [packageBusy, setPackageBusy] = useState(false);
   const [packageErr, setPackageErr]   = useState('');
   const [savingPkg, setSavingPkg]     = useState(false);
+  const [savedPkgs, setSavedPkgs]     = useState([]);
+  const [openPkg, setOpenPkg]         = useState(null);
 
   const blank = { title: "", holder_member_id: "", holder_name: "", term_start: "", term_end: "", status: "active", succession_notes: "", sort: 0 };
   const [f, setF] = useState(blank);
@@ -4873,8 +4875,18 @@ function BoardContinuity({ me }) {
   const isAdmin = canAdmin(me.access);
 
   async function load() {
-    const [pos, mem] = await Promise.all([listBoardPositions(), listMembers()]);
-    setPositions(pos); setMembers(mem);
+    const [pos, mem, pkgs] = await Promise.all([
+      listBoardPositions(),
+      listMembers(),
+      supabase.from('ai_outputs')
+        .select('*')
+        .eq('department_id', me.department_id)
+        .eq('feature', 'continuity')
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false })
+        .then(({ data }) => data || []),
+    ]);
+    setPositions(pos); setMembers(mem); setSavedPkgs(pkgs);
   }
   useEffect(() => { load(); }, []);
 
@@ -4967,6 +4979,7 @@ Write a comprehensive onboarding package for the incoming ${position.title}.`;
         created_by: me.id,
       });
       setGenerating(null); setPackageOut('');
+      await load();
     } catch(e) { setPackageErr(e.message); }
     finally { setSavingPkg(false); }
   }
@@ -5199,6 +5212,48 @@ Write a comprehensive onboarding package for the incoming ${position.title}.`;
           </React.Fragment>
         );
       })}
+
+      {savedPkgs.length > 0 && (
+        <div style={{ marginTop: 24 }}>
+          <p style={{ ...PS.kicker, marginBottom: 10 }}>Saved onboarding packages</p>
+          <Card>
+            {savedPkgs.map(pkg => (
+              <div key={pkg.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderBottom: `0.5px solid ${POA.hairline}` }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 600, color: POA.textPrimary }}>{pkg.title}</div>
+                  <div style={{ fontSize: 11.5, color: POA.textMuted }}>{fmtDate(pkg.created_at)}</div>
+                </div>
+                <button style={{ ...PS.btn, padding: '5px 9px', fontSize: 11.5 }}
+                  onClick={() => setOpenPkg(pkg)}>Open</button>
+                {isAdmin && (
+                  <button style={{ ...PS.btn, padding: '5px 8px', fontSize: 11.5, color: POA.red }}
+                    onClick={async () => {
+                      if (!confirm('Delete this package?')) return;
+                      await supabase.from('ai_outputs').update({ deleted_at: new Date().toISOString() }).eq('id', pkg.id);
+                      load();
+                    }}>
+                    <X size={13} />
+                  </button>
+                )}
+              </div>
+            ))}
+          </Card>
+        </div>
+      )}
+
+      {openPkg && (
+        <div onClick={() => setOpenPkg(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.7)', zIndex: 60, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 16px', overflowY: 'auto' }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background: 'linear-gradient(135deg, #0E1630, #0A1020)', border: `0.5px solid ${POA.hairline2}`, borderRadius: 16, maxWidth: 720, width: '100%', padding: '20px 22px', boxShadow: '0 20px 60px rgba(0,0,0,.6)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.12em', textTransform: 'uppercase', color: POA.accent }}>{openPkg.title}</div>
+              <button style={{ ...PS.btn, padding: '5px 10px' }} onClick={() => setOpenPkg(null)}><X size={13} /></button>
+            </div>
+            <FundraisingPlanDisplay text={openPkg.current_text || openPkg.ai_text} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
