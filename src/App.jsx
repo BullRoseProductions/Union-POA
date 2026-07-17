@@ -702,6 +702,7 @@ function MemberDash({ me, org, setView }) {
 function WhoToCall({ me }) {
   const [contacts, setContacts] = useState(null);
   const [categories, setCategories] = useState([]);
+  const [members, setMembers]   = useState([]);
   const [editing, setEditing]   = useState(null);
   const [adding, setAdding]     = useState(false);
   const [err, setErr]           = useState("");
@@ -730,10 +731,11 @@ function WhoToCall({ me }) {
         subject: rf.subject.trim(),
         body: `${rf.body.trim() ? rf.body.trim() + '\n\n' : ''}Preferred time: ${rf.preferred_time || 'Flexible'}\nPhone: ${rf.phone || 'Not provided'}`,
         status: 'pending',
+        assigned_to: contact.member_id || null,
       });
       setReqSent(true);
       setRequesting(null);
-      setRf({ subject: '', body: '', phone: '' });
+      setRf({ subject: '', body: '', phone: me.phone || '', preferred_time: '' });
       setTimeout(() => setReqSent(false), 4000);
     } catch(e) { setReqErr(e.message); }
     finally { setReqBusy(false); }
@@ -741,14 +743,14 @@ function WhoToCall({ me }) {
 
   async function load() {
     try {
-      const [c, cats] = await Promise.all([listContacts(), listContactCategories()]);
-      setContacts(c); setCategories(cats);
+      const [c, cats, mems] = await Promise.all([listContacts(), listContactCategories(), listMembers()]);
+      setContacts(c); setCategories(cats); setMembers(mems);
     } catch(e) { setErr(e.message); }
   }
   useEffect(() => { load(); }, []);
 
   function startEdit(c) {
-    setF({ role: c.role, name: c.name || "", phone: c.phone || "", email: c.email || "", category: c.category, sort: c.sort || 0 });
+    setF({ role: c.role, name: c.name || "", phone: c.phone || "", email: c.email || "", category: c.category, sort: c.sort || 0, member_id: c.member_id || "" });
     setEditing(c); setAdding(false); setErr("");
   }
   function resetForm() { setEditing(null); setAdding(false); setErr(""); setF(blank); }
@@ -765,6 +767,7 @@ function WhoToCall({ me }) {
         email: f.email.trim() || null,
         category: f.category,
         sort: Number(f.sort) || 0,
+        member_id: f.member_id || null,
       };
       if (editing) await updateContact(editing.id, row);
       else await createContact(row);
@@ -882,6 +885,13 @@ function WhoToCall({ me }) {
               <input value={f.role} onChange={e => setF({ ...f, role: e.target.value })}
                 style={PS.input} placeholder="e.g. Legal Defense Rep" />
             </div>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Link to member (for meeting requests)</div>
+              <select value={f.member_id || ''} onChange={e => setF(x => ({ ...x, member_id: e.target.value }))} style={PS.input}>
+                <option value=''>— Not linked to a member —</option>
+                {(members || []).map(m => <option key={m.id} value={m.id}>{m.full_name} · {(m.access || []).filter(r => r !== 'Member').join(', ') || 'Member'}</option>)}
+              </select>
+            </div>
             <div>
               <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Name</div>
               <input value={f.name} onChange={e => setF({ ...f, name: e.target.value })}
@@ -966,12 +976,16 @@ function WhoToCall({ me }) {
                       </button>
                     )}
                   </div>
-                  {c.availability_note && (
-                    <div style={{ fontSize: 12, color: POA.textMuted, marginTop: 8, padding: '6px 10px', background: 'rgba(70,199,147,.06)', border: '0.5px solid rgba(70,199,147,.2)', borderRadius: 8 }}>
-                      <span style={{ fontSize: 10, fontWeight: 700, color: POA.green, textTransform: 'uppercase', letterSpacing: '.1em', marginRight: 6 }}>Available</span>
-                      {c.availability_note}
-                    </div>
-                  )}
+                  {(() => {
+                    const linkedMember = c.member_id ? (members || []).find(m => m.id === c.member_id) : null;
+                    const avail = linkedMember?.availability_note;
+                    return avail ? (
+                      <div style={{ fontSize: 12, color: POA.textMuted, marginTop: 8, padding: '6px 10px', background: 'rgba(70,199,147,.06)', border: '0.5px solid rgba(70,199,147,.2)', borderRadius: 8 }}>
+                        <span style={{ fontSize: 10, fontWeight: 700, color: POA.green, textTransform: 'uppercase', letterSpacing: '.1em', marginRight: 6 }}>Available</span>
+                        {avail}
+                      </div>
+                    ) : null;
+                  })()}
                   <button style={{ ...PS.btn, width: '100%', justifyContent: 'center', marginTop: 8, fontSize: 12 }}
                     onClick={() => { setRequesting(c); setRf({ subject: '', body: '', phone: me.phone || '' }); setReqErr(''); }}>
                     <CalendarPlus size={12} /> Request a meeting
@@ -9660,7 +9674,6 @@ function MyProfile({ me }) {
       .select('*, members!correspondence_member_id_fkey(full_name, phone)')
       .eq('department_id', me.department_id)
       .eq('kind', 'meeting_request')
-      .eq('assigned_to', me.id)
       .order('created_at', { ascending: false })
       .then(({ data }) => setRequests(data || []));
   }, [me.id]);
@@ -9704,7 +9717,6 @@ function MyProfile({ me }) {
         .select('*, members!correspondence_member_id_fkey(full_name, phone)')
         .eq('department_id', me.department_id)
         .eq('kind', 'meeting_request')
-        .eq('assigned_to', me.id)
         .order('created_at', { ascending: false });
       setRequests(data || []);
     } catch(e) { setErr(e.message); }
