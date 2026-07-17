@@ -9695,6 +9695,7 @@ function MyProfile({ me }) {
   const [replyBusy, setReplyBusy]   = useState(false);
   const [blockStart, setBlockStart] = useState('');
   const [blockEnd, setBlockEnd]     = useState('');
+  const [showAvail, setShowAvail]   = useState(true);
   const [f, setF] = useState({
     preferred_contact: me.preferred_contact || '',
     phone: me.phone || '',
@@ -9802,9 +9803,67 @@ function MyProfile({ me }) {
       )}
 
       <Card style={{ marginBottom: 14 }}>
-        <SectionTitle>My availability</SectionTitle>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', marginBottom: showAvail ? 14 : 0 }}
+          onClick={() => setShowAvail(v => !v)}>
+          <p style={{ ...PS.kicker, margin: 0 }}>My availability</p>
+          {showAvail ? <ChevronUp size={16} color={POA.textMuted} /> : <ChevronDown size={16} color={POA.textMuted} />}
+        </div>
+        {showAvail && (<>
         <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 12 }}>
           Members see these times when they request a meeting with you.
+        </div>
+
+        {/* Visual preview */}
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: POA.textMuted, marginBottom: 8 }}>Preview — this week</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
+            {(() => {
+              const today = new Date();
+              const startOfWeek = new Date(today);
+              startOfWeek.setDate(today.getDate() - today.getDay() + 1); // Monday
+              const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+              const fmt = t => { if (!t) return ''; const [h, m] = t.split(':'); const hr = parseInt(h); return `${hr > 12 ? hr-12 : hr || 12}:${m}${hr >= 12 ? 'pm' : 'am'}`; };
+              return DAYS.map((day, i) => {
+                const date = new Date(startOfWeek);
+                date.setDate(startOfWeek.getDate() + i);
+                const dateStr = date.toISOString().split('T')[0];
+                const dayData = f.availability.schedule[day] || { enabled: false, slots: [] };
+                const isBlocked = (f.availability.blocked || []).some(entry => {
+                  if (entry.includes('/')) {
+                    const [s, e] = entry.split('/');
+                    return dateStr >= s && dateStr <= e;
+                  }
+                  return entry === dateStr;
+                });
+                const isToday = dateStr === today.toISOString().split('T')[0];
+                return (
+                  <div key={day} style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: isToday ? POA.accent : POA.textMuted, marginBottom: 4 }}>{day}</div>
+                    <div style={{ fontSize: 11, color: isToday ? POA.accent : POA.textMuted, marginBottom: 6 }}>{date.getDate()}</div>
+                    <div style={{ minHeight: 60, borderRadius: 6, border: `0.5px solid ${isBlocked ? 'rgba(239,106,100,.4)' : dayData.enabled ? 'rgba(219,165,37,.3)' : POA.hairline}`, background: isBlocked ? 'rgba(239,106,100,.1)' : dayData.enabled ? 'rgba(219,165,37,.08)' : 'transparent', padding: '4px 3px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      {isBlocked ? (
+                        <div style={{ fontSize: 9, color: POA.red, fontWeight: 700, textAlign: 'center', marginTop: 4 }}>Blocked</div>
+                      ) : dayData.enabled && (dayData.slots || []).map((slot, si) => (
+                        <div key={si} style={{ background: 'rgba(219,165,37,.2)', border: '0.5px solid rgba(219,165,37,.4)', borderRadius: 3, padding: '2px 3px', fontSize: 8.5, color: POA.accent, fontWeight: 600, lineHeight: 1.3 }}>
+                          {fmt(slot.start)}–{fmt(slot.end)}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              });
+            })()}
+          </div>
+          <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: POA.textMuted }}>
+              <div style={{ width: 10, height: 10, borderRadius: 2, background: 'rgba(219,165,37,.2)', border: '0.5px solid rgba(219,165,37,.4)' }} />
+              Available
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: POA.textMuted }}>
+              <div style={{ width: 10, height: 10, borderRadius: 2, background: 'rgba(239,106,100,.1)', border: '0.5px solid rgba(239,106,100,.4)' }} />
+              Blocked
+            </div>
+          </div>
         </div>
 
         {/* Weekly schedule */}
@@ -9934,6 +9993,7 @@ function MyProfile({ me }) {
         <button style={PS.btnPrimary} disabled={saving} onClick={saveProfile}>
           {saving ? 'Saving…' : 'Save profile'}
         </button>
+        </>)}
       </Card>
 
       {/* Meeting requests */}
