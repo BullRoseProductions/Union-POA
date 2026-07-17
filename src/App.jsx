@@ -4852,6 +4852,110 @@ function Store({ me }) {
   );
 }
 
+function PlanEditor({ position, plan, actionItems, onSave, onGenerate, onClose, busy, saving, err }) {
+  const SECTIONS = [
+    'Role Overview',
+    'Key Responsibilities',
+    'Critical Contacts',
+    'Access & Credentials',
+    'Active Projects',
+    'Institutional Knowledge',
+    'First 30 Days',
+  ];
+
+  function parseSections(text) {
+    const result = {};
+    SECTIONS.forEach(key => { result[key] = ''; });
+    if (!text) return result;
+    SECTIONS.forEach(key => {
+      const regex = new RegExp(`##\\s*${key}\\s*\\n([\\s\\S]*?)(?=##|$)`, 'i');
+      const match = text.match(regex);
+      if (match) result[key] = match[1].trim();
+    });
+    return result;
+  }
+
+  const [sections, setSections] = useState(() => parseSections(plan?.current_text || plan?.ai_text));
+  const [activeSection, setActiveSection] = useState(SECTIONS[0]);
+
+  return (
+    <div onClick={onClose}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.8)', zIndex: 60, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '20px 16px', overflowY: 'auto' }}>
+      <div onClick={e => e.stopPropagation()}
+        style={{ background: 'linear-gradient(135deg, #0E1630, #060911)', border: `0.5px solid ${POA.hairline2}`, borderRadius: 16, maxWidth: 800, width: '100%', padding: '20px 22px', boxShadow: '0 20px 60px rgba(0,0,0,.7)' }}>
+
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16 }}>
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.12em', textTransform: 'uppercase', color: POA.accent, marginBottom: 4 }}>Continuity Plan</div>
+            <div style={{ fontSize: 20, fontWeight: 700, color: POA.textPrimary }}>{position.title}</div>
+            {plan?.edited_at && <div style={{ fontSize: 11, color: POA.textMuted, marginTop: 2 }}>Last updated {fmtDate(plan.edited_at)}</div>}
+          </div>
+          <button style={{ ...PS.btn, padding: '5px 10px' }} onClick={onClose}><X size={13} /></button>
+        </div>
+
+        {/* Action items from app */}
+        {actionItems.length > 0 && (
+          <div style={{ background: 'rgba(219,165,37,.06)', border: `0.5px solid rgba(219,165,37,.2)`, borderRadius: 10, padding: '10px 14px', marginBottom: 16 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: POA.accent, marginBottom: 6 }}>Open action items pulled from app</div>
+            {actionItems.map((a, i) => (
+              <div key={i} style={{ fontSize: 12, color: POA.textSecondary, marginBottom: 2 }}>· {a.title}{a.due_date ? ` — due ${fmtShort(a.due_date)}` : ''}</div>
+            ))}
+          </div>
+        )}
+
+        {err && <ErrBox msg={err} />}
+
+        {/* Section tabs */}
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
+          {SECTIONS.map(s => (
+            <button key={s} onClick={() => setActiveSection(s)}
+              style={{ fontSize: 11, padding: '5px 12px', borderRadius: 999, border: `0.5px solid ${activeSection === s ? POA.accent : POA.hairline2}`, background: activeSection === s ? POA.accentSoft : 'transparent', color: activeSection === s ? POA.accent : POA.textMuted, cursor: 'pointer', fontWeight: activeSection === s ? 700 : 400 }}>
+              {s}
+              {sections[s]?.trim() && <span style={{ marginLeft: 4, color: POA.green, fontSize: 10 }}>✓</span>}
+            </button>
+          ))}
+        </div>
+
+        {/* Active section editor */}
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: POA.textPrimary, marginBottom: 6 }}>{activeSection}</div>
+          <textarea
+            value={sections[activeSection] || ''}
+            onChange={e => setSections(x => ({ ...x, [activeSection]: e.target.value }))}
+            style={{ ...PS.textarea, minHeight: 180, fontFamily: 'inherit' }}
+            placeholder={
+              activeSection === 'Role Overview' ? 'What does this position do? Who do they work with?' :
+              activeSection === 'Key Responsibilities' ? 'Monthly: ...\nQuarterly: ...\nAnnual: ...' :
+              activeSection === 'Critical Contacts' ? 'Name, role, phone/email, what they handle...' :
+              activeSection === 'Access & Credentials' ? 'What systems need access? (Do not store passwords here)' :
+              activeSection === 'Active Projects' ? 'What is currently in progress that the incoming officer needs to know?' :
+              activeSection === 'Institutional Knowledge' ? 'The stuff that\'s not written down anywhere — how things actually work here...' :
+              'What should the incoming officer do in their first 30 days?'
+            }
+          />
+        </div>
+
+        {/* Actions */}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button style={PS.btnPrimary} disabled={saving} onClick={() => onSave(sections)}>
+            {saving ? 'Saving…' : <><FileText size={13} /> Save plan</>}
+          </button>
+          <button style={PS.btn} disabled={busy} onClick={async () => {
+            const updated = await onGenerate(sections);
+            if (updated) setSections(updated);
+          }}>
+            {busy ? <><Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> Drafting…</> : <><Sparkles size={13} /> Fill with AI</>}
+          </button>
+          <div style={{ marginLeft: 'auto', fontSize: 11.5, color: POA.textMuted, alignSelf: 'center', fontStyle: 'italic' }}>
+            AI drafts, you own the plan.
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function BoardContinuity({ me }) {
   const [positions, setPositions] = useState(null);
   const [members, setMembers]     = useState([]);
@@ -4867,6 +4971,13 @@ function BoardContinuity({ me }) {
   const [savingPkg, setSavingPkg]     = useState(false);
   const [savedPkgs, setSavedPkgs]     = useState([]);
   const [openPkg, setOpenPkg]         = useState(null);
+  const [planPosition, setPlanPosition] = useState(null);
+  const [plan, setPlan]                 = useState(null);
+  const [planBusy, setPlanBusy]         = useState(false);
+  const [planSaving, setPlanSaving]     = useState(false);
+  const [planErr, setPlanErr]           = useState('');
+  const [planDraft, setPlanDraft]       = useState(false);
+  const [actionItems, setActionItems]   = useState([]);
 
   const blank = { title: "", holder_member_id: "", holder_name: "", term_start: "", term_end: "", status: "active", succession_notes: "", sort: 0 };
   const [f, setF] = useState(blank);
@@ -4982,6 +5093,103 @@ Write a comprehensive onboarding package for the incoming ${position.title}.`;
       await load();
     } catch(e) { setPackageErr(e.message); }
     finally { setSavingPkg(false); }
+  }
+
+  async function openPlan(position) {
+    setPlanPosition(position);
+    setPlanErr('');
+    setPlanDraft(false);
+    // Load existing plan
+    const { data } = await supabase.from('ai_outputs')
+      .select('*')
+      .eq('department_id', me.department_id)
+      .eq('feature', 'continuity_plan')
+      .eq('title', position.title)
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false })
+      .limit(1);
+    // Load action items for this position holder
+    let acts = [];
+    if (position.holder_member_id) {
+      const { data: a } = await supabase.from('action_items')
+        .select('title, due_date, status')
+        .eq('department_id', me.department_id)
+        .eq('owner_member_id', position.holder_member_id)
+        .eq('status', 'open');
+      acts = a || [];
+    }
+    setActionItems(acts);
+    if (data?.[0]) {
+      setPlan(data[0]);
+    } else {
+      setPlan(null);
+    }
+  }
+
+  async function savePlan(sections) {
+    if (!planPosition) return;
+    setPlanSaving(true); setPlanErr('');
+    try {
+      const text = Object.entries(sections)
+        .map(([k, v]) => v.trim() ? `## ${k}\n${v.trim()}` : '')
+        .filter(Boolean)
+        .join('\n\n');
+      if (plan) {
+        await supabase.from('ai_outputs').update({
+          current_text: text,
+          edited_by: me.id,
+          edited_at: new Date().toISOString(),
+        }).eq('id', plan.id);
+      } else {
+        const { data } = await supabase.from('ai_outputs').insert({
+          department_id: me.department_id,
+          feature: 'continuity_plan',
+          title: planPosition.title,
+          ai_text: text,
+          current_text: text,
+          created_by: me.id,
+        }).select().single();
+        setPlan(data);
+      }
+      await load();
+    } catch(e) { setPlanErr(e.message); }
+    finally { setPlanSaving(false); }
+  }
+
+  async function generatePlanDraft(sections) {
+    setPlanBusy(true); setPlanErr('');
+    try {
+      const holder = planPosition.holder_member_id
+        ? members.find(m => m.id === planPosition.holder_member_id)
+        : null;
+      const existing = Object.entries(sections)
+        .map(([k, v]) => v.trim() ? `${k}: ${v.trim()}` : `${k}: (not filled in yet)`)
+        .join('\n');
+      const sys = `You help police officers' association board members write succession plans. Fill in missing sections based on the role and what's been provided. Keep it practical and actionable. Format each section with ## heading. Under 500 words total.`;
+      const prompt = `Position: ${planPosition.title}
+Association: Fort Worth POA
+${holder ? `Current holder: ${holder.full_name}` : ''}
+Term: ${planPosition.term_start ? fmtShort(planPosition.term_start) : 'Unknown'}${planPosition.term_end ? ` – ${fmtShort(planPosition.term_end)}` : ''}
+
+Open action items for this role:
+${actionItems.length > 0 ? actionItems.map(a => `- ${a.title}${a.due_date ? ` (due ${fmtShort(a.due_date)})` : ''}`).join('\n') : 'None'}
+
+What the officer has filled in so far:
+${existing}
+
+Fill in any missing sections and improve what's there. Keep it practical for whoever takes over this role.`;
+      const text = await callClaudeAI(sys, prompt);
+      // Parse AI output back into sections
+      const newSections = { ...sections };
+      const sectionKeys = Object.keys(sections);
+      sectionKeys.forEach(key => {
+        const regex = new RegExp(`##\\s*${key}\\s*\\n([\\s\\S]*?)(?=##|$)`, 'i');
+        const match = text.match(regex);
+        if (match && match[1].trim()) newSections[key] = match[1].trim();
+      });
+      return newSections;
+    } catch(e) { setPlanErr('AI draft failed.'); return sections; }
+    finally { setPlanBusy(false); }
   }
 
   const statusColor = { active: POA.accent, vacant: POA.amber, emeritus: POA.textMuted };
@@ -5135,6 +5343,12 @@ Write a comprehensive onboarding package for the incoming ${position.title}.`;
                     <Pencil size={11} />
                   </button>
                 )}
+                {manage && (
+                  <button style={{ ...PS.btn, fontSize: 11, padding: '4px 10px' }}
+                    onClick={() => openPlan(p)}>
+                    <BookOpen size={11} /> Plan
+                  </button>
+                )}
                 {manage && (p.holder_member_id || p.holder_name) && generating !== p.id && (
                   <button style={{ ...PS.btn, fontSize: 11, padding: '4px 10px' }}
                     onClick={() => { setGenerating(p.id); setPackageOut(''); setPackageErr(''); }}>
@@ -5253,6 +5467,20 @@ Write a comprehensive onboarding package for the incoming ${position.title}.`;
             <FundraisingPlanDisplay text={openPkg.current_text || openPkg.ai_text} />
           </div>
         </div>
+      )}
+
+      {planPosition && (
+        <PlanEditor
+          position={planPosition}
+          plan={plan}
+          actionItems={actionItems}
+          onSave={async (sections) => { await savePlan(sections); setPlanPosition(null); }}
+          onGenerate={generatePlanDraft}
+          onClose={() => { setPlanPosition(null); setPlan(null); }}
+          busy={planBusy}
+          saving={planSaving}
+          err={planErr}
+        />
       )}
     </div>
   );
