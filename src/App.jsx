@@ -2888,6 +2888,7 @@ function MembersBoard({ me }) {
         dues_paid_through: ef.dues_paid_through || null,
         member_since: ef.member_since || null,
         preferred_contact: ef.preferred_contact || null,
+        access: ef.access || ['Member'],
       }).eq('id', selected.id);
       await listMembers().then(setMembers);
       setSelected(prev => ({ ...prev, ...ef }));
@@ -2933,7 +2934,7 @@ function MembersBoard({ me }) {
             <div style={{ fontSize: 13, color: POA.textMuted }}>{selected.email}</div>
           </div>
           {!editing && (
-            <button style={{ ...PS.btn, marginLeft: 'auto' }} onClick={() => { setEf({ full_name: selected.full_name, badge: selected.badge || '', district: selected.district || '', phone: selected.phone || '', standing: selected.standing || 'Good', status: selected.status || 'active', dues_paid_through: selected.dues_paid_through || '', member_since: selected.member_since || '', availability_note: selected.availability_note || '', preferred_contact: selected.preferred_contact || '' }); setEditing(true); }}>
+            <button style={{ ...PS.btn, marginLeft: 'auto' }} onClick={() => { setEf({ full_name: selected.full_name, badge: selected.badge || '', district: selected.district || '', phone: selected.phone || '', standing: selected.standing || 'Good', status: selected.status || 'active', dues_paid_through: selected.dues_paid_through || '', member_since: selected.member_since || '', availability_note: selected.availability_note || '', preferred_contact: selected.preferred_contact || '', access: selected.access || ['Member'] }); setEditing(true); }}>
               <Pencil size={12} /> Edit
             </button>
           )}
@@ -2975,6 +2976,28 @@ function MembersBoard({ me }) {
                   <option value='inactive'>Inactive</option>
                   <option value='retired'>Retired</option>
                 </select>
+              </div>
+              <div style={{ gridColumn: '1 / -1' }}>
+                <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Roles</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {['Member','Board','DeptAdmin','Officer','Secretary','Treasurer'].map(role => {
+                    const selected = (ef.access || []).includes(role);
+                    return (
+                      <button key={role} type='button'
+                        onClick={() => {
+                          const cur = ef.access || [];
+                          const updated = selected && role !== 'Member'
+                            ? cur.filter(r => r !== role)
+                            : cur.includes(role) ? cur : [...cur, role];
+                          setEf(x => ({ ...x, access: updated.length ? updated : ['Member'] }));
+                        }}
+                        style={{ fontSize: 12, padding: '5px 12px', borderRadius: 999, border: `0.5px solid ${selected ? POA.accent : POA.hairline2}`, background: selected ? POA.accentSoft : 'transparent', color: selected ? POA.accent : POA.textMuted, cursor: 'pointer', fontWeight: selected ? 700 : 400 }}>
+                        {role}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div style={{ fontSize: 11, color: POA.textMuted, marginTop: 4 }}>Member is always included. Select additional roles as needed.</div>
               </div>
               <div>
                 <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Dues paid through</div>
@@ -3100,6 +3123,28 @@ function MembersBoard({ me }) {
               <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Phone</div>
               <input value={af.phone || ''} onChange={e => setAf(x => ({ ...x, phone: e.target.value }))}
                 style={PS.input} placeholder='(817) 555-0100' type='tel' />
+            </div>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Roles</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {['Member','Board','DeptAdmin','Officer','Secretary','Treasurer'].map(role => {
+                  const selected = (af.access || ['Member']).includes(role);
+                  return (
+                    <button key={role} type='button'
+                      onClick={() => {
+                        const cur = af.access || ['Member'];
+                        const updated = selected && role !== 'Member'
+                          ? cur.filter(r => r !== role)
+                          : cur.includes(role) ? cur : [...cur, role];
+                        setAf(x => ({ ...x, access: updated.length ? updated : ['Member'] }));
+                      }}
+                      style={{ fontSize: 12, padding: '5px 12px', borderRadius: 999, border: `0.5px solid ${selected ? POA.accent : POA.hairline2}`, background: selected ? POA.accentSoft : 'transparent', color: selected ? POA.accent : POA.textMuted, cursor: 'pointer', fontWeight: selected ? 700 : 400 }}>
+                      {role}
+                    </button>
+                  );
+                })}
+              </div>
+              <div style={{ fontSize: 11, color: POA.textMuted, marginTop: 4 }}>Member is always included. Select additional roles as needed.</div>
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
