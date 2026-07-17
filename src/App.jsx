@@ -4956,7 +4956,7 @@ function PlanEditor({ position, plan, actionItems, onSave, onGenerate, onClose, 
   );
 }
 
-function BoardContinuity({ me }) {
+function BoardContinuity({ me, org }) {
   const [positions, setPositions] = useState(null);
   const [members, setMembers]     = useState([]);
   const [editing, setEditing]     = useState(null);
@@ -5167,7 +5167,7 @@ Write a comprehensive onboarding package for the incoming ${position.title}.`;
         .join('\n');
       const sys = `You help police officers' association board members write succession plans. Fill in missing sections based on the role and what's been provided. Keep it practical and actionable. Format each section with ## heading. Under 500 words total.`;
       const prompt = `Position: ${planPosition.title}
-Association: Fort Worth POA
+Association: ${org?.name || 'Association'}
 ${holder ? `Current holder: ${holder.full_name}` : ''}
 Term: ${planPosition.term_start ? fmtShort(planPosition.term_start) : 'Unknown'}${planPosition.term_end ? ` – ${fmtShort(planPosition.term_end)}` : ''}
 
@@ -10752,7 +10752,7 @@ function renderScreen(view, { me, org, setView }) {
     case "b_fundraising":   return <Fundraising me={me} org={org} />;
     case "b_social":        return <SocialMedia me={me} org={org} />;
     case "b_building":      return <POABuilding me={me} org={org} />;
-    case "b_continuity":    return <BoardContinuity me={me} />;
+    case "b_continuity":    return <BoardContinuity me={me} org={org} />;
     case "b_correspondence":return <BoardCorrespondence me={me} />;
     case "b_community":     return <BoardCommunity me={me} />;
     case "b_ledger":        return <ValueLedger me={me} />;
