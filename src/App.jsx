@@ -2833,6 +2833,9 @@ function MembersBoard({ me }) {
   const [ef, setEf]             = useState({});
   const [editBusy, setEditBusy] = useState(false);
   const [editErr, setEditErr]   = useState('');
+  const [inviting, setInviting]   = useState(false);
+  const [inviteSent, setInviteSent] = useState(false);
+  const [inviteErr, setInviteErr] = useState('');
   const [adding, setAdding]     = useState(false);
   const [af, setAf]             = useState({ full_name: '', email: '', badge: '', district: '', phone: '', access: ['Member'], standing: 'Good', status: 'active' });
 
@@ -2897,6 +2900,22 @@ function MembersBoard({ me }) {
     finally { setEditBusy(false); }
   }
 
+  async function doInvite() {
+    setInviting(true); setInviteErr(''); setInviteSent(false);
+    try {
+      const res = await fetch('/api/invite-member', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: selected.email, full_name: selected.full_name }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Invite failed');
+      setInviteSent(true);
+      setTimeout(() => setInviteSent(false), 5000);
+    } catch(e) { setInviteErr(e.message); }
+    finally { setInviting(false); }
+  }
+
   async function doAddMember() {
     setEditBusy(true); setEditErr('');
     try {
@@ -2933,10 +2952,20 @@ function MembersBoard({ me }) {
             <h2 style={{ fontFamily: 'inherit', fontSize: 22, fontWeight: 700, color: POA.textPrimary, margin: 0 }}>{selected.full_name}</h2>
             <div style={{ fontSize: 13, color: POA.textMuted }}>{selected.email}</div>
           </div>
-          {!editing && (
-            <button style={{ ...PS.btn, marginLeft: 'auto' }} onClick={() => { setEf({ full_name: selected.full_name, badge: selected.badge || '', district: selected.district || '', phone: selected.phone || '', standing: selected.standing || 'Good', status: selected.status || 'active', dues_paid_through: selected.dues_paid_through || '', member_since: selected.member_since || '', availability_note: selected.availability_note || '', preferred_contact: selected.preferred_contact || '', access: selected.access || ['Member'] }); setEditing(true); }}>
-              <Pencil size={12} /> Edit
-            </button>
+          {canAdmin(me.access) && !editing && (
+            <div style={{ marginLeft: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button style={{ ...PS.btn }} onClick={() => { setEf({ full_name: selected.full_name, badge: selected.badge || '', district: selected.district || '', phone: selected.phone || '', standing: selected.standing || 'Good', status: selected.status || 'active', dues_paid_through: selected.dues_paid_through || '', member_since: selected.member_since || '', availability_note: selected.availability_note || '', preferred_contact: selected.preferred_contact || '', access: selected.access || ['Member'] }); setEditing(true); }}>
+                  <Pencil size={12} /> Edit
+                </button>
+                <button style={{ ...PS.btnPrimary, fontSize: 12 }} disabled={inviting || !selected.email}
+                  onClick={doInvite}>
+                  {inviting ? 'Sending…' : <><Mail size={12} /> Send invite</>}
+                </button>
+              </div>
+              {inviteSent && <div style={{ fontSize: 11, color: POA.green }}>✓ Invite sent to {selected.email}</div>}
+              {inviteErr && <div style={{ fontSize: 11, color: POA.red }}>{inviteErr}</div>}
+            </div>
           )}
         </div>
 
