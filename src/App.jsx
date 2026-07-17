@@ -8377,13 +8377,6 @@ function BoardDocuments({ me }) {
     catch(e) { setErr(e.message); }
   }
 
-  async function doOpen(doc) {
-    try {
-      const url = await getDocumentUrl(doc.storage_path);
-      window.open(url, "_blank");
-    } catch(e) { setErr("Couldn't open document: " + e.message); }
-  }
-
   const CATEGORIES = ["CBA","Bylaws","Policies","Member Handbook","Benefits","Meeting Minutes","General","Other"];
   const grouped = {};
   (docs || []).forEach(d => { (grouped[d.category] = grouped[d.category] || []).push(d); });
@@ -8571,13 +8564,6 @@ function MemberDocuments({ me }) {
   useEffect(() => {
     listDocuments().then(setDocs).catch(e => setErr(e.message));
   }, []);
-
-  async function doOpen(doc) {
-    try {
-      const url = await getDocumentUrl(doc.storage_path);
-      window.open(url, "_blank");
-    } catch(e) { setErr("Couldn't open document: " + e.message); }
-  }
 
   const filtered = (docs || []).filter(d =>
     !search || d.name.toLowerCase().includes(search.toLowerCase()) || (d.notes || '').toLowerCase().includes(search.toLowerCase())
