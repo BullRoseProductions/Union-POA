@@ -1054,6 +1054,44 @@ function WhoToCall({ me }) {
               <input value={rf.phone} onChange={e => setRf(x => ({ ...x, phone: e.target.value }))}
                 style={PS.input} placeholder='(817) 555-0100' type='tel' />
             </div>
+            {(() => {
+              const linkedMember = requesting?.member_id ? (members || []).find(m => m.id === requesting.member_id) : null;
+              if (!linkedMember?.availability_note) return null;
+              let avail = null;
+              try { avail = JSON.parse(linkedMember.availability_note); } catch { return null; }
+              const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+              const fmt = t => { if (!t) return ''; const [h, m] = t.split(':'); const hr = parseInt(h); return `${hr > 12 ? hr-12 : hr || 12}:${m}${hr >= 12 ? 'pm' : 'am'}`; };
+              const parts = DAYS.filter(d => avail.schedule?.[d]?.enabled)
+                .map(d => {
+                  const slots = avail.schedule[d].slots || [];
+                  return `${d}: ${slots.map(s => `${fmt(s.start)}–${fmt(s.end)}`).join(', ')}`;
+                });
+              const today = new Date().toISOString().split('T')[0];
+              const blocked = (avail.blocked || []).filter(entry => {
+                const end = entry.includes('/') ? entry.split('/')[1] : entry;
+                return end >= today;
+              }).map(entry => {
+                const [start, end] = entry.includes('/') ? entry.split('/') : [entry, null];
+                const fmtD = d => new Date(d + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+                return end ? `${fmtD(start)}–${fmtD(end)}` : fmtD(start);
+              });
+              if (parts.length === 0 && blocked.length === 0) return null;
+              return (
+                <div style={{ background: 'rgba(70,199,147,.06)', border: '0.5px solid rgba(70,199,147,.25)', borderRadius: 10, padding: '10px 14px', marginBottom: 12 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.12em', textTransform: 'uppercase', color: POA.green, marginBottom: 6 }}>
+                    {requesting.name || requesting.role} availability
+                  </div>
+                  {parts.map((p, i) => (
+                    <div key={i} style={{ fontSize: 12, color: POA.textSecondary, marginBottom: 2 }}>· {p}</div>
+                  ))}
+                  {blocked.length > 0 && (
+                    <div style={{ fontSize: 11, color: POA.red, marginTop: 4 }}>
+                      Unavailable: {blocked.join(', ')}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
             <div style={{ marginBottom: 14 }}>
               <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Preferred date/time</div>
               <input value={rf.preferred_time || ''} onChange={e => setRf(x => ({ ...x, preferred_time: e.target.value }))}
