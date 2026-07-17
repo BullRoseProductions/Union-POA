@@ -5203,7 +5203,7 @@ Write a comprehensive onboarding package for the incoming ${position.title}.`;
                     </button>
                   </div>
                   <div style={{ fontSize: 11.5, color: POA.textMuted, marginTop: 8, fontStyle: 'italic' }}>
-                    Saved packages appear in Agenda & Minutes under saved documents.
+                    Saved packages appear below in the Saved onboarding packages section.
                   </div>
                 </div>
               )}
