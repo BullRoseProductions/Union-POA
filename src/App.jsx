@@ -6504,14 +6504,25 @@ function BoardCorrespondence({ me, members }) {
   const [alertForm, setAlertForm] = useState({ subject: "", body: "" });
   const [replyText, setReplyText] = useState({});
   const [selectedMsg, setSelectedMsg] = useState(null);
+  const [requests, setRequests]       = useState([]);
+  const [responding, setResponding]   = useState(null);
+  const [reqReply, setReqReply]       = useState('');
+  const [replyBusy, setReplyBusy]     = useState(false);
 
   async function load() {
-    const [ann, msgs, act, bqs] = await Promise.all([
-      listAnnouncements(), listMessages(), getActiveAlert(), listBoardQuestions()
+    const [ann, msgs, act, bqs, reqs] = await Promise.all([
+      listAnnouncements(), listMessages(), getActiveAlert(), listBoardQuestions(),
+      supabase.from('correspondence')
+        .select('*, members!correspondence_member_id_fkey(full_name, phone, email)')
+        .eq('department_id', me.department_id)
+        .eq('kind', 'meeting_request')
+        .order('created_at', { ascending: false })
+        .then(({ data }) => data || []),
     ]);
     setAnnouncements(ann);
     setMessages([...msgs, ...bqs].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
     setAlert(act);
+    setRequests(reqs);
   }
   useEffect(() => { load(); }, []);
 
@@ -6588,6 +6599,7 @@ function BoardCorrespondence({ me, members }) {
     { id: "questions", label: `Questions${messages?.filter(m => m.kind === "board_question").length ? ` (${messages.filter(m => m.kind === "board_question").length})` : ""}` },
     { id: "announce", label: "Post Announcement" },
     { id: "alert", label: "🚨 Alert" },
+    { id: 'requests', label: `Meeting Requests${requests.filter(r => !r.status || r.status === 'pending').length > 0 ? ` (${requests.filter(r => !r.status || r.status === 'pending').length})` : ''}` },
   ];
 
   // inbox = member messages; questions = board-question submissions
@@ -6782,6 +6794,103 @@ function BoardCorrespondence({ me, members }) {
               </button>
             </Card>
           )}
+        </div>
+      )}
+
+      {tab === 'requests' && (
+        <div>
+          {requests.length === 0 ? (
+            <Card>
+              <div style={{ color: POA.textMuted, fontSize: 13.5, textAlign: 'center', padding: '16px 0' }}>
+                No meeting requests yet.
+              </div>
+            </Card>
+          ) : requests.map(req => {
+            const isPending = !req.status || req.status === 'pending';
+            return (
+              <Card key={req.id} style={{ marginBottom: 10, borderLeft: `3px solid ${isPending ? POA.amber : POA.green}`, borderRadius: '0 13px 13px 0' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, marginBottom: 8 }}>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: 14, color: POA.textPrimary }}>{req.members?.full_name || 'Member'}</div>
+                    <div style={{ fontSize: 12, color: POA.textMuted, marginTop: 2 }}>
+                      {req.members?.phone && `${req.members.phone} · `}
+                      {req.members?.email && `${req.members.email} · `}
+                      {fmtDate(req.created_at)}
+                    </div>
+                  </div>
+                  <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 9px', borderRadius: 999, background: isPending ? 'rgba(240,180,74,.14)' : 'rgba(70,199,147,.14)', color: isPending ? POA.amber : POA.green, flexShrink: 0 }}>
+                    {req.status || 'Pending'}
+                  </span>
+                </div>
+                <div style={{ fontWeight: 600, fontSize: 14, color: POA.textPrimary, marginBottom: 4 }}>{req.subject}</div>
+                {req.body && <div style={{ fontSize: 13, color: POA.textSecondary, lineHeight: 1.65, marginBottom: 12, whiteSpace: 'pre-wrap' }}>{req.body}</div>}
+
+                {isPending && (
+                  responding === req.id || responding === req.id + '_propose' || responding === req.id + '_decline' ? (
+                    <div>
+                      <textarea value={reqReply} onChange={e => setReqReply(e.target.value)}
+                        style={{ ...PS.textarea, minHeight: 80, marginBottom: 8 }}
+                        placeholder={
+                          responding === req.id + '_propose'
+                            ? 'Suggest an alternate time…'
+                            : responding === req.id + '_decline'
+                            ? 'Optional note to the member…'
+                            : 'Optional message with your confirmation…'
+                        } />
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <button style={{ ...PS.btnPrimary, fontSize: 12 }} disabled={replyBusy}
+                          onClick={async () => {
+                            setReplyBusy(true);
+                            try {
+                              const status = responding.includes('_propose') ? 'proposed' : responding.includes('_decline') ? 'declined' : 'confirmed';
+                              const replyBody = status === 'confirmed'
+                                ? `Your meeting request has been accepted. ${reqReply || 'I\'ll be in touch to confirm the details.'}`
+                                : status === 'proposed'
+                                ? reqReply || 'That time doesn\'t work — let me suggest an alternative.'
+                                : reqReply || 'I\'m unable to meet at this time.';
+                              await supabase.from('correspondence').update({ status }).eq('id', req.id);
+                              await supabase.from('correspondence').insert({
+                                department_id: me.department_id,
+                                member_id: req.member_id,
+                                kind: 'reply',
+                                subject: `Re: ${req.subject}`,
+                                body: replyBody,
+                              });
+                              setResponding(null); setReqReply('');
+                              const { data } = await supabase.from('correspondence')
+                                .select('*, members!correspondence_member_id_fkey(full_name, phone, email)')
+                                .eq('department_id', me.department_id)
+                                .eq('kind', 'meeting_request')
+                                .order('created_at', { ascending: false });
+                              setRequests(data || []);
+                            } catch(e) { setErr(e.message); }
+                            finally { setReplyBusy(false); }
+                          }}>
+                          {replyBusy ? 'Sending…' : 'Send reply'}
+                        </button>
+                        <button style={PS.btn} onClick={() => { setResponding(null); setReqReply(''); }}>Cancel</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      <button style={{ ...PS.btnPrimary, fontSize: 12, background: 'rgba(70,199,147,.15)', color: POA.green, border: '0.5px solid rgba(70,199,147,.3)' }}
+                        onClick={() => { setResponding(req.id); setReqReply(''); }}>
+                        <CheckCircle2 size={12} /> Accept
+                      </button>
+                      <button style={{ ...PS.btn, fontSize: 12 }}
+                        onClick={() => { setResponding(req.id + '_propose'); setReqReply(''); }}>
+                        <Clock size={12} /> Propose alternate
+                      </button>
+                      <button style={{ ...PS.btn, fontSize: 12, color: POA.red }}
+                        onClick={() => { setResponding(req.id + '_decline'); setReqReply(''); }}>
+                        Decline
+                      </button>
+                    </div>
+                  )
+                )}
+              </Card>
+            );
+          })}
         </div>
       )}
     </div>
