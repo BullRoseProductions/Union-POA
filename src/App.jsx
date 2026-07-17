@@ -8317,6 +8317,7 @@ function BoardDocuments({ me }) {
   const [editing, setEditing] = useState(null);
   const [err, setErr]         = useState("");
   const [busy, setBusy]       = useState(false);
+  const [viewing, setViewing] = useState(null);
   const isAdmin               = canAdmin(me.access);
   const [f, setF] = useState({
     name: "", category: "General", visibility: "board_only",
@@ -8490,8 +8491,14 @@ function BoardDocuments({ me }) {
                   </div>
                   <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
                     {doc.storage_path && (
-                      <button style={{ ...PS.btn, fontSize: 12 }} onClick={() => doOpen(doc)}>
-                        Open ↗
+                      <button style={{ ...PS.btnPrimary, fontSize: 12, padding: '6px 12px' }}
+                        onClick={async () => {
+                          try {
+                            const url = await getDocumentUrl(doc.storage_path);
+                            setViewing({ doc, url });
+                          } catch(e) { setErr('Could not open document.'); }
+                        }}>
+                        Open
                       </button>
                     )}
                     {isAdmin && (
@@ -8511,6 +8518,46 @@ function BoardDocuments({ me }) {
           </div>
         ))
       )}
+      {viewing && (
+        <div onClick={() => setViewing(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.85)', zIndex: 60, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', padding: '20px 16px', overflowY: 'auto' }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background: 'linear-gradient(135deg, #0E1630, #0A1020)', border: `0.5px solid ${POA.hairline2}`, borderRadius: 16, maxWidth: 860, width: '100%', padding: '16px 18px', boxShadow: '0 20px 60px rgba(0,0,0,.6)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.12em', textTransform: 'uppercase', color: POA.accent, marginBottom: 2 }}>Document</div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: POA.textPrimary }}>{viewing.doc.name}</div>
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <a href={viewing.url} target='_blank' rel='noreferrer'
+                  style={{ ...PS.btn, fontSize: 12, textDecoration: 'none' }}>
+                  Open in new tab ↗
+                </a>
+                <button style={{ ...PS.btn, padding: '6px 10px' }} onClick={() => setViewing(null)}>
+                  <X size={14} />
+                </button>
+              </div>
+            </div>
+            {viewing.doc.mime_type === 'application/pdf' || viewing.doc.file_name?.endsWith('.pdf') ? (
+              <iframe src={viewing.url} style={{ width: '100%', height: '75vh', border: 'none', borderRadius: 8, background: '#fff' }} title={viewing.doc.name} />
+            ) : viewing.doc.extracted_text ? (
+              <div style={{ background: 'rgba(0,0,0,.3)', border: `0.5px solid ${POA.hairline}`, borderRadius: 10, padding: '16px 18px', maxHeight: '75vh', overflowY: 'auto', fontSize: 13.5, color: POA.textSecondary, lineHeight: 1.75, whiteSpace: 'pre-wrap' }}>
+                {viewing.doc.extracted_text}
+              </div>
+            ) : (
+              <div style={{ textAlign: 'center', padding: '40px 0' }}>
+                <div style={{ fontSize: 13.5, color: POA.textMuted, marginBottom: 14 }}>
+                  This file type can't be previewed in-app.
+                </div>
+                <a href={viewing.url} target='_blank' rel='noreferrer'
+                  style={{ ...PS.btnPrimary, textDecoration: 'none' }}>
+                  Open in new tab ↗
+                </a>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -8519,6 +8566,7 @@ function MemberDocuments({ me }) {
   const [docs, setDocs] = useState(null);
   const [err, setErr]   = useState("");
   const [search, setSearch] = useState('');
+  const [viewing, setViewing] = useState(null);
 
   useEffect(() => {
     listDocuments().then(setDocs).catch(e => setErr(e.message));
@@ -8569,8 +8617,14 @@ function MemberDocuments({ me }) {
                     {doc.notes && <div style={{ fontSize: 12, color: POA.textMuted, fontStyle: "italic" }}>{doc.notes}</div>}
                   </div>
                   {doc.storage_path && (
-                    <button style={{ ...PS.btnPrimary, fontSize: 13, padding: "8px 14px", flexShrink: 0 }} onClick={() => doOpen(doc)}>
-                      Open ↗
+                    <button style={{ ...PS.btnPrimary, fontSize: 13, padding: "8px 14px", flexShrink: 0 }}
+                      onClick={async () => {
+                        try {
+                          const url = await getDocumentUrl(doc.storage_path);
+                          setViewing({ doc, url });
+                        } catch(e) { setErr('Could not open document.'); }
+                      }}>
+                      Open
                     </button>
                   )}
                 </div>
@@ -8585,6 +8639,46 @@ function MemberDocuments({ me }) {
             No documents match '{search}'. Try a different search term.
           </div>
         </Card>
+      )}
+      {viewing && (
+        <div onClick={() => setViewing(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.85)', zIndex: 60, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', padding: '20px 16px', overflowY: 'auto' }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background: 'linear-gradient(135deg, #0E1630, #0A1020)', border: `0.5px solid ${POA.hairline2}`, borderRadius: 16, maxWidth: 860, width: '100%', padding: '16px 18px', boxShadow: '0 20px 60px rgba(0,0,0,.6)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.12em', textTransform: 'uppercase', color: POA.accent, marginBottom: 2 }}>Document</div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: POA.textPrimary }}>{viewing.doc.name}</div>
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <a href={viewing.url} target='_blank' rel='noreferrer'
+                  style={{ ...PS.btn, fontSize: 12, textDecoration: 'none' }}>
+                  Open in new tab ↗
+                </a>
+                <button style={{ ...PS.btn, padding: '6px 10px' }} onClick={() => setViewing(null)}>
+                  <X size={14} />
+                </button>
+              </div>
+            </div>
+            {viewing.doc.mime_type === 'application/pdf' || viewing.doc.file_name?.endsWith('.pdf') ? (
+              <iframe src={viewing.url} style={{ width: '100%', height: '75vh', border: 'none', borderRadius: 8, background: '#fff' }} title={viewing.doc.name} />
+            ) : viewing.doc.extracted_text ? (
+              <div style={{ background: 'rgba(0,0,0,.3)', border: `0.5px solid ${POA.hairline}`, borderRadius: 10, padding: '16px 18px', maxHeight: '75vh', overflowY: 'auto', fontSize: 13.5, color: POA.textSecondary, lineHeight: 1.75, whiteSpace: 'pre-wrap' }}>
+                {viewing.doc.extracted_text}
+              </div>
+            ) : (
+              <div style={{ textAlign: 'center', padding: '40px 0' }}>
+                <div style={{ fontSize: 13.5, color: POA.textMuted, marginBottom: 14 }}>
+                  This file type can't be previewed in-app.
+                </div>
+                <a href={viewing.url} target='_blank' rel='noreferrer'
+                  style={{ ...PS.btnPrimary, textDecoration: 'none' }}>
+                  Open in new tab ↗
+                </a>
+              </div>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );
