@@ -4852,7 +4852,7 @@ function Store({ me }) {
   );
 }
 
-function PlanEditor({ position, plan, actionItems, onSave, onGenerate, onClose, busy, saving, err }) {
+function PlanEditor({ position, plan, activityLog, onSave, onGenerate, onClose, busy, saving, err }) {
   const SECTIONS = [
     'Role Overview',
     'Key Responsibilities',
@@ -4894,12 +4894,12 @@ function PlanEditor({ position, plan, actionItems, onSave, onGenerate, onClose, 
           <button style={{ ...PS.btn, padding: '5px 10px' }} onClick={onClose}><X size={13} /></button>
         </div>
 
-        {/* Action items from app */}
-        {actionItems.length > 0 && (
-          <div style={{ background: 'rgba(219,165,37,.06)', border: `0.5px solid rgba(219,165,37,.2)`, borderRadius: 10, padding: '10px 14px', marginBottom: 16 }}>
-            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: POA.accent, marginBottom: 6 }}>Open action items pulled from app</div>
-            {actionItems.map((a, i) => (
-              <div key={i} style={{ fontSize: 12, color: POA.textSecondary, marginBottom: 2 }}>· {a.title}{a.due_date ? ` — due ${fmtShort(a.due_date)}` : ''}</div>
+        {/* Activity pulled from app */}
+        {activityLog.length > 0 && (
+          <div style={{ background: 'rgba(219,165,37,.06)', border: `0.5px solid rgba(219,165,37,.2)`, borderRadius: 10, padding: '10px 14px', marginBottom: 16, maxHeight: 220, overflowY: 'auto' }}>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: POA.accent, marginBottom: 6 }}>Recent activity pulled from app (last 90 days)</div>
+            {activityLog.map((entry, i) => (
+              <div key={i} style={{ fontSize: 12, color: POA.textSecondary, marginBottom: 2 }}>{entry}</div>
             ))}
           </div>
         )}
@@ -4977,7 +4977,7 @@ function BoardContinuity({ me, org }) {
   const [planSaving, setPlanSaving]     = useState(false);
   const [planErr, setPlanErr]           = useState('');
   const [planDraft, setPlanDraft]       = useState(false);
-  const [actionItems, setActionItems]   = useState([]);
+  const [activityLog, setActivityLog]   = useState([]);
 
   const blank = { title: "", holder_member_id: "", holder_name: "", term_start: "", term_end: "", status: "active", succession_notes: "", sort: 0 };
   const [f, setF] = useState(blank);
@@ -5108,17 +5108,134 @@ Write a comprehensive onboarding package for the incoming ${position.title}.`;
       .is('deleted_at', null)
       .order('created_at', { ascending: false })
       .limit(1);
-    // Load action items for this position holder
-    let acts = [];
+    let activityLog = [];
     if (position.holder_member_id) {
-      const { data: a } = await supabase.from('action_items')
-        .select('title, due_date, status')
-        .eq('department_id', me.department_id)
-        .eq('owner_member_id', position.holder_member_id)
-        .eq('status', 'open');
-      acts = a || [];
+      const since = new Date();
+      since.setDate(since.getDate() - 90);
+      const sinceStr = since.toISOString();
+      const sinceDateStr = since.toISOString().split('T')[0];
+
+      const [
+        completedActions,
+        openActions,
+        filedMinutes,
+        savedAgendas,
+        announcements,
+        causeEntries,
+        meetingRequests,
+        communityPosts,
+        documents,
+      ] = await Promise.all([
+        // Completed action items
+        supabase.from('action_items')
+          .select('title, updated_at')
+          .eq('department_id', me.department_id)
+          .eq('owner_member_id', position.holder_member_id)
+          .eq('status', 'done')
+          .gte('updated_at', sinceStr)
+          .order('updated_at', { ascending: false })
+          .limit(10)
+          .then(({ data }) => (data || []).map(a => `✓ Completed action item: ${a.title}`)),
+
+        // Still open action items
+        supabase.from('action_items')
+          .select('title, due_date')
+          .eq('department_id', me.department_id)
+          .eq('owner_member_id', position.holder_member_id)
+          .eq('status', 'open')
+          .order('due_date', { ascending: true, nullsFirst: false })
+          .limit(10)
+          .then(({ data }) => (data || []).map(a => `⏳ Open action item: ${a.title}${a.due_date ? ` (due ${fmtShort(a.due_date)})` : ''}`)),
+
+        // Minutes filed
+        supabase.from('ai_outputs')
+          .select('title, created_at')
+          .eq('department_id', me.department_id)
+          .eq('feature', 'minutes')
+          .eq('created_by', position.holder_member_id)
+          .gte('created_at', sinceStr)
+          .order('created_at', { ascending: false })
+          .limit(8)
+          .then(({ data }) => (data || []).map(m => `📋 Filed minutes: ${m.title}`)),
+
+        // Agendas created
+        supabase.from('ai_outputs')
+          .select('title, created_at')
+          .eq('department_id', me.department_id)
+          .eq('feature', 'agenda')
+          .eq('created_by', position.holder_member_id)
+          .gte('created_at', sinceStr)
+          .order('created_at', { ascending: false })
+          .limit(5)
+          .then(({ data }) => (data || []).map(a => `📅 Created agenda: ${a.title}`)),
+
+        // Announcements posted
+        supabase.from('correspondence')
+          .select('subject, created_at')
+          .eq('department_id', me.department_id)
+          .eq('kind', 'announcement')
+          .eq('member_id', position.holder_member_id)
+          .gte('created_at', sinceStr)
+          .order('created_at', { ascending: false })
+          .limit(8)
+          .then(({ data }) => (data || []).map(a => `📢 Posted announcement: ${a.subject}`)),
+
+        // Cause entries (contributions, updates, outcomes)
+        supabase.from('cause_entries')
+          .select('label, kind, amount, occurred_on, causes(name)')
+          .eq('department_id', me.department_id)
+          .gte('occurred_on', sinceDateStr)
+          .order('occurred_on', { ascending: false })
+          .limit(10)
+          .then(({ data }) => (data || []).map(e => `❤️ Cause activity (${e.causes?.name || 'cause'}): ${e.label}${e.amount ? ` — $${e.amount}` : ''}`)),
+
+        // Meeting requests handled
+        supabase.from('correspondence')
+          .select('subject, status, created_at')
+          .eq('department_id', me.department_id)
+          .eq('kind', 'meeting_request')
+          .eq('assigned_to', position.holder_member_id)
+          .in('status', ['confirmed', 'proposed', 'declined'])
+          .gte('created_at', sinceStr)
+          .order('created_at', { ascending: false })
+          .limit(8)
+          .then(({ data }) => (data || []).map(r => `🤝 Meeting request ${r.status}: ${r.subject}`)),
+
+        // Community posts approved
+        supabase.from('community_posts')
+          .select('kind, created_at')
+          .eq('department_id', me.department_id)
+          .eq('created_by', position.holder_member_id)
+          .eq('status', 'active')
+          .gte('created_at', sinceStr)
+          .order('created_at', { ascending: false })
+          .limit(8)
+          .then(({ data }) => (data || []).map(p => `🌟 Posted community ${p.kind}`)),
+
+        // Documents uploaded
+        supabase.from('documents')
+          .select('name, created_at')
+          .eq('department_id', me.department_id)
+          .eq('uploaded_by', position.holder_member_id)
+          .gte('created_at', sinceStr)
+          .order('created_at', { ascending: false })
+          .limit(8)
+          .then(({ data }) => (data || []).map(d => `📄 Uploaded document: ${d.name}`)),
+      ]);
+
+      activityLog = [
+        ...openActions,
+        ...completedActions,
+        ...causeEntries,
+        ...filedMinutes,
+        ...savedAgendas,
+        ...announcements,
+        ...meetingRequests,
+        ...communityPosts,
+        ...documents,
+      ];
     }
-    setActionItems(acts);
+    setActivityLog(activityLog);
     if (data?.[0]) {
       setPlan(data[0]);
     } else {
@@ -5171,8 +5288,8 @@ Association: ${org?.name || 'Association'}
 ${holder ? `Current holder: ${holder.full_name}` : ''}
 Term: ${planPosition.term_start ? fmtShort(planPosition.term_start) : 'Unknown'}${planPosition.term_end ? ` – ${fmtShort(planPosition.term_end)}` : ''}
 
-Open action items for this role:
-${actionItems.length > 0 ? actionItems.map(a => `- ${a.title}${a.due_date ? ` (due ${fmtShort(a.due_date)})` : ''}`).join('\n') : 'None'}
+Recent activity for this role (last 90 days):
+${activityLog.length > 0 ? activityLog.map(item => `- ${item}`).join('\n') : 'None'}
 
 What the officer has filled in so far:
 ${existing}
@@ -5465,7 +5582,7 @@ Fill in any missing sections and improve what's there. Keep it practical for who
         <PlanEditor
           position={planPosition}
           plan={plan}
-          actionItems={actionItems}
+          activityLog={activityLog}
           onSave={async (sections) => { await savePlan(sections); setPlanPosition(null); }}
           onGenerate={generatePlanDraft}
           onClose={() => { setPlanPosition(null); setPlan(null); }}
