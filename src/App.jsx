@@ -8,7 +8,7 @@ import {
   BookOpen, Mail, Users, BarChart3, LogOut, Menu, X, ChevronRight, ChevronDown, ChevronUp,
   Sparkles, CheckCircle2, Clock, Loader2, Send, Building2,
   Plus, Pencil, Trash2, ArrowLeft, RefreshCw, FileText, QrCode, Settings, Upload,
-  KeyRound, Play, UserCircle,
+  KeyRound, Play, UserCircle, CalendarPlus,
 } from "lucide-react";
 import { supabase } from "./lib/supabase";
 import { QRCodeCanvas } from "qrcode.react";
@@ -713,6 +713,31 @@ function WhoToCall({ me }) {
 
   const blank = { role: "", name: "", phone: "", email: "", category: "Leadership", sort: 0 };
   const [f, setF] = useState(blank);
+  const [requesting, setRequesting] = useState(null); // contact being requested
+  const [rf, setRf] = useState({ subject: '', body: '', phone: '' });
+  const [reqBusy, setReqBusy] = useState(false);
+  const [reqSent, setReqSent] = useState(false);
+  const [reqErr, setReqErr] = useState('');
+
+  async function doRequestMeeting(contact) {
+    if (!rf.subject.trim()) { setReqErr('Please describe what the meeting is about.'); return; }
+    setReqBusy(true); setReqErr('');
+    try {
+      await supabase.from('correspondence').insert({
+        department_id: me.department_id,
+        member_id: me.id,
+        kind: 'meeting_request',
+        subject: rf.subject.trim(),
+        body: `${rf.body.trim() ? rf.body.trim() + '\n\n' : ''}Preferred time: ${rf.preferred_time || 'Flexible'}\nPhone: ${rf.phone || 'Not provided'}`,
+        status: 'pending',
+      });
+      setReqSent(true);
+      setRequesting(null);
+      setRf({ subject: '', body: '', phone: '' });
+      setTimeout(() => setReqSent(false), 4000);
+    } catch(e) { setReqErr(e.message); }
+    finally { setReqBusy(false); }
+  }
 
   async function load() {
     try {
@@ -809,6 +834,12 @@ function WhoToCall({ me }) {
       </div>
 
       <ErrBox msg={err} />
+      {reqSent && (
+        <div style={{ background: 'rgba(70,199,147,.1)', border: '0.5px solid rgba(70,199,147,.3)', borderRadius: 10, padding: '12px 16px', fontSize: 13, color: POA.greenText, marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <CheckCircle2 size={16} color={POA.green} />
+          Meeting request sent. You'll hear back in Correspondence.
+        </div>
+      )}
 
       {showCatMgr && manage && (
         <Card style={{ marginBottom: 16 }}>
@@ -935,6 +966,16 @@ function WhoToCall({ me }) {
                       </button>
                     )}
                   </div>
+                  {c.availability_note && (
+                    <div style={{ fontSize: 12, color: POA.textMuted, marginTop: 8, padding: '6px 10px', background: 'rgba(70,199,147,.06)', border: '0.5px solid rgba(70,199,147,.2)', borderRadius: 8 }}>
+                      <span style={{ fontSize: 10, fontWeight: 700, color: POA.green, textTransform: 'uppercase', letterSpacing: '.1em', marginRight: 6 }}>Available</span>
+                      {c.availability_note}
+                    </div>
+                  )}
+                  <button style={{ ...PS.btn, width: '100%', justifyContent: 'center', marginTop: 8, fontSize: 12 }}
+                    onClick={() => { setRequesting(c); setRf({ subject: '', body: '', phone: me.phone || '' }); setReqErr(''); }}>
+                    <CalendarPlus size={12} /> Request a meeting
+                  </button>
                 </div>
               ))}
             </div>
@@ -945,6 +986,49 @@ function WhoToCall({ me }) {
       {!manage && (
         <div style={{ fontSize: 11.5, color: POA.textMuted, marginTop: 8, fontStyle: "italic", textAlign: "center" }}>
           Contact details are managed by your board. Flag missing info in Correspondence.
+        </div>
+      )}
+
+      {requesting && (
+        <div onClick={() => setRequesting(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.7)', zIndex: 60, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 16px', overflowY: 'auto' }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background: 'linear-gradient(135deg, #0E1630, #0A1020)', border: `0.5px solid ${POA.hairline2}`, borderRadius: 16, maxWidth: 480, width: '100%', padding: '20px 22px', boxShadow: '0 20px 60px rgba(0,0,0,.6)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.12em', textTransform: 'uppercase', color: POA.accent }}>Request a meeting</div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: POA.textPrimary, marginTop: 2 }}>{requesting.name || requesting.role}</div>
+              </div>
+              <button style={{ ...PS.btn, padding: '5px 10px' }} onClick={() => setRequesting(null)}><X size={13} /></button>
+            </div>
+            {reqErr && <ErrBox msg={reqErr} />}
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>What is this about?</div>
+              <input value={rf.subject} onChange={e => setRf(x => ({ ...x, subject: e.target.value }))}
+                style={PS.input} placeholder='e.g. Injury claim concern, contract question, benefit issue' />
+            </div>
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Details (optional)</div>
+              <textarea value={rf.body} onChange={e => setRf(x => ({ ...x, body: e.target.value }))}
+                style={{ ...PS.textarea, minHeight: 70 }} placeholder='Any additional context that would help…' />
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Your phone number</div>
+              <input value={rf.phone} onChange={e => setRf(x => ({ ...x, phone: e.target.value }))}
+                style={PS.input} placeholder='(817) 555-0100' type='tel' />
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Preferred date/time</div>
+              <input value={rf.preferred_time || ''} onChange={e => setRf(x => ({ ...x, preferred_time: e.target.value }))}
+                style={PS.input} placeholder='e.g. Thursday after 6pm, weekday mornings' />
+            </div>
+            <button style={{ ...PS.btnPrimary, width: '100%' }} disabled={reqBusy || !rf.subject.trim()} onClick={() => doRequestMeeting(requesting)}>
+              {reqBusy ? 'Sending…' : 'Send meeting request'}
+            </button>
+            <div style={{ fontSize: 11.5, color: POA.textMuted, marginTop: 8, textAlign: 'center', fontStyle: 'italic' }}>
+              Your request goes directly to {requesting.name || 'the officer'}. You'll hear back in Correspondence.
+            </div>
+          </div>
         </div>
       )}
     </div>
