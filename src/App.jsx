@@ -2952,21 +2952,23 @@ function MembersBoard({ me }) {
             <h2 style={{ fontFamily: 'inherit', fontSize: 22, fontWeight: 700, color: POA.textPrimary, margin: 0 }}>{selected.full_name}</h2>
             <div style={{ fontSize: 13, color: POA.textMuted }}>{selected.email}</div>
           </div>
-          {canAdmin(me.access) && !editing && (
-            <div style={{ marginLeft: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
-              <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ marginLeft: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {!editing && (
                 <button style={{ ...PS.btn }} onClick={() => { setEf({ full_name: selected.full_name, badge: selected.badge || '', district: selected.district || '', phone: selected.phone || '', standing: selected.standing || 'Good', status: selected.status || 'active', dues_paid_through: selected.dues_paid_through || '', member_since: selected.member_since || '', availability_note: selected.availability_note || '', preferred_contact: selected.preferred_contact || '', access: selected.access || ['Member'] }); setEditing(true); }}>
                   <Pencil size={12} /> Edit
                 </button>
+              )}
+              {canAdmin(me.access) && !editing && (
                 <button style={{ ...PS.btnPrimary, fontSize: 12 }} disabled={inviting || !selected.email}
                   onClick={doInvite}>
                   {inviting ? 'Sending…' : <><Mail size={12} /> Send invite</>}
                 </button>
-              </div>
-              {inviteSent && <div style={{ fontSize: 11, color: POA.green }}>✓ Invite sent to {selected.email}</div>}
-              {inviteErr && <div style={{ fontSize: 11, color: POA.red }}>{inviteErr}</div>}
+              )}
             </div>
-          )}
+            {inviteSent && <div style={{ fontSize: 11, color: POA.green }}>✓ Invite sent to {selected.email}</div>}
+            {inviteErr && <div style={{ fontSize: 11, color: POA.red }}>{inviteErr}</div>}
+          </div>
         </div>
 
         {editing ? (
