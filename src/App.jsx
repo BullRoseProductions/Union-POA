@@ -9695,7 +9695,7 @@ function MyProfile({ me }) {
   const [replyBusy, setReplyBusy]   = useState(false);
   const [blockStart, setBlockStart] = useState('');
   const [blockEnd, setBlockEnd]     = useState('');
-  const [showAvail, setShowAvail]   = useState(true);
+  const [showAvail, setShowAvail]   = useState(false);
   const [f, setF] = useState({
     preferred_contact: me.preferred_contact || '',
     phone: me.phone || '',
