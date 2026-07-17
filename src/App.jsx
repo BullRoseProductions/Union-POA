@@ -6855,6 +6855,8 @@ function BoardCorrespondence({ me, members }) {
                                 kind: 'reply',
                                 subject: `Re: ${req.subject}`,
                                 body: replyBody,
+                                thread_id: req.id,
+                                replied_by: me.id,
                               });
                               setResponding(null); setReqReply('');
                               const { data } = await supabase.from('correspondence')
@@ -9937,7 +9939,8 @@ function MyProfile({ me }) {
         kind: 'reply',
         subject: `Re: ${req.subject}`,
         body: replyBody,
-        created_by: me.id,
+        thread_id: req.id,
+        replied_by: me.id,
       });
       setResponding(null); setReplyText('');
       // Reload requests

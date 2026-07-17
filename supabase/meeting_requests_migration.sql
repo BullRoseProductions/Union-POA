@@ -10,6 +10,12 @@ alter table contacts add column if not exists member_id uuid references members(
 -- correspondence.assigned_to: the board member a meeting request is routed to.
 alter table correspondence add column if not exists assigned_to uuid references members(id);
 
+-- Reply threading + authorship: thread_id links a reply to the request it answers
+-- (already used elsewhere in the app for message replies); replied_by records the
+-- board member who authored the reply (member_id stays the member the thread is about).
+alter table correspondence add column if not exists thread_id  uuid references correspondence(id);
+alter table correspondence add column if not exists replied_by uuid references members(id);
+
 -- Allow the new kind/status values on correspondence. If your correspondence
 -- table has CHECK constraints on kind/status that exclude these, the inserts
 -- fail. Find them with:
