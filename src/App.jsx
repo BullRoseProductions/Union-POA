@@ -5311,67 +5311,59 @@ Fill in any missing sections and improve what's there. Keep it practical for who
       {!positions ? <Spinner /> : active.length === 0 ? (
         <Card><div style={{ color: POA.textMuted, fontSize: 13.5 }}>No positions yet. Add your first board position above.</div></Card>
       ) : active.map(p => {
-        const holderName = p.holder_member_id
-          ? (p.members?.full_name || "Member")
-          : (p.holder_name || null);
-        const expanded = expandedId === p.id;
+        const holder = p.holder_member_id ? members.find(m => m.id === p.holder_member_id) : null;
+        const holderName = holder?.full_name || p.holder_name || null;
         return (
-          <React.Fragment key={p.id}>
-          <Card style={{ marginBottom: 10 }}>
-            <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 700, fontSize: 15, color: POA.textPrimary, marginBottom: 3 }}>
-                  {p.title}
+          <div key={p.id} style={{ marginBottom: 10 }}>
+            <div style={{ background: 'linear-gradient(160deg, #101828 0%, #0A1020 100%)', border: `0.5px solid ${POA.hairline2}`, borderLeft: `3px solid ${statusColor[p.status] || POA.accent}`, borderRadius: '0 13px 13px 0', padding: '16px 18px', boxShadow: '0 2px 12px rgba(0,0,0,.4)' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 700, fontSize: 16, color: POA.textPrimary, marginBottom: 4 }}>{p.title}</div>
+                  {holderName ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ width: 28, height: 28, borderRadius: '50%', background: POA.accentSoft, color: POA.accent, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>
+                        {holderName.split(' ').map(w => w[0]).slice(0,2).join('')}
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 13.5, fontWeight: 600, color: POA.textPrimary }}>{holderName}</div>
+                        {(p.term_start || p.term_end) && (
+                          <div style={{ fontSize: 11, color: POA.textMuted }}>
+                            {p.term_start ? fmtShort(p.term_start) : '?'} — {p.term_end ? fmtShort(p.term_end) : 'present'}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: 13, color: POA.amber, fontStyle: 'italic' }}>Position vacant</div>
+                  )}
+                  {p.succession_notes && (
+                    <div style={{ fontSize: 12, color: POA.textMuted, marginTop: 8, padding: '6px 10px', background: 'rgba(255,255,255,.03)', borderRadius: 6, lineHeight: 1.5 }}>
+                      {p.succession_notes.slice(0, 100)}{p.succession_notes.length > 100 ? '…' : ''}
+                    </div>
+                  )}
                 </div>
-                <div style={{ fontSize: 13, color: holderName ? POA.textSecondary : POA.textMuted }}>
-                  {holderName || "Vacant"}
-                  {p.members?.badge ? ` · Badge ${p.members.badge}` : ""}
-                </div>
-                {(p.term_start || p.term_end) && (
-                  <div style={{ fontSize: 11.5, color: POA.textMuted, marginTop: 2 }}>
-                    Term {p.term_start ? fmtDate(p.term_start) : "?"} — {p.term_end ? fmtDate(p.term_end) : "ongoing"}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, flexShrink: 0 }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 999, background: statusBg[p.status] || POA.accentSoft, color: statusColor[p.status] || POA.accent, textTransform: 'uppercase', letterSpacing: '.08em' }}>
+                    {p.status}
+                  </span>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    {manage && (
+                      <button style={{ ...PS.btn, fontSize: 11, padding: '4px 8px' }} onClick={() => startEdit(p)}>
+                        <Pencil size={11} />
+                      </button>
+                    )}
+                    <button style={{ ...PS.btn, fontSize: 11, padding: '4px 10px' }} onClick={() => openPlan(p)}>
+                      <BookOpen size={11} /> Plan
+                    </button>
+                    {manage && (p.holder_member_id || p.holder_name) && generating !== p.id && (
+                      <button style={{ ...PS.btn, fontSize: 11, padding: '4px 10px' }} onClick={() => { setGenerating(p.id); setPackageOut(''); setPackageErr(''); }}>
+                        <Sparkles size={11} /> Package
+                      </button>
+                    )}
                   </div>
-                )}
-              </div>
-              <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
-                <span style={{ fontSize: 10, fontWeight: 700, padding: "3px 9px", borderRadius: 999, background: statusBg[p.status] || POA.accentSoft, color: statusColor[p.status] || POA.accent, textTransform: "uppercase" }}>
-                  {p.status}
-                </span>
-                {manage && (
-                  <button style={{ ...PS.btn, padding: "5px 9px", fontSize: 11.5 }}
-                    onClick={() => startEdit(p)}>
-                    <Pencil size={11} />
-                  </button>
-                )}
-                {manage && (
-                  <button style={{ ...PS.btn, fontSize: 11, padding: '4px 10px' }}
-                    onClick={() => openPlan(p)}>
-                    <BookOpen size={11} /> Plan
-                  </button>
-                )}
-                {manage && (p.holder_member_id || p.holder_name) && generating !== p.id && (
-                  <button style={{ ...PS.btn, fontSize: 11, padding: '4px 10px' }}
-                    onClick={() => { setGenerating(p.id); setPackageOut(''); setPackageErr(''); }}>
-                    <Sparkles size={11} /> Onboarding package
-                  </button>
-                )}
+                </div>
               </div>
             </div>
-            {p.succession_notes && (
-              <>
-                <div onClick={() => setExpandedId(expanded ? null : p.id)}
-                  style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 10, cursor: "pointer", color: POA.textMuted, fontSize: 12 }}>
-                  {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-                  Succession notes
-                </div>
-                {expanded && (
-                  <div style={{ marginTop: 8, background: POA.sidebar, border: `0.5px solid ${POA.hairline}`, borderLeft: `3px solid ${POA.accent}`, borderRadius: "0 9px 9px 0", padding: "11px 14px", fontSize: 13, color: POA.textSecondary, lineHeight: 1.65, whiteSpace: "pre-wrap" }}>
-                    {p.succession_notes}
-                  </div>
-                )}
-              </>
-            )}
-          </Card>
           {generating === p.id && (
             <Card style={{ marginBottom: 10, borderLeft: `3px solid ${POA.accent}`, borderRadius: '0 13px 13px 0' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
@@ -5423,7 +5415,7 @@ Fill in any missing sections and improve what's there. Keep it practical for who
               )}
             </Card>
           )}
-          </React.Fragment>
+          </div>
         );
       })}
 
