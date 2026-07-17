@@ -9803,17 +9803,12 @@ function MyProfile({ me }) {
       )}
 
       <Card style={{ marginBottom: 14 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', marginBottom: showAvail ? 14 : 0 }}
-          onClick={() => setShowAvail(v => !v)}>
-          <p style={{ ...PS.kicker, margin: 0 }}>My availability</p>
-          {showAvail ? <ChevronUp size={16} color={POA.textMuted} /> : <ChevronDown size={16} color={POA.textMuted} />}
-        </div>
-        {showAvail && (<>
+        <p style={{ ...PS.kicker, margin: '0 0 12px' }}>My availability</p>
         <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 12 }}>
           Members see these times when they request a meeting with you.
         </div>
 
-        {/* Visual preview */}
+        {/* Always visible — week preview */}
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: POA.textMuted, marginBottom: 8 }}>Preview — this week</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
@@ -9866,6 +9861,14 @@ function MyProfile({ me }) {
           </div>
         </div>
 
+        {/* Collapsible — schedule editor */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', margin: '12px 0 0' }}
+          onClick={() => setShowAvail(v => !v)}>
+          <p style={{ ...PS.kicker, margin: 0 }}>Edit schedule</p>
+          {showAvail ? <ChevronUp size={15} color={POA.textMuted} /> : <ChevronDown size={15} color={POA.textMuted} />}
+        </div>
+
+        {showAvail && (<>
         {/* Weekly schedule */}
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: POA.textMuted, marginBottom: 8 }}>Weekly availability</div>
