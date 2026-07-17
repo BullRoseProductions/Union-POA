@@ -982,11 +982,11 @@ function WhoToCall({ me }) {
                     let avail = null;
                     try { avail = JSON.parse(linkedMember.availability_note); } catch { return null; }
                     const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+                    const fmt = t => { if (!t) return ''; const [h, m] = t.split(':'); const hr = parseInt(h); return `${hr > 12 ? hr-12 : hr || 12}:${m}${hr >= 12 ? 'pm' : 'am'}`; };
                     const parts = DAYS.filter(d => avail.schedule?.[d]?.enabled)
                       .map(d => {
-                        const slot = avail.schedule[d];
-                        const fmt = t => { if (!t) return ''; const [h, m] = t.split(':'); const hr = parseInt(h); return `${hr > 12 ? hr-12 : hr || 12}:${m}${hr >= 12 ? 'pm' : 'am'}`; };
-                        return `${d} ${fmt(slot.start)}–${fmt(slot.end)}`;
+                        const slots = avail.schedule[d].slots || [{ start: avail.schedule[d].start, end: avail.schedule[d].end }];
+                        return `${d} ${slots.map(s => `${fmt(s.start)}–${fmt(s.end)}`).join(', ')}`;
                       });
                     const blocked = (avail.blocked || []).filter(d => d >= new Date().toISOString().split('T')[0]);
                     if (parts.length === 0 && blocked.length === 0) return null;
@@ -2985,11 +2985,11 @@ function MembersBoard({ me }) {
                     try {
                       const avail = JSON.parse(selected.availability_note);
                       const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+                      const fmt = t => { if (!t) return ''; const [h, m] = t.split(':'); const hr = parseInt(h); return `${hr > 12 ? hr-12 : hr || 12}:${m}${hr >= 12 ? 'pm' : 'am'}`; };
                       const parts = DAYS.filter(d => avail.schedule?.[d]?.enabled)
                         .map(d => {
-                          const slot = avail.schedule[d];
-                          const fmt = t => { if (!t) return ''; const [h, m] = t.split(':'); const hr = parseInt(h); return `${hr > 12 ? hr-12 : hr || 12}:${m}${hr >= 12 ? 'pm' : 'am'}`; };
-                          return `${d} ${fmt(slot.start)}–${fmt(slot.end)}`;
+                          const slots = avail.schedule[d].slots || [{ start: avail.schedule[d].start, end: avail.schedule[d].end }];
+                          return `${d} ${slots.map(s => `${fmt(s.start)}–${fmt(s.end)}`).join(', ')}`;
                         });
                       return parts.length > 0 ? parts.join(' · ') : 'No schedule set';
                     } catch { return selected.availability_note || 'Not set'; }
@@ -9761,7 +9761,7 @@ function MyProfile({ me }) {
     const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
     const fmt = t => { if (!t) return ''; const [h, m] = t.split(':'); const hr = parseInt(h); return `${hr > 12 ? hr-12 : hr || 12}:${m}${hr >= 12 ? 'pm' : 'am'}`; };
     const parts = DAYS.filter(d => avail.schedule[d]?.enabled)
-      .map(d => { const slot = avail.schedule[d]; return `${d} ${fmt(slot.start)}–${fmt(slot.end)}`; });
+      .map(d => { const slots = avail.schedule[d].slots || [{ start: avail.schedule[d].start, end: avail.schedule[d].end }]; return `${d} ${slots.map(s => `${fmt(s.start)}–${fmt(s.end)}`).join(', ')}`; });
     return parts.length > 0 ? parts.join(', ') : null;
   }
 
@@ -9802,31 +9802,59 @@ function MyProfile({ me }) {
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: POA.textMuted, marginBottom: 8 }}>Weekly availability</div>
           {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(day => {
-            const slot = f.availability.schedule[day] || { enabled: false, start: '17:00', end: '20:00' };
+            const dayData = f.availability.schedule[day] || { enabled: false, slots: [{ start: '09:00', end: '17:00' }] };
+            const slots = dayData.slots || [{ start: dayData.start || '09:00', end: dayData.end || '17:00' }];
             return (
-              <div key={day} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, padding: '10px 12px', background: slot.enabled ? 'rgba(219,165,37,.06)' : 'rgba(255,255,255,.02)', border: `0.5px solid ${slot.enabled ? 'rgba(219,165,37,.25)' : POA.hairline}`, borderRadius: 8 }}>
-                <div onClick={() => setF(x => {
-                  const cur = x.availability.schedule[day] || { enabled: false, start: '17:00', end: '20:00' };
-                  return { ...x, availability: { ...x.availability, schedule: { ...x.availability.schedule, [day]: { ...cur, enabled: !cur.enabled } } } };
-                })} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', flex: '0 0 auto' }}>
-                  <div style={{ width: 20, height: 20, borderRadius: 6, border: `2px solid ${slot.enabled ? POA.accent : POA.hairline2}`, background: slot.enabled ? POA.accent : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: '.15s' }}>
-                    {slot.enabled && <CheckCircle2 size={12} color='#06090A' />}
+              <div key={day} style={{ marginBottom: 8, padding: '10px 12px', background: dayData.enabled ? 'rgba(219,165,37,.06)' : 'rgba(255,255,255,.02)', border: `0.5px solid ${dayData.enabled ? 'rgba(219,165,37,.25)' : POA.hairline}`, borderRadius: 8 }}>
+                {/* Day header row */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: dayData.enabled ? 10 : 0 }}>
+                  <div onClick={() => setF(x => {
+                    const cur = x.availability.schedule[day] || { enabled: false, slots: [{ start: '09:00', end: '17:00' }] };
+                    return { ...x, availability: { ...x.availability, schedule: { ...x.availability.schedule, [day]: { ...cur, enabled: !cur.enabled, slots: cur.slots || [{ start: '09:00', end: '17:00' }] } } } };
+                  })} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                    <div style={{ width: 20, height: 20, borderRadius: 6, border: `2px solid ${dayData.enabled ? POA.accent : POA.hairline2}`, background: dayData.enabled ? POA.accent : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: '.15s' }}>
+                      {dayData.enabled && <CheckCircle2 size={12} color='#06090A' />}
+                    </div>
+                    <div style={{ width: 36, fontSize: 13, fontWeight: 700, color: dayData.enabled ? POA.textPrimary : POA.textMuted }}>{day}</div>
                   </div>
-                  <div style={{ width: 36, fontSize: 13, fontWeight: 700, color: slot.enabled ? POA.textPrimary : POA.textMuted }}>{day}</div>
+                  {!dayData.enabled && <div style={{ fontSize: 12, color: POA.textMuted, fontStyle: 'italic' }}>Unavailable</div>}
+                  {dayData.enabled && (
+                    <button onClick={() => setF(x => {
+                      const cur = x.availability.schedule[day];
+                      return { ...x, availability: { ...x.availability, schedule: { ...x.availability.schedule, [day]: { ...cur, slots: [...(cur.slots || []), { start: '09:00', end: '17:00' }] } } } };
+                    })} style={{ ...PS.btn, fontSize: 11, padding: '3px 10px', marginLeft: 'auto' }}>
+                      <Plus size={11} /> Add slot
+                    </button>
+                  )}
                 </div>
-                {slot.enabled ? (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1 }}>
-                    <input type='time' value={slot.start || '17:00'}
-                      onChange={e => setF(x => ({ ...x, availability: { ...x.availability, schedule: { ...x.availability.schedule, [day]: { ...slot, start: e.target.value } } } }))}
+                {/* Time slots */}
+                {dayData.enabled && slots.map((slot, si) => (
+                  <div key={si} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: si < slots.length - 1 ? 6 : 0 }}>
+                    <input type='time' value={slot.start}
+                      onChange={e => setF(x => {
+                        const cur = x.availability.schedule[day];
+                        const newSlots = cur.slots.map((s, i) => i === si ? { ...s, start: e.target.value } : s);
+                        return { ...x, availability: { ...x.availability, schedule: { ...x.availability.schedule, [day]: { ...cur, slots: newSlots } } } };
+                      })}
                       style={{ ...PS.input, width: 120, fontSize: 13 }} />
                     <span style={{ fontSize: 12, color: POA.textMuted }}>to</span>
-                    <input type='time' value={slot.end || '20:00'}
-                      onChange={e => setF(x => ({ ...x, availability: { ...x.availability, schedule: { ...x.availability.schedule, [day]: { ...slot, end: e.target.value } } } }))}
+                    <input type='time' value={slot.end}
+                      onChange={e => setF(x => {
+                        const cur = x.availability.schedule[day];
+                        const newSlots = cur.slots.map((s, i) => i === si ? { ...s, end: e.target.value } : s);
+                        return { ...x, availability: { ...x.availability, schedule: { ...x.availability.schedule, [day]: { ...cur, slots: newSlots } } } };
+                      })}
                       style={{ ...PS.input, width: 120, fontSize: 13 }} />
+                    {slots.length > 1 && (
+                      <button onClick={() => setF(x => {
+                        const cur = x.availability.schedule[day];
+                        return { ...x, availability: { ...x.availability, schedule: { ...x.availability.schedule, [day]: { ...cur, slots: cur.slots.filter((_, i) => i !== si) } } } };
+                      })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: POA.textMuted, padding: '0 4px' }}>
+                        <X size={13} />
+                      </button>
+                    )}
                   </div>
-                ) : (
-                  <div style={{ fontSize: 12, color: POA.textMuted, fontStyle: 'italic' }}>Unavailable</div>
-                )}
+                ))}
               </div>
             );
           })}
