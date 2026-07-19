@@ -357,6 +357,7 @@ function MemberDash({ me, org, setView }) {
   const [attendance, setAttendance] = useState([]);
   const [openActions, setOpenActions] = useState(0);
   const [videos, setVideos] = useState([]);
+  const [playingVideo, setPlayingVideo] = useState(null);
   const [onCall, setOnCall_state] = useState([]);
   const [activity, setActivity] = useState([]);
   const [announcements, setAnnouncements] = useState([]);
@@ -664,18 +665,34 @@ function MemberDash({ me, org, setView }) {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 10 }}>
             {videos.slice(0, 3).map(v => (
               <div key={v.id} style={{ background: 'linear-gradient(160deg, #101828 0%, #0A1020 100%)', border: `0.5px solid ${POA.hairline2}`, borderRadius: 12, overflow: 'hidden', cursor: 'pointer' }}
-                onClick={() => window.open(v.vimeo_url, '_blank')}>
-                <div style={{ background: 'rgba(0,0,0,.4)', aspectRatio: '16/9', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
-                  {v.thumbnail_url ? (
-                    <img src={v.thumbnail_url} alt={v.title} style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', inset: 0 }} />
-                  ) : null}
-                  <div style={{ position: 'relative', width: 36, height: 36, borderRadius: '50%', background: 'rgba(219,165,37,.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 12px rgba(0,0,0,.5)' }}>
-                    <Play size={16} color='#06090A' fill='#06090A' style={{ marginLeft: 2 }} />
+                onClick={() => setPlayingVideo(playingVideo === v.id ? null : v.id)}>
+                {playingVideo === v.id && v.vimeo_url ? (() => {
+                  const match = v.vimeo_url.match(/vimeo\.com\/(\d+)/);
+                  const embedUrl = match ? `https://player.vimeo.com/video/${match[1]}?autoplay=1` : null;
+                  return embedUrl ? (
+                    <div style={{ aspectRatio: '16/9' }}>
+                      <iframe src={embedUrl} style={{ width: '100%', height: '100%', border: 'none' }}
+                        allow='autoplay; fullscreen' title={v.title} />
+                    </div>
+                  ) : null;
+                })() : (
+                  <div style={{ background: 'rgba(0,0,0,.4)', aspectRatio: '16/9', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+                    {v.thumbnail_url && <img src={v.thumbnail_url} alt={v.title} style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', inset: 0 }} />}
+                    <div style={{ position: 'relative', width: 36, height: 36, borderRadius: '50%', background: 'rgba(219,165,37,.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 12px rgba(0,0,0,.5)' }}>
+                      <Play size={16} color='#06090A' fill='#06090A' style={{ marginLeft: 2 }} />
+                    </div>
                   </div>
-                </div>
+                )}
                 <div style={{ padding: '10px 12px' }}>
                   <div style={{ fontWeight: 600, fontSize: 13, color: POA.textPrimary, marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.title}</div>
                   {v.series_name && <div style={{ fontSize: 11, color: POA.textMuted }}>{v.series_name}</div>}
+                  {playingVideo === v.id && (
+                    <a href={v.vimeo_url} target='_blank' rel='noreferrer'
+                      style={{ fontSize: 11, color: POA.accent, textDecoration: 'none', display: 'block', marginTop: 4 }}
+                      onClick={e => e.stopPropagation()}>
+                      Watch on Vimeo ↗
+                    </a>
+                  )}
                 </div>
               </div>
             ))}
@@ -10432,6 +10449,8 @@ function OrgSettings({ me, org }) {
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [err, setErr] = useState("");
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [logoPreview, setLogoPreview]     = useState(null);
 
   useEffect(() => {
     supabase.from("org_settings")
@@ -10450,6 +10469,25 @@ function OrgSettings({ me, org }) {
       .upsert({ department_id: me.department_id, key, value },
         { onConflict: "department_id,key" });
     if (error) throw error;
+  }
+
+  async function uploadLogo(file) {
+    if (!file) return;
+    setLogoUploading(true); setErr("");
+    try {
+      const ext = file.name.split('.').pop();
+      const path = `logos/${me.department_id}.${ext}`;
+      const { error: upErr } = await supabase.storage
+        .from('org-assets')
+        .upload(path, file, { upsert: true, contentType: file.type });
+      if (upErr) throw upErr;
+      const { data } = supabase.storage.from('org-assets').getPublicUrl(path);
+      const url = data.publicUrl;
+      await saveSetting('org_logo_url', url);
+      setSettings(prev => ({ ...prev, org_logo_url: url }));
+      setLogoPreview(url);
+    } catch(e) { setErr(e.message); }
+    finally { setLogoUploading(false); }
   }
 
   async function doSave() {
@@ -10511,14 +10549,30 @@ function OrgSettings({ me, org }) {
 
           <Card style={{ marginBottom: 16 }}>
             <SectionTitle>Branding</SectionTitle>
-            <OrgSettingsField label="Logo URL (link to your logo image)" k="org_logo_url" placeholder="https://fwpoa.org/logo.png" type="url" value={settings.org_logo_url} onChange={onFieldChange} isAdmin={isAdmin} />
-            {settings.org_logo_url && (
-              <div style={{ marginBottom: 12 }}>
-                <img src={settings.org_logo_url} alt="Logo preview"
-                  style={{ height: 60, objectFit: "contain", borderRadius: 8, background: "rgba(0,0,0,.3)", padding: 8 }}
-                  onError={e => { e.target.style.display = "none"; }} />
+            <div style={{ gridColumn: '1 / -1', marginBottom: 12 }}>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 8 }}>Association logo</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                <div style={{ width: 64, height: 64, borderRadius: 12, background: 'rgba(219,165,37,.1)', border: `1px solid rgba(219,165,37,.2)`, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
+                  {(logoPreview || settings.org_logo_url) ? (
+                    <img src={logoPreview || settings.org_logo_url} alt='logo'
+                      style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                      onError={e => { e.target.style.display = 'none'; }} />
+                  ) : (
+                    <div style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: 14, fontWeight: 700, color: POA.accent }}>
+                      {(settings.org_short_name || settings.org_name || 'POA').slice(0,3).toUpperCase()}
+                    </div>
+                  )}
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={{ ...PS.btnPrimary, display: 'inline-flex', cursor: 'pointer', fontSize: 12 }}>
+                    {logoUploading ? 'Uploading…' : <><Upload size={13} /> {(logoPreview || settings.org_logo_url) ? 'Replace logo' : 'Upload logo'}</>}
+                    <input type='file' accept='image/*' style={{ display: 'none' }}
+                      onChange={e => { if (e.target.files[0]) uploadLogo(e.target.files[0]); }} />
+                  </label>
+                  <div style={{ fontSize: 11, color: POA.textMuted, marginTop: 6 }}>PNG or SVG recommended. Shows on membership cards and the board dashboard.</div>
+                </div>
               </div>
-            )}
+            </div>
             <div style={{ marginBottom: 12 }}>
               <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Association color</div>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
