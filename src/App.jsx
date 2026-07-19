@@ -3381,28 +3381,65 @@ function CausesBoard({ me }) {
         </Card>
       )}
       {rows.length === 0 && !adding && <Card><div style={{ color: POA.textMuted, fontSize: 13.5 }}>No causes yet. Add your association's first initiative.</div></Card>}
-      {rows.map(c => {
-        const raised = (c.cause_entries || []).filter(e => e.kind === "contribution" && e.amount).reduce((s, e) => s + Number(e.amount), 0);
+      {rows.filter(c => c.status !== 'archived').map(c => {
+        const raised = (c.cause_entries || []).filter(e => e.kind === 'contribution' && e.amount).reduce((s, e) => s + Number(e.amount), 0);
+        const goalPct = c.goal_amount ? Math.min(100, Math.round((raised / c.goal_amount) * 100)) : null;
+        const lastEntry = (c.cause_entries || []).sort((a, b) => b.occurred_on > a.occurred_on ? 1 : -1)[0];
         return (
-          <Card key={c.id} style={{ cursor: "pointer" }} onClick={() => setSelectedCause(c)}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div key={c.id} style={{ background: 'linear-gradient(160deg, #101828 0%, #0A1020 100%)', border: `0.5px solid ${POA.hairline2}`, borderLeft: `3px solid ${c.status === 'active' ? POA.accent : POA.amber}`, borderRadius: '0 13px 13px 0', padding: '16px 18px', marginBottom: 10, cursor: 'pointer', boxShadow: '0 2px 12px rgba(0,0,0,.4)' }}
+            onClick={() => setSelectedCause(c)}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
               <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 700, color: POA.textPrimary }}>{c.name}</div>
-                {c.tagline && <div style={{ fontSize: 12.5, color: POA.textMuted, marginTop: 2 }}>{c.tagline}</div>}
-                {raised > 0 && <div style={{ fontSize: 12, color: POA.greenText, marginTop: 4 }}>Raised {money(raised)}{c.goal_amount ? ` of ${money(c.goal_amount)}` : ""}</div>}
+                <div style={{ fontWeight: 700, fontSize: 16, color: POA.textPrimary, marginBottom: 2 }}>{c.name}</div>
+                {c.tagline && <div style={{ fontSize: 12.5, color: POA.textMuted }}>{c.tagline}</div>}
                 {c.point_person && (
-                  <div style={{ fontSize: 11, color: POA.textMuted, marginTop: 6, display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <div style={{ fontSize: 11, color: POA.textMuted, marginTop: 5, display: 'flex', alignItems: 'center', gap: 5 }}>
                     <div style={{ width: 18, height: 18, borderRadius: '50%', background: POA.accentSoft, color: POA.accent, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700 }}>
                       {c.point_person.full_name.split(' ').map(w => w[0]).join('').slice(0,2)}
                     </div>
-                    {c.point_person.full_name}
+                    <span style={{ color: POA.accent }}>{c.point_person.full_name}</span>
                   </div>
                 )}
               </div>
-              {c.status === "archived" && <span style={{ fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 999, background: POA.track, color: POA.textMuted }}>Archived</span>}
+              <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 9px', borderRadius: 999, background: c.status === 'active' ? 'rgba(70,199,147,.14)' : POA.accentSoft, color: c.status === 'active' ? POA.green : POA.textMuted, flexShrink: 0 }}>
+                {c.status}
+              </span>
+            </div>
+
+            {/* Stats row */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: goalPct !== null ? 10 : 0 }}>
+              <div style={{ background: 'rgba(0,0,0,.2)', borderRadius: 8, padding: '8px 10px' }}>
+                <div style={{ fontWeight: 700, fontSize: 18, color: POA.green }}>{money(raised)}</div>
+                <div style={{ fontSize: 10, color: POA.textMuted, textTransform: 'uppercase', letterSpacing: '.06em' }}>Raised</div>
+              </div>
+              <div style={{ background: 'rgba(0,0,0,.2)', borderRadius: 8, padding: '8px 10px' }}>
+                <div style={{ fontWeight: 700, fontSize: 18, color: POA.accent }}>{c.goal_amount ? money(c.goal_amount) : '—'}</div>
+                <div style={{ fontSize: 10, color: POA.textMuted, textTransform: 'uppercase', letterSpacing: '.06em' }}>Goal</div>
+              </div>
+              <div style={{ background: 'rgba(0,0,0,.2)', borderRadius: 8, padding: '8px 10px' }}>
+                <div style={{ fontWeight: 700, fontSize: 18, color: POA.textPrimary }}>{(c.cause_entries || []).length}</div>
+                <div style={{ fontSize: 10, color: POA.textMuted, textTransform: 'uppercase', letterSpacing: '.06em' }}>Activities</div>
+              </div>
+            </div>
+
+            {/* Progress bar */}
+            {goalPct !== null && (
+              <div style={{ marginBottom: 10 }}>
+                <div style={{ height: 6, borderRadius: 999, background: 'rgba(255,255,255,.08)', overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${goalPct}%`, background: `linear-gradient(90deg, ${POA.accent}, #F0C84A)`, borderRadius: 999 }} />
+                </div>
+                <div style={{ fontSize: 10, color: POA.textMuted, marginTop: 3 }}>{goalPct}% of goal</div>
+              </div>
+            )}
+
+            {/* Last activity + chevron */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ fontSize: 11, color: POA.textMuted }}>
+                {lastEntry ? `Last activity: ${fmtShort(lastEntry.occurred_on)}` : 'No activity logged yet'}
+              </div>
               <ChevronRight size={15} color={POA.textMuted} />
             </div>
-          </Card>
+          </div>
         );
       })}
     </div>
