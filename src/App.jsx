@@ -2915,6 +2915,36 @@ function CauseDetail({ cause, me, onBack, onRefresh }) {
               )}
             </Card>
           )}
+
+          {!editingOverview && manage && (
+            <div style={{ marginTop: 16, paddingTop: 16, borderTop: `0.5px solid ${POA.hairline}` }}>
+              <div style={{ fontSize: 11, color: POA.textMuted, marginBottom: 8, fontStyle: 'italic' }}>
+                Danger zone — these actions affect the entire cause.
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {cause.status !== 'archived' && (
+                  <button style={{ ...PS.btn, color: POA.amber, fontSize: 12 }}
+                    onClick={async () => {
+                      if (!confirm('Archive this cause? It will be hidden from the active list but data is preserved.')) return;
+                      await supabase.from('causes').update({ status: 'archived' }).eq('id', cause.id);
+                      onBack(); onRefresh();
+                    }}>
+                    Archive cause
+                  </button>
+                )}
+                {canAdmin(me.access) && (
+                  <button style={{ ...PS.btn, color: POA.red, fontSize: 12 }}
+                    onClick={async () => {
+                      if (!confirm('Permanently delete this cause and all its data? This cannot be undone.')) return;
+                      await supabase.from('causes').delete().eq('id', cause.id);
+                      onBack(); onRefresh();
+                    }}>
+                    Delete cause
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
