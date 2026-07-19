@@ -3262,20 +3262,6 @@ function CausesBoard({ me }) {
     if (error) { setErr(error.message); return; }
     setAdding(false); setF({ name: "", tagline: "", external_url: "", goal_amount: "", description: "", status: "active" }); await load();
   }
-  async function remove() {
-    // DeptAdmin = hard delete; Board = soft archive. Operates on the selected cause.
-    if (isDeptAdmin(me.access)) {
-      if (!confirm("Permanently delete this cause? This cannot be undone.")) return;
-      await supabase.from("causes").delete().eq("id", selectedCause.id);
-      setSelectedCause(null);
-    } else {
-      if (!confirm("Archive this cause? It can be restored by your Department Admin.")) return;
-      await supabase.from("causes").update({ status: "archived" }).eq("id", selectedCause.id);
-      setSelectedCause(prev => ({ ...prev, status: "archived" }));
-    }
-    await load();
-  }
-
   if (!rows) return <Spinner />;
 
   if (selectedCause) {
