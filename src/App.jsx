@@ -7663,30 +7663,142 @@ function CollapsiblePast({ bookings, statusColor, statusBg }) {
   );
 }
 
-function PADash() {
-  const [depts, setDepts] = useState(null);
-  useEffect(() => { listAllDepts().then(setDepts); }, []);
-  if (!depts) return <Spinner />;
+function PADash({ setView, setCurViewAs }) {
+  const [depts, setDepts]         = useState(null);
+  const [stats, setStats]         = useState({});
+  const [errors, setErrors]       = useState([]);
+  const [switching, setSwitching] = useState(false);
+  const [err, setErr]             = useState('');
+
+  useEffect(() => {
+    loadAll();
+  }, []);
+
+  async function loadAll() {
+    try {
+      const d = await listAllDepts();
+      setDepts(d);
+      // Load stats for each dept in parallel
+      const statsMap = {};
+      await Promise.all(d.map(async dept => {
+        const [members, events, correspondence] = await Promise.all([
+          supabase.from('members').select('id, status, standing, created_at').eq('department_id', dept.id).then(({ data }) => data || []),
+          supabase.from('events').select('id, created_at').eq('department_id', dept.id).then(({ data }) => data || []),
+          supabase.from('correspondence').select('id, kind, created_at').eq('department_id', dept.id).then(({ data }) => data || []),
+        ]);
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        statsMap[dept.id] = {
+          totalMembers: members.length,
+          activeMembers: members.filter(m => m.status === 'active').length,
+          goodStanding: members.filter(m => m.standing === 'Good' || m.standing === 'Active').length,
+          recentMembers: members.filter(m => new Date(m.created_at) > thirtyDaysAgo).length,
+          totalEvents: events.length,
+          recentEvents: events.filter(e => new Date(e.created_at) > thirtyDaysAgo).length,
+          announcements: correspondence.filter(c => c.kind === 'announcement').length,
+          messages: correspondence.filter(c => c.kind === 'message').length,
+        };
+      }));
+      setStats(statsMap);
+    } catch(e) { setErr(e.message); }
+  }
+
+  const totalOrgs    = depts?.length || 0;
+  const totalMembers = Object.values(stats).reduce((s, d) => s + (d.totalMembers || 0), 0);
+  const poaOrgs      = depts?.filter(d => d.org_type === 'poa').length || 0;
+  const fireOrgs     = depts?.filter(d => d.org_type === 'fire').length || 0;
+
   return (
     <div>
-      <PageTitle sub="Before the Call · Project Admin">PA Dashboard</PageTitle>
-      <StatRow stats={[
-        { n: depts.length, label: 'Organizations', color: POA.accent },
-        { n: depts.filter(d => d.org_type === 'poa').length, label: 'POA', color: POA.green },
-        { n: depts.filter(d => d.org_type === 'fire').length, label: 'Fire/EMS', color: POA.amber },
-      ]} />
-      <SectionTitle>All organizations</SectionTitle>
-      {depts.map(d => (
-        <Card key={d.id}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 700, color: POA.textPrimary }}>{d.name}</div>
-              <div style={{ fontSize: 12, color: POA.textMuted, marginTop: 2 }}>{d.org_type}</div>
-            </div>
-            <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 9px', borderRadius: 999, background: POA.accentSoft, color: POA.accent }}>{d.org_type}</span>
+      <div style={{ marginBottom: 20 }}>
+        <p style={{ ...PS.kicker, marginBottom: 4 }}>Project Admin</p>
+        <h1 style={{ fontFamily: 'inherit', fontSize: 24, fontWeight: 700, color: POA.textPrimary, margin: '0 0 4px' }}>
+          Platform Overview
+        </h1>
+        <div style={{ fontSize: 13, color: POA.textMuted }}>
+          Before the Call · Big Bull Technology
+        </div>
+      </div>
+
+      <ErrBox msg={err} />
+
+      {/* Platform stats */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 9, marginBottom: 20 }}>
+        {[
+          { n: totalOrgs, label: 'Organizations', color: POA.accent },
+          { n: totalMembers, label: 'Total members', color: POA.green },
+          { n: poaOrgs, label: 'POA', color: POA.accent },
+          { n: fireOrgs, label: 'Fire/EMS', color: POA.amber },
+        ].map(s => (
+          <div key={s.label} style={{ background: 'linear-gradient(160deg, #101828 0%, #0A1020 100%)', border: `0.5px solid ${POA.hairline2}`, borderRadius: 11, padding: '13px 14px' }}>
+            <div style={{ fontWeight: 700, fontSize: 26, color: s.color, lineHeight: 1 }}>{s.n}</div>
+            <div style={{ fontSize: 10, color: POA.textMuted, marginTop: 5, textTransform: 'uppercase', letterSpacing: '.06em' }}>{s.label}</div>
           </div>
-        </Card>
-      ))}
+        ))}
+      </div>
+
+      {/* Org cards */}
+      {!depts ? <Spinner /> : depts.map(dept => {
+        const s = stats[dept.id] || {};
+        const healthPct = s.totalMembers ? Math.round((s.goodStanding / s.totalMembers) * 100) : 0;
+        return (
+          <div key={dept.id} style={{ background: 'linear-gradient(160deg, #101828 0%, #0A1020 100%)', border: `0.5px solid ${POA.hairline2}`, borderRadius: 13, padding: '16px 18px', marginBottom: 12, boxShadow: '0 2px 12px rgba(0,0,0,.4)' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 14 }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 16, color: POA.textPrimary, marginBottom: 2 }}>{dept.name}</div>
+                <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: dept.org_type === 'poa' ? 'rgba(219,165,37,.14)' : 'rgba(70,199,147,.14)', color: dept.org_type === 'poa' ? POA.accent : POA.green }}>
+                  {dept.org_type === 'poa' ? 'POA' : 'Fire/EMS'}
+                </span>
+              </div>
+              <button style={{ ...PS.btnPrimary, fontSize: 12, padding: '6px 14px' }}
+                onClick={async () => {
+                  setSwitching(true);
+                  try {
+                    // Switch active department context
+                    const { error } = await supabase.rpc('set_active_department', { dept_id: dept.id });
+                    if (!error) {
+                      window.location.reload();
+                    } else {
+                      // Fallback — just reload into that org context
+                      window.location.href = window.location.pathname;
+                    }
+                  } catch {
+                    // Best effort — reload and let RLS pick up the right dept
+                    window.location.reload();
+                  } finally { setSwitching(false); }
+                }}>
+                {switching ? 'Switching…' : 'Switch to →'}
+              </button>
+            </div>
+
+            {/* Org stats grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8, marginBottom: 12 }}>
+              {[
+                { n: s.activeMembers || 0, label: 'Active members', color: POA.green },
+                { n: `${healthPct}%`, label: 'Good standing', color: healthPct > 80 ? POA.green : healthPct > 50 ? POA.amber : POA.red },
+                { n: s.recentMembers || 0, label: 'New (30d)', color: POA.accent },
+                { n: s.totalEvents || 0, label: 'Events', color: POA.textSecondary },
+              ].map(stat => (
+                <div key={stat.label} style={{ background: 'rgba(0,0,0,.2)', borderRadius: 8, padding: '8px 10px' }}>
+                  <div style={{ fontWeight: 700, fontSize: 18, color: stat.color }}>{stat.n}</div>
+                  <div style={{ fontSize: 10, color: POA.textMuted, textTransform: 'uppercase', letterSpacing: '.05em', marginTop: 3 }}>{stat.label}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Activity bar */}
+            <div style={{ display: 'flex', gap: 12, fontSize: 12, color: POA.textMuted, borderTop: `0.5px solid ${POA.hairline}`, paddingTop: 10 }}>
+              <span><span style={{ color: POA.accent, fontWeight: 600 }}>{s.announcements || 0}</span> announcements</span>
+              <span><span style={{ color: POA.accent, fontWeight: 600 }}>{s.messages || 0}</span> member messages</span>
+              <span><span style={{ color: POA.accent, fontWeight: 600 }}>{s.recentEvents || 0}</span> events this month</span>
+            </div>
+          </div>
+        );
+      })}
+
+      <div style={{ fontSize: 11.5, color: POA.textMuted, marginTop: 8, textAlign: 'center', fontStyle: 'italic' }}>
+        Platform data is live. Stats update on each load.
+      </div>
     </div>
   );
 }
@@ -11906,7 +12018,7 @@ function renderScreen(view, { me, org, setView }) {
     case "b_community":     return <BoardCommunity me={me} />;
     case "b_ledger":        return <ValueLedger me={me} />;
     case "b_settings":      return <OrgSettings me={me} org={org} />;
-    case "pa_dash":         return <PADash />;
+    case "pa_dash":         return <PADash setView={setView} />;
     case "pa_orgs":         return <PADash />;
     case "pa_config":       return <PAOrgConfig />;
     case "pa_add":          return <PAAddOrg />;
