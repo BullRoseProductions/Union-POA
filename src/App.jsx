@@ -2912,7 +2912,7 @@ function CauseDetail({ cause, me, onBack, onRefresh }) {
                   </select>
                 </div>
                 <div>
-                  <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Main external contact</div>
+                  <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Secondary contact</div>
                   <select value={of.main_contact_id} onChange={e => setOf(x => ({ ...x, main_contact_id: e.target.value }))} style={PS.input}>
                     <option value=''>— No main contact set —</option>
                     {contacts.map(c => <option key={c.id} value={c.id}>{c.name}{c.organization ? ` · ${c.organization}` : ''}</option>)}
@@ -2966,7 +2966,7 @@ function CauseDetail({ cause, me, onBack, onRefresh }) {
                     const mc = contacts.find(c => c.id === cause.main_contact_id);
                     return mc ? (
                       <div style={{ background: 'rgba(70,199,147,.06)', border: `0.5px solid rgba(70,199,147,.2)`, borderRadius: 8, padding: '10px 12px' }}>
-                        <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: POA.green, marginBottom: 4 }}>Main contact</div>
+                        <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: POA.green, marginBottom: 4 }}>Secondary contact</div>
                         <div style={{ fontWeight: 600, fontSize: 13.5, color: POA.textPrimary }}>{mc.name}</div>
                         {mc.organization && <div style={{ fontSize: 12, color: POA.textMuted }}>{mc.organization}</div>}
                         {mc.phone && <a href={`tel:${mc.phone.replace(/\D/g,'')}`} style={{ fontSize: 12, color: POA.accent, textDecoration: 'none', display: 'block', marginTop: 2 }}>{mc.phone}</a>}
