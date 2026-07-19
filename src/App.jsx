@@ -2634,9 +2634,592 @@ Draft professional minutes from these notes.`;
   );
 }
 
+function CauseDetail({ cause, me, onBack, onRefresh }) {
+  const [tab, setTab]               = useState('overview');
+  const [contacts, setContacts]     = useState([]);
+  const [events, setEvents]         = useState([]);
+  const [entries, setEntries]       = useState(cause.cause_entries || []);
+  const [err, setErr]               = useState('');
+  const manage                      = canManage(me.access);
+
+  // Contact form
+  const blankC = { name: '', organization: '', role: 'Sponsor', phone: '', email: '', amount_committed: '', amount_received: '', last_contact_date: '', relationship_notes: '' };
+  const [addingContact, setAddingContact]   = useState(false);
+  const [editingContact, setEditingContact] = useState(null);
+  const [cf, setCf]                         = useState(blankC);
+  const [cBusy, setCBusy]                   = useState(false);
+
+  // Event form
+  const blankE = { title: '', event_date: '', location: '', amount_raised: '', notes: '', status: 'upcoming' };
+  const [addingEvent, setAddingEvent]   = useState(false);
+  const [editingEvent, setEditingEvent] = useState(null);
+  const [ef, setEf]                     = useState(blankE);
+  const [eBusy, setEBusy]               = useState(false);
+
+  // Activity entry form
+  const blankA = { kind: 'update', label: '', amount: '', occurred_on: '', note: '' };
+  const [addingEntry, setAddingEntry] = useState(false);
+  const [af, setAf]                   = useState(blankA);
+  const [aBusy, setABusy]             = useState(false);
+
+  // Cause overview edit
+  const [editingOverview, setEditingOverview] = useState(false);
+  const [of, setOf] = useState({
+    next_event_date: cause.next_event_date || '',
+    next_event_notes: cause.next_event_notes || '',
+    goal_amount: cause.goal_amount || '',
+    description: cause.description || '',
+    external_url: cause.external_url || '',
+  });
+  const [oBusy, setOBusy] = useState(false);
+
+  async function load() {
+    const [c, e] = await Promise.all([
+      supabase.from('cause_contacts').select('*').eq('cause_id', cause.id).eq('active', true).order('sort').then(({ data }) => data || []),
+      supabase.from('cause_events').select('*').eq('cause_id', cause.id).order('event_date', { ascending: false }).then(({ data }) => data || []),
+    ]);
+    setContacts(c);
+    setEvents(e);
+    const { data: ents } = await supabase.from('cause_entries').select('*').eq('cause_id', cause.id).order('occurred_on', { ascending: false });
+    setEntries(ents || []);
+  }
+
+  useEffect(() => { load(); }, [cause.id]);
+
+  // Financial summary
+  const contribFromEntries = entries.filter(e => e.kind === 'contribution' && e.amount).reduce((s, e) => s + Number(e.amount), 0);
+  const contribFromContacts = contacts.reduce((s, c) => s + (Number(c.amount_received) || 0), 0);
+  const contribFromEvents = events.filter(e => e.status === 'completed').reduce((s, e) => s + (Number(e.amount_raised) || 0), 0);
+  const totalRaised = contribFromEntries + contribFromContacts + contribFromEvents;
+  const goalPct = cause.goal_amount ? Math.min(100, Math.round((totalRaised / cause.goal_amount) * 100)) : null;
+  const upcomingEvents = events.filter(e => e.status === 'upcoming').sort((a, b) => a.event_date > b.event_date ? 1 : -1);
+  const nextEvent = upcomingEvents[0];
+
+  // Save overview
+  async function saveOverview() {
+    setOBusy(true); setErr('');
+    try {
+      await supabase.from('causes').update({
+        next_event_date: of.next_event_date || null,
+        next_event_notes: of.next_event_notes || null,
+        goal_amount: of.goal_amount ? Number(of.goal_amount) : null,
+        description: of.description || null,
+        external_url: of.external_url || null,
+      }).eq('id', cause.id);
+      setEditingOverview(false);
+      onRefresh();
+    } catch(e) { setErr(e.message); }
+    finally { setOBusy(false); }
+  }
+
+  // Contact CRUD
+  async function saveContact() {
+    setCBusy(true); setErr('');
+    try {
+      const row = {
+        cause_id: cause.id,
+        department_id: me.department_id,
+        name: cf.name.trim(),
+        organization: cf.organization.trim() || null,
+        role: cf.role || 'Sponsor',
+        phone: cf.phone.trim() || null,
+        email: cf.email.trim() || null,
+        amount_committed: cf.amount_committed ? Number(cf.amount_committed) : null,
+        amount_received: cf.amount_received ? Number(cf.amount_received) : null,
+        last_contact_date: cf.last_contact_date || null,
+        relationship_notes: cf.relationship_notes.trim() || null,
+      };
+      if (editingContact) {
+        await supabase.from('cause_contacts').update(row).eq('id', editingContact.id);
+      } else {
+        await supabase.from('cause_contacts').insert(row);
+      }
+      setCf(blankC); setAddingContact(false); setEditingContact(null);
+      await load();
+    } catch(e) { setErr(e.message); }
+    finally { setCBusy(false); }
+  }
+
+  async function removeContact(id) {
+    if (!confirm('Remove this contact?')) return;
+    await supabase.from('cause_contacts').update({ active: false }).eq('id', id);
+    await load();
+  }
+
+  // Event CRUD
+  async function saveEvent() {
+    setEBusy(true); setErr('');
+    try {
+      const row = {
+        cause_id: cause.id,
+        department_id: me.department_id,
+        title: ef.title.trim(),
+        event_date: ef.event_date || null,
+        location: ef.location.trim() || null,
+        amount_raised: ef.amount_raised ? Number(ef.amount_raised) : null,
+        notes: ef.notes.trim() || null,
+        status: ef.status,
+      };
+      if (editingEvent) {
+        await supabase.from('cause_events').update(row).eq('id', editingEvent.id);
+      } else {
+        await supabase.from('cause_events').insert(row);
+      }
+      setEf(blankE); setAddingEvent(false); setEditingEvent(null);
+      await load();
+    } catch(e) { setErr(e.message); }
+    finally { setEBusy(false); }
+  }
+
+  // Activity entry
+  async function saveEntry() {
+    setABusy(true); setErr('');
+    try {
+      await supabase.from('cause_entries').insert({
+        cause_id: cause.id,
+        department_id: me.department_id,
+        kind: af.kind,
+        label: af.label.trim(),
+        amount: af.amount ? Number(af.amount) : null,
+        occurred_on: af.occurred_on || new Date().toISOString().split('T')[0],
+        note: af.note.trim() || null,
+      });
+      setAf(blankA); setAddingEntry(false);
+      await load();
+    } catch(e) { setErr(e.message); }
+    finally { setABusy(false); }
+  }
+
+  const TABS = ['overview', 'contacts', 'events', 'activity'];
+  const TAB_LABELS = { overview: 'Overview', contacts: `Contacts (${contacts.length})`, events: `Events (${events.length})`, activity: `Activity (${entries.length})` };
+
+  return (
+    <div>
+      {/* Back + header */}
+      <button onClick={onBack} style={{ ...PS.btn, marginBottom: 16 }}>
+        <ArrowLeft size={13} /> Causes
+      </button>
+
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 16 }}>
+        <div style={{ flex: 1 }}>
+          <p style={{ ...PS.kicker, marginBottom: 4 }}>Cause</p>
+          <h1 style={{ fontFamily: 'inherit', fontSize: 24, fontWeight: 700, color: POA.textPrimary, margin: '0 0 4px' }}>{cause.name}</h1>
+          {cause.tagline && <div style={{ fontSize: 13.5, color: POA.textMuted }}>{cause.tagline}</div>}
+        </div>
+        <span style={{ fontSize: 11, fontWeight: 700, padding: '4px 12px', borderRadius: 999, background: cause.status === 'active' ? 'rgba(70,199,147,.14)' : POA.accentSoft, color: cause.status === 'active' ? POA.green : POA.textMuted, flexShrink: 0 }}>
+          {cause.status}
+        </span>
+      </div>
+
+      {/* Financial summary strip */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 16 }}>
+        {[
+          { label: 'Total raised', value: money(totalRaised), color: POA.green },
+          { label: 'From events', value: money(contribFromEvents), color: POA.accent },
+          { label: 'From sponsors', value: money(contribFromContacts), color: POA.accent },
+          { label: 'Goal', value: cause.goal_amount ? money(cause.goal_amount) : '—', color: POA.textMuted },
+        ].map(s => (
+          <div key={s.label} style={{ background: 'linear-gradient(160deg, #101828 0%, #0A1020 100%)', border: `0.5px solid ${POA.hairline2}`, borderRadius: 11, padding: '12px 14px' }}>
+            <div style={{ fontWeight: 700, fontSize: 22, color: s.color, lineHeight: 1 }}>{s.value}</div>
+            <div style={{ fontSize: 10, color: POA.textMuted, marginTop: 5, textTransform: 'uppercase', letterSpacing: '.06em' }}>{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Progress bar */}
+      {goalPct !== null && (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: POA.textMuted, marginBottom: 4 }}>
+            <span>Progress toward goal</span>
+            <span style={{ color: POA.accent, fontWeight: 700 }}>{goalPct}%</span>
+          </div>
+          <div style={{ height: 8, borderRadius: 999, background: 'rgba(255,255,255,.08)', overflow: 'hidden' }}>
+            <div style={{ height: '100%', width: `${goalPct}%`, background: `linear-gradient(90deg, ${POA.accent}, #F0C84A)`, borderRadius: 999, transition: 'width .4s' }} />
+          </div>
+        </div>
+      )}
+
+      {/* Next event banner */}
+      {nextEvent && (
+        <div style={{ background: 'rgba(219,165,37,.08)', border: `0.5px solid rgba(219,165,37,.25)`, borderRadius: 12, padding: '10px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ fontSize: 20 }}>📅</div>
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: POA.accent, marginBottom: 2 }}>Next event</div>
+            <div style={{ fontWeight: 700, fontSize: 14, color: POA.textPrimary }}>{nextEvent.title}</div>
+            <div style={{ fontSize: 12, color: POA.textMuted }}>{nextEvent.event_date ? new Date(nextEvent.event_date + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'long', day: 'numeric' }) : 'Date TBD'}{nextEvent.location ? ` · ${nextEvent.location}` : ''}</div>
+          </div>
+        </div>
+      )}
+
+      <ErrBox msg={err} />
+
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
+        {TABS.map(t => (
+          <button key={t} onClick={() => setTab(t)}
+            style={{ fontSize: 12, padding: '6px 14px', borderRadius: 999, border: `0.5px solid ${tab === t ? POA.accent : POA.hairline2}`, background: tab === t ? POA.accentSoft : 'transparent', color: tab === t ? POA.accent : POA.textMuted, cursor: 'pointer', fontWeight: tab === t ? 700 : 400 }}>
+            {TAB_LABELS[t]}
+          </button>
+        ))}
+      </div>
+
+      {/* OVERVIEW TAB */}
+      {tab === 'overview' && (
+        <div>
+          {editingOverview ? (
+            <Card style={{ marginBottom: 14 }}>
+              <SectionTitle>Edit overview</SectionTitle>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Description</div>
+                  <textarea value={of.description} onChange={e => setOf(x => ({ ...x, description: e.target.value }))}
+                    style={{ ...PS.textarea, minHeight: 80 }} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Goal amount</div>
+                  <input value={of.goal_amount} onChange={e => setOf(x => ({ ...x, goal_amount: e.target.value }))}
+                    style={PS.input} placeholder='e.g. 10000' inputMode='numeric' />
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>External link</div>
+                  <input value={of.external_url} onChange={e => setOf(x => ({ ...x, external_url: e.target.value }))}
+                    style={PS.input} placeholder='https://...' />
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Next event date</div>
+                  <input type='date' value={of.next_event_date} onChange={e => setOf(x => ({ ...x, next_event_date: e.target.value }))} style={PS.input} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Next event notes</div>
+                  <input value={of.next_event_notes} onChange={e => setOf(x => ({ ...x, next_event_notes: e.target.value }))}
+                    style={PS.input} placeholder='What is it, where, who is involved' />
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button style={PS.btnPrimary} disabled={oBusy} onClick={saveOverview}>{oBusy ? 'Saving…' : 'Save'}</button>
+                <button style={PS.btn} onClick={() => setEditingOverview(false)}>Cancel</button>
+              </div>
+            </Card>
+          ) : (
+            <Card style={{ marginBottom: 14 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: cause.description ? 10 : 0 }}>
+                <SectionTitle>About this cause</SectionTitle>
+                {manage && <button style={{ ...PS.btn, fontSize: 11 }} onClick={() => setEditingOverview(true)}><Pencil size={11} /> Edit</button>}
+              </div>
+              {cause.description && <div style={{ fontSize: 13.5, color: POA.textSecondary, lineHeight: 1.7, marginBottom: 10 }}>{cause.description}</div>}
+              {cause.external_url && (
+                <a href={cause.external_url} target='_blank' rel='noreferrer'
+                  style={{ ...PS.btnPrimary, textDecoration: 'none', display: 'inline-flex', fontSize: 12 }}>
+                  Learn more ↗
+                </a>
+              )}
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* CONTACTS TAB */}
+      {tab === 'contacts' && (
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <div style={{ fontSize: 13, color: POA.textMuted }}>Sponsors, partners, and key contacts for this cause.</div>
+            {manage && <button style={PS.btn} onClick={() => { setAddingContact(true); setEditingContact(null); setCf(blankC); }}><Plus size={13} /> Add contact</button>}
+          </div>
+
+          {(addingContact || editingContact) && (
+            <Card style={{ marginBottom: 14 }}>
+              <SectionTitle>{editingContact ? 'Edit contact' : 'New contact'}</SectionTitle>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+                <div>
+                  <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Name</div>
+                  <input value={cf.name} onChange={e => setCf(x => ({ ...x, name: e.target.value }))} style={PS.input} placeholder='Full name' />
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Organization</div>
+                  <input value={cf.organization} onChange={e => setCf(x => ({ ...x, organization: e.target.value }))} style={PS.input} placeholder='Company or org' />
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Role</div>
+                  <select value={cf.role} onChange={e => setCf(x => ({ ...x, role: e.target.value }))} style={PS.input}>
+                    {['Sponsor','Individual Donor','Community Partner','City Contact','Vendor','Volunteer Lead','Media Contact','Other'].map(r => <option key={r}>{r}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Phone</div>
+                  <input value={cf.phone} onChange={e => setCf(x => ({ ...x, phone: e.target.value }))} style={PS.input} placeholder='(817) 555-0100' type='tel' />
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Email</div>
+                  <input value={cf.email} onChange={e => setCf(x => ({ ...x, email: e.target.value }))} style={PS.input} type='email' />
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Last contact date</div>
+                  <input type='date' value={cf.last_contact_date} onChange={e => setCf(x => ({ ...x, last_contact_date: e.target.value }))} style={PS.input} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Amount committed</div>
+                  <input value={cf.amount_committed} onChange={e => setCf(x => ({ ...x, amount_committed: e.target.value }))} style={PS.input} placeholder='e.g. 500' inputMode='numeric' />
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Amount received</div>
+                  <input value={cf.amount_received} onChange={e => setCf(x => ({ ...x, amount_received: e.target.value }))} style={PS.input} placeholder='e.g. 250' inputMode='numeric' />
+                </div>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Relationship notes</div>
+                  <textarea value={cf.relationship_notes} onChange={e => setCf(x => ({ ...x, relationship_notes: e.target.value }))}
+                    style={{ ...PS.textarea, minHeight: 80 }}
+                    placeholder='How did we connect? What did we discuss? What are the next steps? Who do we follow up with?' />
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button style={PS.btnPrimary} disabled={cBusy || !cf.name.trim()} onClick={saveContact}>{cBusy ? 'Saving…' : editingContact ? 'Save changes' : 'Add contact'}</button>
+                <button style={PS.btn} onClick={() => { setAddingContact(false); setEditingContact(null); }}>Cancel</button>
+                {editingContact && <button style={{ ...PS.btn, color: POA.red, marginLeft: 'auto' }} onClick={() => { removeContact(editingContact.id); setEditingContact(null); }}>Remove</button>}
+              </div>
+            </Card>
+          )}
+
+          {contacts.length === 0 && !addingContact ? (
+            <Card>
+              <div style={{ color: POA.textMuted, fontSize: 13.5, textAlign: 'center', padding: '16px 0' }}>
+                No contacts yet. Add sponsors, partners, and key contacts so this knowledge doesn't live in one person's head.
+              </div>
+            </Card>
+          ) : contacts.map(c => (
+            <Card key={c.id} style={{ marginBottom: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, marginBottom: 8 }}>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 15, color: POA.textPrimary }}>{c.name}</div>
+                  {c.organization && <div style={{ fontSize: 12.5, color: POA.textMuted }}>{c.organization}</div>}
+                  <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: POA.accentSoft, color: POA.accent, display: 'inline-block', marginTop: 4 }}>{c.role}</span>
+                </div>
+                {manage && (
+                  <button style={{ ...PS.btn, fontSize: 11, padding: '4px 8px' }} onClick={() => { setEditingContact(c); setCf({ name: c.name, organization: c.organization || '', role: c.role, phone: c.phone || '', email: c.email || '', amount_committed: c.amount_committed || '', amount_received: c.amount_received || '', last_contact_date: c.last_contact_date || '', relationship_notes: c.relationship_notes || '' }); setAddingContact(false); }}>
+                    <Pencil size={11} />
+                  </button>
+                )}
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: c.relationship_notes ? 10 : 0 }}>
+                {c.phone && (
+                  <a href={`tel:${c.phone.replace(/\D/g,'')}`} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: POA.textSecondary, textDecoration: 'none' }}>
+                    <Phone size={13} color={POA.accent} /> {c.phone}
+                  </a>
+                )}
+                {c.email && (
+                  <a href={`mailto:${c.email}`} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: POA.textSecondary, textDecoration: 'none' }}>
+                    <Mail size={13} color={POA.accent} /> {c.email}
+                  </a>
+                )}
+                {c.last_contact_date && (
+                  <div style={{ fontSize: 12, color: POA.textMuted }}>Last contact: {fmtShort(c.last_contact_date)}</div>
+                )}
+                {(c.amount_committed || c.amount_received) && (
+                  <div style={{ fontSize: 12, color: POA.green }}>
+                    {c.amount_received ? `Received: ${money(c.amount_received)}` : ''}
+                    {c.amount_committed ? ` / Committed: ${money(c.amount_committed)}` : ''}
+                  </div>
+                )}
+              </div>
+
+              {c.relationship_notes && (
+                <div style={{ fontSize: 12.5, color: POA.textSecondary, lineHeight: 1.65, padding: '10px 12px', background: 'rgba(0,0,0,.2)', borderRadius: 8, borderLeft: `2px solid ${POA.accentDim}` }}>
+                  {c.relationship_notes}
+                </div>
+              )}
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* EVENTS TAB */}
+      {tab === 'events' && (
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <div style={{ fontSize: 13, color: POA.textMuted }}>Events tied to this cause — upcoming and past.</div>
+            {manage && <button style={PS.btn} onClick={() => { setAddingEvent(true); setEditingEvent(null); setEf(blankE); }}><Plus size={13} /> Add event</button>}
+          </div>
+
+          {(addingEvent || editingEvent) && (
+            <Card style={{ marginBottom: 14 }}>
+              <SectionTitle>{editingEvent ? 'Edit event' : 'New event'}</SectionTitle>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Event title</div>
+                  <input value={ef.title} onChange={e => setEf(x => ({ ...x, title: e.target.value }))} style={PS.input} placeholder='e.g. Annual Toy Drive' />
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Date</div>
+                  <input type='date' value={ef.event_date} onChange={e => setEf(x => ({ ...x, event_date: e.target.value }))} style={PS.input} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Location</div>
+                  <input value={ef.location} onChange={e => setEf(x => ({ ...x, location: e.target.value }))} style={PS.input} placeholder='Address or venue' />
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Status</div>
+                  <select value={ef.status} onChange={e => setEf(x => ({ ...x, status: e.target.value }))} style={PS.input}>
+                    <option value='upcoming'>Upcoming</option>
+                    <option value='completed'>Completed</option>
+                    <option value='cancelled'>Cancelled</option>
+                  </select>
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Amount raised</div>
+                  <input value={ef.amount_raised} onChange={e => setEf(x => ({ ...x, amount_raised: e.target.value }))} style={PS.input} placeholder='e.g. 2500' inputMode='numeric' />
+                </div>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Notes</div>
+                  <textarea value={ef.notes} onChange={e => setEf(x => ({ ...x, notes: e.target.value }))}
+                    style={{ ...PS.textarea, minHeight: 70 }} placeholder='What happened? Who attended? Key takeaways?' />
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button style={PS.btnPrimary} disabled={eBusy || !ef.title.trim()} onClick={saveEvent}>{eBusy ? 'Saving…' : editingEvent ? 'Save changes' : 'Add event'}</button>
+                <button style={PS.btn} onClick={() => { setAddingEvent(false); setEditingEvent(null); }}>Cancel</button>
+              </div>
+            </Card>
+          )}
+
+          {events.length === 0 && !addingEvent ? (
+            <Card><div style={{ color: POA.textMuted, fontSize: 13.5, textAlign: 'center', padding: '16px 0' }}>No events yet. Add upcoming and past events to track progress.</div></Card>
+          ) : (
+            <>
+              {upcomingEvents.length > 0 && (
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.12em', textTransform: 'uppercase', color: POA.accent, marginBottom: 8 }}>Upcoming</div>
+                  {upcomingEvents.map(e => (
+                    <Card key={e.id} style={{ marginBottom: 8 }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+                        <div>
+                          <div style={{ fontWeight: 700, fontSize: 14, color: POA.textPrimary }}>{e.title}</div>
+                          <div style={{ fontSize: 12, color: POA.textMuted, marginTop: 2 }}>
+                            {e.event_date ? new Date(e.event_date + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'long', day: 'numeric' }) : 'Date TBD'}
+                            {e.location ? ` · ${e.location}` : ''}
+                          </div>
+                          {e.notes && <div style={{ fontSize: 12, color: POA.textSecondary, marginTop: 6, lineHeight: 1.55 }}>{e.notes}</div>}
+                        </div>
+                        {manage && (
+                          <button style={{ ...PS.btn, fontSize: 11, padding: '4px 8px', flexShrink: 0 }}
+                            onClick={() => { setEditingEvent(e); setEf({ title: e.title, event_date: e.event_date || '', location: e.location || '', amount_raised: e.amount_raised || '', notes: e.notes || '', status: e.status }); setAddingEvent(false); }}>
+                            <Pencil size={11} />
+                          </button>
+                        )}
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              )}
+
+              {events.filter(e => e.status !== 'upcoming').length > 0 && (
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.12em', textTransform: 'uppercase', color: POA.textMuted, marginBottom: 8 }}>Past events</div>
+                  {events.filter(e => e.status !== 'upcoming').map(e => (
+                    <Card key={e.id} style={{ marginBottom: 8, opacity: e.status === 'cancelled' ? .5 : 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+                        <div>
+                          <div style={{ fontWeight: 700, fontSize: 14, color: POA.textPrimary }}>{e.title}</div>
+                          <div style={{ fontSize: 12, color: POA.textMuted, marginTop: 2 }}>
+                            {e.event_date ? new Date(e.event_date + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : 'Date unknown'}
+                            {e.location ? ` · ${e.location}` : ''}
+                          </div>
+                          {e.amount_raised && <div style={{ fontSize: 13, color: POA.green, fontWeight: 700, marginTop: 4 }}>Raised {money(e.amount_raised)}</div>}
+                          {e.notes && <div style={{ fontSize: 12, color: POA.textSecondary, marginTop: 6, lineHeight: 1.55 }}>{e.notes}</div>}
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+                          <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: e.status === 'completed' ? 'rgba(70,199,147,.14)' : 'rgba(239,106,100,.14)', color: e.status === 'completed' ? POA.green : POA.red }}>
+                            {e.status}
+                          </span>
+                          {manage && (
+                            <button style={{ ...PS.btn, fontSize: 11, padding: '4px 8px' }}
+                              onClick={() => { setEditingEvent(e); setEf({ title: e.title, event_date: e.event_date || '', location: e.location || '', amount_raised: e.amount_raised || '', notes: e.notes || '', status: e.status }); setAddingEvent(false); }}>
+                              <Pencil size={11} />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ACTIVITY TAB */}
+      {tab === 'activity' && (
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <div style={{ fontSize: 13, color: POA.textMuted }}>Log of everything that's happened with this cause.</div>
+            {manage && <button style={PS.btn} onClick={() => setAddingEntry(v => !v)}><Plus size={13} /> Log activity</button>}
+          </div>
+
+          {addingEntry && (
+            <Card style={{ marginBottom: 14 }}>
+              <SectionTitle>Log activity</SectionTitle>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+                <div>
+                  <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Type</div>
+                  <select value={af.kind} onChange={e => setAf(x => ({ ...x, kind: e.target.value }))} style={PS.input}>
+                    {['contribution','participation','outcome','update','meeting','phone_call','email','other'].map(k => <option key={k} value={k}>{k.replace('_', ' ')}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Date</div>
+                  <input type='date' value={af.occurred_on} onChange={e => setAf(x => ({ ...x, occurred_on: e.target.value }))} style={PS.input} />
+                </div>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>What happened</div>
+                  <input value={af.label} onChange={e => setAf(x => ({ ...x, label: e.target.value }))} style={PS.input}
+                    placeholder='e.g. Called John at HEB, confirmed $500 sponsorship for toy drive' />
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Amount (if any)</div>
+                  <input value={af.amount} onChange={e => setAf(x => ({ ...x, amount: e.target.value }))} style={PS.input} placeholder='e.g. 500' inputMode='numeric' />
+                </div>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Additional notes</div>
+                  <textarea value={af.note} onChange={e => setAf(x => ({ ...x, note: e.target.value }))}
+                    style={{ ...PS.textarea, minHeight: 60 }} placeholder='Follow-up needed? Next steps? Who to contact?' />
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button style={PS.btnPrimary} disabled={aBusy || !af.label.trim()} onClick={saveEntry}>{aBusy ? 'Saving…' : 'Log it'}</button>
+                <button style={PS.btn} onClick={() => setAddingEntry(false)}>Cancel</button>
+              </div>
+            </Card>
+          )}
+
+          {entries.length === 0 && !addingEntry ? (
+            <Card><div style={{ color: POA.textMuted, fontSize: 13.5, textAlign: 'center', padding: '16px 0' }}>No activity logged yet. Start building the record.</div></Card>
+          ) : entries.map((e, i) => (
+            <div key={e.id} style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0 }}>
+                <div style={{ width: 10, height: 10, borderRadius: '50%', background: e.kind === 'contribution' ? POA.green : e.kind === 'outcome' ? POA.accent : POA.hairline2, flexShrink: 0, marginTop: 4 }} />
+                {i < entries.length - 1 && <div style={{ width: 1, flex: 1, background: POA.hairline, minHeight: 20 }} />}
+              </div>
+              <div style={{ flex: 1, paddingBottom: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 999, background: POA.accentSoft, color: POA.accent }}>{e.kind.replace('_', ' ')}</span>
+                  <span style={{ fontSize: 11, color: POA.textMuted }}>{e.occurred_on ? fmtShort(e.occurred_on) : ''}</span>
+                  {e.amount && <span style={{ fontSize: 12, fontWeight: 700, color: POA.green, marginLeft: 'auto' }}>{money(e.amount)}</span>}
+                </div>
+                <div style={{ fontSize: 13.5, color: POA.textPrimary, fontWeight: 600, marginBottom: e.note ? 4 : 0 }}>{e.label}</div>
+                {e.note && <div style={{ fontSize: 12.5, color: POA.textSecondary, lineHeight: 1.6 }}>{e.note}</div>}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CausesBoard({ me }) {
   const [rows, setRows]       = useState(null);
   const [detail, setDetail]   = useState(null);
+  const [selectedCause, setSelectedCause] = useState(null);
   const [adding, setAdding]   = useState(false);
   const [editing, setEditing] = useState(false);
   const [err, setErr]         = useState("");
@@ -2686,6 +3269,19 @@ function CausesBoard({ me }) {
   }
 
   if (!rows) return <Spinner />;
+
+  if (selectedCause) {
+    return <CauseDetail
+      cause={selectedCause}
+      me={me}
+      onBack={() => setSelectedCause(null)}
+      onRefresh={async () => {
+        await load();
+        const updated = rows?.find(r => r.id === selectedCause.id);
+        if (updated) setSelectedCause(updated);
+      }}
+    />;
+  }
 
   if (detail) {
     const entries = detail.cause_entries || [];
@@ -2838,7 +3434,7 @@ function CausesBoard({ me }) {
       {rows.map(c => {
         const raised = (c.cause_entries || []).filter(e => e.kind === "contribution" && e.amount).reduce((s, e) => s + Number(e.amount), 0);
         return (
-          <Card key={c.id} style={{ cursor: "pointer" }} onClick={() => { setDetail(c); setEditing(false); setAddEntry(false); }}>
+          <Card key={c.id} style={{ cursor: "pointer" }} onClick={() => setSelectedCause(c)}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: 700, color: POA.textPrimary }}>{c.name}</div>
