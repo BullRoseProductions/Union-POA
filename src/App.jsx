@@ -248,9 +248,9 @@ async function myActionItems(memberId) {
   return data || [];
 }
 async function listCauses() {
-  const { data, error } = await supabase.from("causes")
-    .select("*, cause_entries(*)")
-    .order("sort", { ascending: true });
+  const { data, error } = await supabase.from('causes')
+    .select('*, cause_entries(*), point_person:members!causes_point_person_id_fkey(id, full_name, phone), main_contact:cause_contacts!causes_main_contact_id_fkey(id, name, organization, phone, email)')
+    .order('sort', { ascending: true });
   if (error) throw error;
   return data || [];
 }
@@ -2638,6 +2638,7 @@ function CauseDetail({ cause, me, onBack, onRefresh }) {
   const [tab, setTab]               = useState('overview');
   const [contacts, setContacts]     = useState([]);
   const [events, setEvents]         = useState([]);
+  const [members, setMembers]       = useState([]);
   const [entries, setEntries]       = useState(cause.cause_entries || []);
   const [err, setErr]               = useState('');
   const manage                      = canManage(me.access);
@@ -2670,16 +2671,20 @@ function CauseDetail({ cause, me, onBack, onRefresh }) {
     goal_amount: cause.goal_amount || '',
     description: cause.description || '',
     external_url: cause.external_url || '',
+    point_person_id: cause.point_person_id || '',
+    main_contact_id: cause.main_contact_id || '',
   });
   const [oBusy, setOBusy] = useState(false);
 
   async function load() {
-    const [c, e] = await Promise.all([
+    const [c, e, mem] = await Promise.all([
       supabase.from('cause_contacts').select('*').eq('cause_id', cause.id).eq('active', true).order('sort').then(({ data }) => data || []),
       supabase.from('cause_events').select('*').eq('cause_id', cause.id).order('event_date', { ascending: false }).then(({ data }) => data || []),
+      listMembers().then(m => m).catch(() => []),
     ]);
     setContacts(c);
     setEvents(e);
+    setMembers(mem);
     const { data: ents } = await supabase.from('cause_entries').select('*').eq('cause_id', cause.id).order('occurred_on', { ascending: false });
     setEntries(ents || []);
   }
@@ -2705,6 +2710,8 @@ function CauseDetail({ cause, me, onBack, onRefresh }) {
         goal_amount: of.goal_amount ? Number(of.goal_amount) : null,
         description: of.description || null,
         external_url: of.external_url || null,
+        point_person_id: of.point_person_id || null,
+        main_contact_id: of.main_contact_id || null,
       }).eq('id', cause.id);
       setEditingOverview(false);
       onRefresh();
@@ -2898,6 +2905,20 @@ function CauseDetail({ cause, me, onBack, onRefresh }) {
                     style={{ ...PS.textarea, minHeight: 80 }} />
                 </div>
                 <div>
+                  <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Point person (board member responsible)</div>
+                  <select value={of.point_person_id} onChange={e => setOf(x => ({ ...x, point_person_id: e.target.value }))} style={PS.input}>
+                    <option value=''>— No point person set —</option>
+                    {members.map(m => <option key={m.id} value={m.id}>{m.full_name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Main external contact</div>
+                  <select value={of.main_contact_id} onChange={e => setOf(x => ({ ...x, main_contact_id: e.target.value }))} style={PS.input}>
+                    <option value=''>— No main contact set —</option>
+                    {contacts.map(c => <option key={c.id} value={c.id}>{c.name}{c.organization ? ` · ${c.organization}` : ''}</option>)}
+                  </select>
+                </div>
+                <div>
                   <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Goal amount</div>
                   <input value={of.goal_amount} onChange={e => setOf(x => ({ ...x, goal_amount: e.target.value }))}
                     style={PS.input} placeholder='e.g. 10000' inputMode='numeric' />
@@ -2929,9 +2950,35 @@ function CauseDetail({ cause, me, onBack, onRefresh }) {
                 {manage && <button style={{ ...PS.btn, fontSize: 11 }} onClick={() => setEditingOverview(true)}><Pencil size={11} /> Edit</button>}
               </div>
               {cause.description && <div style={{ fontSize: 13.5, color: POA.textSecondary, lineHeight: 1.7, marginBottom: 10 }}>{cause.description}</div>}
+              {(cause.point_person_id || cause.main_contact_id) && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 12 }}>
+                  {cause.point_person_id && (() => {
+                    const pp = members.find(m => m.id === cause.point_person_id);
+                    return pp ? (
+                      <div style={{ background: 'rgba(219,165,37,.06)', border: `0.5px solid rgba(219,165,37,.2)`, borderRadius: 8, padding: '10px 12px' }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: POA.accent, marginBottom: 4 }}>Point person</div>
+                        <div style={{ fontWeight: 600, fontSize: 13.5, color: POA.textPrimary }}>{pp.full_name}</div>
+                        {pp.phone && <a href={`tel:${pp.phone.replace(/\D/g,'')}`} style={{ fontSize: 12, color: POA.textMuted, textDecoration: 'none', display: 'block', marginTop: 2 }}>{pp.phone}</a>}
+                      </div>
+                    ) : null;
+                  })()}
+                  {cause.main_contact_id && (() => {
+                    const mc = contacts.find(c => c.id === cause.main_contact_id);
+                    return mc ? (
+                      <div style={{ background: 'rgba(70,199,147,.06)', border: `0.5px solid rgba(70,199,147,.2)`, borderRadius: 8, padding: '10px 12px' }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: POA.green, marginBottom: 4 }}>Main contact</div>
+                        <div style={{ fontWeight: 600, fontSize: 13.5, color: POA.textPrimary }}>{mc.name}</div>
+                        {mc.organization && <div style={{ fontSize: 12, color: POA.textMuted }}>{mc.organization}</div>}
+                        {mc.phone && <a href={`tel:${mc.phone.replace(/\D/g,'')}`} style={{ fontSize: 12, color: POA.accent, textDecoration: 'none', display: 'block', marginTop: 2 }}>{mc.phone}</a>}
+                        {mc.email && <a href={`mailto:${mc.email}`} style={{ fontSize: 12, color: POA.textMuted, textDecoration: 'none', display: 'block' }}>{mc.email}</a>}
+                      </div>
+                    ) : null;
+                  })()}
+                </div>
+              )}
               {cause.external_url && (
                 <a href={cause.external_url} target='_blank' rel='noreferrer'
-                  style={{ ...PS.btnPrimary, textDecoration: 'none', display: 'inline-flex', fontSize: 12 }}>
+                  style={{ ...PS.btnPrimary, textDecoration: 'none', display: 'inline-flex', fontSize: 12, marginTop: 12 }}>
                   Learn more ↗
                 </a>
               )}
@@ -3356,6 +3403,14 @@ function CausesBoard({ me }) {
                 <div style={{ fontWeight: 700, color: POA.textPrimary }}>{c.name}</div>
                 {c.tagline && <div style={{ fontSize: 12.5, color: POA.textMuted, marginTop: 2 }}>{c.tagline}</div>}
                 {raised > 0 && <div style={{ fontSize: 12, color: POA.greenText, marginTop: 4 }}>Raised {money(raised)}{c.goal_amount ? ` of ${money(c.goal_amount)}` : ""}</div>}
+                {c.point_person && (
+                  <div style={{ fontSize: 11, color: POA.textMuted, marginTop: 6, display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <div style={{ width: 18, height: 18, borderRadius: '50%', background: POA.accentSoft, color: POA.accent, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700 }}>
+                      {c.point_person.full_name.split(' ').map(w => w[0]).join('').slice(0,2)}
+                    </div>
+                    {c.point_person.full_name}
+                  </div>
+                )}
               </div>
               {c.status === "archived" && <span style={{ fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 999, background: POA.track, color: POA.textMuted }}>Archived</span>}
               <ChevronRight size={15} color={POA.textMuted} />
