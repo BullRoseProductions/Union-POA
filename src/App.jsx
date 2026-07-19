@@ -7667,7 +7667,6 @@ function PADash({ setView, setCurViewAs }) {
   const [depts, setDepts]         = useState(null);
   const [stats, setStats]         = useState({});
   const [errors, setErrors]       = useState([]);
-  const [switching, setSwitching] = useState(false);
   const [err, setErr]             = useState('');
 
   useEffect(() => {
@@ -7751,23 +7750,8 @@ function PADash({ setView, setCurViewAs }) {
                 </span>
               </div>
               <button style={{ ...PS.btnPrimary, fontSize: 12, padding: '6px 14px' }}
-                onClick={async () => {
-                  setSwitching(true);
-                  try {
-                    // Switch active department context
-                    const { error } = await supabase.rpc('set_active_department', { dept_id: dept.id });
-                    if (!error) {
-                      window.location.reload();
-                    } else {
-                      // Fallback — just reload into that org context
-                      window.location.href = window.location.pathname;
-                    }
-                  } catch {
-                    // Best effort — reload and let RLS pick up the right dept
-                    window.location.reload();
-                  } finally { setSwitching(false); }
-                }}>
-                {switching ? 'Switching…' : 'Switch to →'}
+                onClick={() => setView('pa_orgs')}>
+                Switch to →
               </button>
             </div>
 
