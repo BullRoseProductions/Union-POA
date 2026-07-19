@@ -7663,7 +7663,7 @@ function CollapsiblePast({ bookings, statusColor, statusBg }) {
   );
 }
 
-function PADash({ setView, setCurViewAs }) {
+function PADash({ setView, setViewAs }) {
   const [depts, setDepts]         = useState(null);
   const [stats, setStats]         = useState({});
   const [errors, setErrors]       = useState([]);
@@ -7779,6 +7779,32 @@ function PADash({ setView, setCurViewAs }) {
           </div>
         );
       })}
+
+      {/* Quick access to board screens */}
+      {depts && depts.length > 0 && (
+        <div style={{ marginTop: 20, marginBottom: 12 }}>
+          <p style={{ ...PS.kicker, marginBottom: 10 }}>Quick access — Fort Worth POA</p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8 }}>
+            {[
+              { label: 'Members', id: 'b_members', icon: Users },
+              { label: 'Causes', id: 'b_causes', icon: Heart },
+              { label: 'Correspondence', id: 'b_correspondence', icon: Mail },
+              { label: 'Documents', id: 'b_documents', icon: FileText },
+              { label: 'Board Continuity', id: 'b_continuity', icon: BookOpen },
+              { label: 'Meetings & Events', id: 'b_attendance', icon: CalendarCheck },
+              { label: 'Value Ledger', id: 'b_ledger', icon: TrendingUp },
+              { label: 'Settings', id: 'b_settings', icon: Settings },
+            ].map(({ label, id, icon: Icon }) => (
+              <button key={id}
+                onClick={() => { setViewAs('board'); setView(id); }}
+                style={{ background: 'linear-gradient(160deg, #101828, #0A1020)', border: `0.5px solid ${POA.hairline2}`, borderRadius: 10, padding: '12px 10px', cursor: 'pointer', textAlign: 'center', boxShadow: '0 2px 8px rgba(0,0,0,.3)' }}>
+                <Icon size={18} color={POA.accent} style={{ marginBottom: 6, display: 'block', margin: '0 auto 6px' }} />
+                <div style={{ fontSize: 11, color: POA.textSecondary, fontWeight: 500 }}>{label}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div style={{ fontSize: 11.5, color: POA.textMuted, marginTop: 8, textAlign: 'center', fontStyle: 'italic' }}>
         Platform data is live. Stats update on each load.
@@ -11965,7 +11991,7 @@ function MemberVideos({ me, setView }) {
   );
 }
 
-function renderScreen(view, { me, org, setView }) {
+function renderScreen(view, { me, org, setView, setViewAs }) {
   if (view.startsWith("m_")) {
     switch (view) {
       case "m_dash":     return <MemberDash me={me} org={org} setView={setView} />;
@@ -12002,7 +12028,7 @@ function renderScreen(view, { me, org, setView }) {
     case "b_community":     return <BoardCommunity me={me} />;
     case "b_ledger":        return <ValueLedger me={me} />;
     case "b_settings":      return <OrgSettings me={me} org={org} />;
-    case "pa_dash":         return <PADash setView={setView} />;
+    case "pa_dash":         return <PADash setView={setView} setViewAs={setViewAs} />;
     case "pa_orgs":         return <PADash />;
     case "pa_config":       return <PAOrgConfig />;
     case "pa_add":          return <PAAddOrg />;
@@ -12240,7 +12266,7 @@ export default function App() {
       <main className="app-main" style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "32px 36px", maxWidth: 860, minWidth: 0, boxSizing: "border-box", background: 'radial-gradient(ellipse 60% 40% at 80% 0%, rgba(219,165,37,.04) 0%, transparent 60%)' }}>
         {mountedViews.map(viewId => (
           <div key={viewId} style={{ display: activeView === viewId ? "block" : "none" }}>
-            {renderScreen(viewId, { me, org, setView })}
+            {renderScreen(viewId, { me, org, setView, setViewAs })}
           </div>
         ))}
       </main>
