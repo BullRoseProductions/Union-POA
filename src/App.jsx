@@ -3548,7 +3548,7 @@ function MembersBoard({ me }) {
   const [inviteSent, setInviteSent] = useState(false);
   const [inviteErr, setInviteErr] = useState('');
   const [adding, setAdding]     = useState(false);
-  const [af, setAf]             = useState({ full_name: '', email: '', badge: '', district: '', phone: '', access: ['Member'], standing: 'Good', status: 'active' });
+  const [af, setAf]             = useState({ full_name: '', email: '', badge: '', district: '', rank: '', phone: '', access: ['Member'], standing: 'Good', status: 'active' });
 
   useEffect(() => { listMembers().then(setMembers); }, []);
 
@@ -3596,6 +3596,7 @@ function MembersBoard({ me }) {
         full_name: ef.full_name,
         badge: ef.badge || null,
         district: ef.district || null,
+        rank: ef.rank || null,
         phone: ef.phone || null,
         standing: ef.standing,
         status: ef.status,
@@ -3636,6 +3637,7 @@ function MembersBoard({ me }) {
         email: af.email.trim(),
         badge: af.badge || null,
         district: af.district || null,
+        rank: af.rank || null,
         phone: af.phone || null,
         standing: af.standing,
         status: af.status,
@@ -3643,7 +3645,7 @@ function MembersBoard({ me }) {
       });
       await listMembers().then(setMembers);
       setAdding(false);
-      setAf({ full_name: '', email: '', badge: '', district: '', phone: '', access: ['Member'], standing: 'Good', status: 'active' });
+      setAf({ full_name: '', email: '', badge: '', district: '', rank: '', phone: '', access: ['Member'], standing: 'Good', status: 'active' });
     } catch(e) { setEditErr(e.message); }
     finally { setEditBusy(false); }
   }
@@ -3666,7 +3668,7 @@ function MembersBoard({ me }) {
           <div style={{ marginLeft: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
             <div style={{ display: 'flex', gap: 8 }}>
               {!editing && (
-                <button style={{ ...PS.btn }} onClick={() => { setEf({ full_name: selected.full_name, badge: selected.badge || '', district: selected.district || '', phone: selected.phone || '', standing: selected.standing || 'Good', status: selected.status || 'active', dues_paid_through: selected.dues_paid_through || '', member_since: selected.member_since || '', availability_note: selected.availability_note || '', preferred_contact: selected.preferred_contact || '', access: selected.access || ['Member'] }); setEditing(true); }}>
+                <button style={{ ...PS.btn }} onClick={() => { setEf({ full_name: selected.full_name, badge: selected.badge || '', district: selected.district || '', rank: selected.rank || '', phone: selected.phone || '', standing: selected.standing || 'Good', status: selected.status || 'active', dues_paid_through: selected.dues_paid_through || '', member_since: selected.member_since || '', availability_note: selected.availability_note || '', preferred_contact: selected.preferred_contact || '', access: selected.access || ['Member'] }); setEditing(true); }}>
                   <Pencil size={12} /> Edit
                 </button>
               )}
@@ -3697,6 +3699,11 @@ function MembersBoard({ me }) {
               <div>
                 <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>District</div>
                 <input value={ef.district} onChange={e => setEf(x => ({ ...x, district: e.target.value }))} style={PS.input} placeholder='e.g. 4' />
+              </div>
+              <div>
+                <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Rank</div>
+                <input value={ef.rank || ''} onChange={e => setEf(x => ({ ...x, rank: e.target.value }))}
+                  style={PS.input} placeholder='e.g. Patrol, Sergeant, Lieutenant, Detective' />
               </div>
               <div>
                 <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Phone</div>
@@ -3806,6 +3813,7 @@ function MembersBoard({ me }) {
             {[
               { label: 'Badge', value: selected.badge || '—' },
               { label: 'District', value: selected.district || '—' },
+              { label: 'Rank', value: selected.rank || '—' },
               { label: 'Phone', value: selected.phone || '—' },
               { label: 'Standing', value: selected.standing || 'Good' },
               { label: 'Status', value: selected.status || 'active' },
@@ -3892,6 +3900,11 @@ function MembersBoard({ me }) {
             <div>
               <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>District</div>
               <input value={af.district} onChange={e => setAf(x => ({ ...x, district: e.target.value }))} style={PS.input} placeholder='e.g. 4' />
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Rank</div>
+              <input value={af.rank || ''} onChange={e => setAf(x => ({ ...x, rank: e.target.value }))}
+                style={PS.input} placeholder='e.g. Patrol, Sergeant, Lieutenant, Detective' />
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
               <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Phone</div>
