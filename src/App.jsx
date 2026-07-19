@@ -12015,15 +12015,56 @@ export default function App() {
         @keyframes spin { to { transform: rotate(360deg); } }
         ::-webkit-scrollbar { width: 0; }
         .nav-item:hover { background: rgba(219,165,37,.08) !important; }
+        @media (max-width: 768px) {
+          .mobile-menu-btn { display: flex !important; }
+          .app-sidebar {
+            position: fixed !important;
+            left: -240px !important;
+            top: 0 !important;
+            height: 100vh !important;
+            width: 240px !important;
+            transition: left 0.25s ease !important;
+            z-index: 100 !important;
+            overflow-y: auto !important;
+          }
+          .app-sidebar.nav-open {
+            left: 0 !important;
+            box-shadow: 4px 0 24px rgba(0,0,0,.5) !important;
+          }
+          .nav-backdrop { display: block !important; }
+          .app-main {
+            margin-left: 0 !important;
+            width: 100% !important;
+            min-width: 0 !important;
+            padding: 56px 14px 24px !important;
+          }
+        }
+        @media (min-width: 769px) {
+          .mobile-menu-btn { display: none !important; }
+        }
       `}</style>
 
+      <button
+        onClick={() => setSideOpen(v => !v)}
+        style={{ display: 'none', position: 'fixed', top: 12, left: 12, zIndex: 200, background: POA.accent, color: '#06090A', border: 'none', borderRadius: 8, width: 36, height: 36, alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 12px rgba(0,0,0,.4)' }}
+        className='mobile-menu-btn'>
+        {sideOpen ? <X size={18} /> : <Menu size={18} />}
+      </button>
+
+      {sideOpen && (
+        <div onClick={() => setSideOpen(false)}
+          style={{ display: 'none', position: 'fixed', inset: 0, background: 'rgba(0,0,0,.6)', zIndex: 99 }}
+          className='nav-backdrop' />
+      )}
+
       {/* ---- Sidebar ---- */}
-      <aside style={{
+      <aside className={`app-sidebar${sideOpen ? ' nav-open' : ''}`} style={{
         width: 220, flexShrink: 0,
         background: 'linear-gradient(180deg, #060B1A 0%, #030610 100%)',
         borderRight: '0.5px solid rgba(219,165,37,.12)',
         display: "flex", flexDirection: "column",
         position: "sticky", top: 0, height: "100vh", overflowY: "auto",
+        zIndex: 100,
       }}>
         {/* Brand */}
         <div style={{ padding: "22px 18px 16px", borderBottom: '0.5px solid rgba(219,165,37,.10)', background: 'linear-gradient(180deg, rgba(219,165,37,.05) 0%, transparent 100%)', position: 'relative' }}>
@@ -12100,7 +12141,7 @@ export default function App() {
       </aside>
 
       {/* ---- Main content ---- */}
-      <main style={{ flex: 1, overflowY: "auto", padding: "32px 36px", maxWidth: 860, background: 'radial-gradient(ellipse 60% 40% at 80% 0%, rgba(219,165,37,.04) 0%, transparent 60%)' }}>
+      <main className="app-main" style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "32px 36px", maxWidth: 860, minWidth: 0, boxSizing: "border-box", background: 'radial-gradient(ellipse 60% 40% at 80% 0%, rgba(219,165,37,.04) 0%, transparent 60%)' }}>
         {mountedViews.map(viewId => (
           <div key={viewId} style={{ display: activeView === viewId ? "block" : "none" }}>
             {renderScreen(viewId, { me, org, setView })}
