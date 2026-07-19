@@ -2666,8 +2666,6 @@ function CauseDetail({ cause, me, onBack, onRefresh }) {
   // Cause overview edit
   const [editingOverview, setEditingOverview] = useState(false);
   const [of, setOf] = useState({
-    next_event_date: cause.next_event_date || '',
-    next_event_notes: cause.next_event_notes || '',
     goal_amount: cause.goal_amount || '',
     description: cause.description || '',
     external_url: cause.external_url || '',
@@ -2705,8 +2703,6 @@ function CauseDetail({ cause, me, onBack, onRefresh }) {
     setOBusy(true); setErr('');
     try {
       await supabase.from('causes').update({
-        next_event_date: of.next_event_date || null,
-        next_event_notes: of.next_event_notes || null,
         goal_amount: of.goal_amount ? Number(of.goal_amount) : null,
         description: of.description || null,
         external_url: of.external_url || null,
@@ -2927,15 +2923,6 @@ function CauseDetail({ cause, me, onBack, onRefresh }) {
                   <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>External link</div>
                   <input value={of.external_url} onChange={e => setOf(x => ({ ...x, external_url: e.target.value }))}
                     style={PS.input} placeholder='https://...' />
-                </div>
-                <div>
-                  <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Next event date</div>
-                  <input type='date' value={of.next_event_date} onChange={e => setOf(x => ({ ...x, next_event_date: e.target.value }))} style={PS.input} />
-                </div>
-                <div>
-                  <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Next event notes</div>
-                  <input value={of.next_event_notes} onChange={e => setOf(x => ({ ...x, next_event_notes: e.target.value }))}
-                    style={PS.input} placeholder='What is it, where, who is involved' />
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
