@@ -377,6 +377,7 @@ function MemberDash({ me, org, setView }) {
       const top3 = vids.slice(0, 3);
       setVideos(top3);
       const withThumbs = await Promise.all(top3.map(async v => {
+        if (v.thumbnail_url) return v;
         const thumb = await getVimeoThumb(v.vimeo_url);
         return { ...v, thumbnail_url: thumb };
       }));
@@ -8484,7 +8485,7 @@ function SocialMedia({ me, org }) {
     if (!newVid.title.trim() || !newVid.vimeo_url.trim()) { setErr("Title and Vimeo URL required."); return; }
     setBusy(true); setErr("");
     try {
-      await addVideo({
+      const newVideo = await addVideo({
         department_id: me.department_id,
         title: newVid.title.trim(),
         description: newVid.description.trim() || null,
@@ -8492,6 +8493,13 @@ function SocialMedia({ me, org }) {
         series_name: newVid.series_name.trim() || null,
         posted_by: me.id,
       });
+      // Fetch and store thumbnail so members don't re-fetch from Vimeo each load
+      if (newVideo) {
+        const thumb = await getVimeoThumb(newVid.vimeo_url.trim());
+        if (thumb) {
+          await supabase.from('association_videos').update({ thumbnail_url: thumb }).eq('id', newVideo.id);
+        }
+      }
       setNewVid({ title: "", description: "", vimeo_url: "", series_name: "" });
       setShowAddVid(false);
       await loadAll();
