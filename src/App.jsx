@@ -3218,22 +3218,12 @@ function CauseDetail({ cause, me, onBack, onRefresh }) {
 
 function CausesBoard({ me }) {
   const [rows, setRows]       = useState(null);
-  const [detail, setDetail]   = useState(null);
   const [selectedCause, setSelectedCause] = useState(null);
   const [adding, setAdding]   = useState(false);
-  const [editing, setEditing] = useState(false);
   const [err, setErr]         = useState("");
   const [f, setF]             = useState({ name: "", tagline: "", external_url: "", goal_amount: "", description: "", status: "active" });
-  const [ef, setEf]           = useState({});
-  const [addEntry, setAddEntry] = useState(false);
-  const [en, setEn]           = useState({ kind: "contribution", label: "", amount: "", occurred_on: "" });
 
   async function load() { setRows(await listCauses()); }
-  async function loadDetail(id) {
-    const updated = await listCauses();
-    setRows(updated);
-    setDetail(updated.find(c => c.id === id) || null);
-  }
   useEffect(() => { load(); }, []);
 
   async function create() {
@@ -3242,30 +3232,18 @@ function CausesBoard({ me }) {
     if (error) { setErr(error.message); return; }
     setAdding(false); setF({ name: "", tagline: "", external_url: "", goal_amount: "", description: "", status: "active" }); await load();
   }
-  async function update() {
-    setErr("");
-    const { error } = await supabase.from("causes").update({ name: ef.name, tagline: ef.tagline || null, external_url: ef.external_url || null, goal_amount: ef.goal_amount ? Number(ef.goal_amount) : null, description: ef.description || null, status: ef.status }).eq("id", detail.id);
-    if (error) { setErr(error.message); return; }
-    setEditing(false); await loadDetail(detail.id);
-  }
   async function remove() {
-    // DeptAdmin = hard delete; Board = soft archive (same pattern as fire cancel)
+    // DeptAdmin = hard delete; Board = soft archive. Operates on the selected cause.
     if (isDeptAdmin(me.access)) {
       if (!confirm("Permanently delete this cause? This cannot be undone.")) return;
-      await supabase.from("causes").delete().eq("id", detail.id);
-      setDetail(null);
+      await supabase.from("causes").delete().eq("id", selectedCause.id);
+      setSelectedCause(null);
     } else {
       if (!confirm("Archive this cause? It can be restored by your Department Admin.")) return;
-      await supabase.from("causes").update({ status: "archived" }).eq("id", detail.id);
-      setDetail(prev => ({ ...prev, status: "archived" }));
+      await supabase.from("causes").update({ status: "archived" }).eq("id", selectedCause.id);
+      setSelectedCause(prev => ({ ...prev, status: "archived" }));
     }
     await load();
-  }
-  async function addCauseEntry() {
-    setErr("");
-    const { error } = await supabase.from("cause_entries").insert({ cause_id: detail.id, department_id: me.department_id, kind: en.kind, label: en.label.trim(), amount: en.amount ? Number(en.amount) : null, occurred_on: en.occurred_on || null });
-    if (error) { setErr(error.message); return; }
-    setAddEntry(false); setEn({ kind: "contribution", label: "", amount: "", occurred_on: "" }); await loadDetail(detail.id);
   }
 
   if (!rows) return <Spinner />;
@@ -3283,106 +3261,6 @@ function CausesBoard({ me }) {
     />;
   }
 
-  if (detail) {
-    const entries = detail.cause_entries || [];
-    const raised  = entries.filter(e => e.kind === "contribution" && e.amount).reduce((s, e) => s + Number(e.amount), 0);
-    return (
-      <div>
-        <button onClick={() => { setDetail(null); setEditing(false); setAddEntry(false); }} style={{ ...PS.btn, marginBottom: 16 }}><ArrowLeft size={13} /> Causes</button>
-        <ErrBox msg={err} />
-        {editing ? (
-          <Card>
-            {["name","tagline","description","external_url","goal_amount"].map(k => (
-              <div key={k} style={{ marginBottom: 10 }}>
-                <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4, textTransform: "capitalize" }}>{k.replace(/_/g," ")}</div>
-                {k === "description"
-                  ? <textarea value={ef[k] || ""} onChange={e => setEf({ ...ef, [k]: e.target.value })} style={{ ...PS.textarea, minHeight: 80 }} />
-                  : <input value={ef[k] || ""} onChange={e => setEf({ ...ef, [k]: e.target.value })} style={PS.input} />
-                }
-              </div>
-            ))}
-            <div style={{ marginBottom: 10 }}>
-              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Status</div>
-              <select value={ef.status} onChange={e => setEf({ ...ef, status: e.target.value })} style={{ ...PS.input }}>
-                <option value="active">Active</option>
-                <option value="archived">Archived</option>
-              </select>
-            </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button style={PS.btnPrimary} onClick={update}>Save</button>
-              <button style={PS.btn} onClick={() => setEditing(false)}>Cancel</button>
-              <button style={{ ...PS.btn, color: POA.red, marginLeft: "auto" }} onClick={remove}>
-                {isDeptAdmin(me.access) ? "Delete" : "Archive"}
-              </button>
-            </div>
-          </Card>
-        ) : (
-          <>
-            <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 16 }}>
-              <div style={{ flex: 1 }}>
-                <p style={PS.kicker}>Cause</p>
-                <h2 style={{ fontFamily: "inherit", fontSize: 22, fontWeight: 700, color: POA.textPrimary, margin: "4px 0" }}>{detail.name}</h2>
-                {detail.tagline && <div style={{ fontSize: 13.5, color: POA.textMuted }}>{detail.tagline}</div>}
-              </div>
-              <button style={PS.btn} onClick={() => { setEf({ name: detail.name, tagline: detail.tagline || "", description: detail.description || "", external_url: detail.external_url || "", goal_amount: detail.goal_amount ?? "", status: detail.status }); setEditing(true); }}>
-                <Pencil size={12} /> Edit
-              </button>
-            </div>
-            {detail.description && <Card><div style={{ fontSize: 13.5, color: POA.textSecondary, lineHeight: 1.65 }}>{detail.description}</div></Card>}
-            {(raised > 0 || detail.goal_amount) && (
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
-                <Card><div style={{ fontWeight: 700, fontSize: 22, color: POA.green }}>{money(raised) || "$0"}</div><div style={{ fontSize: 11, color: POA.textMuted, marginTop: 4 }}>RAISED (TRACKED)</div></Card>
-                <Card><div style={{ fontWeight: 700, fontSize: 22, color: POA.accent }}>{money(detail.goal_amount) || "—"}</div><div style={{ fontSize: 11, color: POA.textMuted, marginTop: 4 }}>GOAL</div></Card>
-              </div>
-            )}
-            {detail.external_url && (
-              <a href={detail.external_url} target="_blank" rel="noreferrer" style={{ ...PS.btnPrimary, textDecoration: "none", marginBottom: 14, display: "inline-flex" }}>Support this cause ↗</a>
-            )}
-          </>
-        )}
-
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", margin: "18px 0 8px" }}>
-          <p style={{ ...PS.kicker, margin: 0 }}>Activity</p>
-          {!addEntry && <button style={PS.btn} onClick={() => setAddEntry(true)}><Plus size={12} /> Add entry</button>}
-        </div>
-        {addEntry && (
-          <Card>
-            <div style={{ marginBottom: 10 }}>
-              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Type</div>
-              <select value={en.kind} onChange={e => setEn({ ...en, kind: e.target.value })} style={PS.input}>
-                {["contribution","participation","outcome","update"].map(k => <option key={k} value={k}>{k}</option>)}
-              </select>
-            </div>
-            <div style={{ marginBottom: 10 }}>
-              <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>What happened</div>
-              <input value={en.label} onChange={e => setEn({ ...en, label: e.target.value })} style={PS.input} placeholder="e.g. Toy drive at Station 4" />
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
-              <div>
-                <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Amount</div>
-                <input value={en.amount} onChange={e => setEn({ ...en, amount: e.target.value })} style={PS.input} placeholder="optional" inputMode="numeric" />
-              </div>
-              <div>
-                <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Date</div>
-                <input type="date" value={en.occurred_on} onChange={e => setEn({ ...en, occurred_on: e.target.value })} style={PS.input} />
-              </div>
-            </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button style={PS.btnPrimary} onClick={addCauseEntry}>Save entry</button>
-              <button style={PS.btn} onClick={() => setAddEntry(false)}>Cancel</button>
-            </div>
-          </Card>
-        )}
-        {entries.length === 0 && !addEntry && <Card><div style={{ color: POA.textMuted, fontSize: 13.5 }}>No activity recorded yet.</div></Card>}
-        {entries.map(e => (
-          <Card key={e.id}>
-            <div style={{ fontWeight: 600, color: POA.textPrimary }}>{e.label}{e.amount ? ` · ${money(e.amount)}` : ""}</div>
-            <div style={{ fontSize: 12, color: POA.textMuted, marginTop: 3 }}>{e.kind}{e.occurred_on ? ` · ${fmtShort(e.occurred_on)}` : ""}</div>
-          </Card>
-        ))}
-      </div>
-    );
-  }
 
   return (
     <div>
