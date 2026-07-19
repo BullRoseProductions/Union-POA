@@ -8332,12 +8332,16 @@ function ValueLedger({ me }) {
                   placeholder="Write 2-3 sentences about what this period meant for the association. AI can draft; you file."
                   style={{ ...PS.textarea, minHeight: 120 }} />
                 <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-                  <button style={PS.btnPrimary} disabled={busy} onClick={saveNarrative}>
-                    {busy ? "Saving…" : "File narrative"}
-                  </button>
-                  <button style={{ ...PS.btn }} disabled={aiBusy} onClick={draftNarrative}>
-                    <Sparkles size={13} /> {aiBusy ? "Drafting…" : "Draft with AI"}
-                  </button>
+                  {canManage(me?.access) && (
+                    <button style={PS.btnPrimary} disabled={busy} onClick={saveNarrative}>
+                      {busy ? "Saving…" : "File narrative"}
+                    </button>
+                  )}
+                  {canManage(me?.access) && (
+                    <button style={{ ...PS.btn }} disabled={aiBusy} onClick={draftNarrative}>
+                      <Sparkles size={13} /> {aiBusy ? "Drafting…" : "Draft with AI"}
+                    </button>
+                  )}
                   <button style={PS.btn} onClick={() => { setEditingNarrative(false); setNarrative(savedNarrative); }}>
                     Cancel
                   </button>
@@ -8349,23 +8353,27 @@ function ValueLedger({ me }) {
             ) : savedNarrative ? (
               <>
                 <div style={{ fontSize: 14, color: POA.textSecondary, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{savedNarrative}</div>
-                <button style={{ ...PS.btn, marginTop: 12 }} onClick={() => setEditingNarrative(true)}>
-                  <Pencil size={12} /> Edit narrative
-                </button>
+                {canManage(me?.access) && (
+                  <button style={{ ...PS.btn, marginTop: 12 }} onClick={() => setEditingNarrative(true)}>
+                    <Pencil size={12} /> Edit narrative
+                  </button>
+                )}
               </>
             ) : (
               <>
                 <div style={{ fontSize: 13.5, color: POA.textMuted, lineHeight: 1.6, marginBottom: 14 }}>
                   No narrative filed yet. Write a 2-3 sentence summary of what this period meant — or let AI draft from the numbers above.
                 </div>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button style={PS.btnPrimary} onClick={() => setEditingNarrative(true)}>
-                    <FileText size={14} /> Write narrative
-                  </button>
-                  <button style={PS.btn} disabled={aiBusy} onClick={draftNarrative}>
-                    <Sparkles size={13} /> {aiBusy ? "Drafting…" : "Draft with AI"}
-                  </button>
-                </div>
+                {canManage(me?.access) && (
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button style={PS.btnPrimary} onClick={() => setEditingNarrative(true)}>
+                      <FileText size={14} /> Write narrative
+                    </button>
+                    <button style={PS.btn} disabled={aiBusy} onClick={draftNarrative}>
+                      <Sparkles size={13} /> {aiBusy ? "Drafting…" : "Draft with AI"}
+                    </button>
+                  </div>
+                )}
               </>
             )}
           </Card>
