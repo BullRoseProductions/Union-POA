@@ -53,3 +53,6 @@ alter table cause_events add column if not exists funding_event_id uuid referenc
 -- funding_events insert/update in saveEvent will be rejected.
 alter table funding_events add column if not exists description text;
 alter table funding_events add column if not exists link_url    text;
+
+-- Fundraising calendar -> cause assignment: which cause a funding_event supports.
+alter table funding_events add column if not exists cause_id uuid references causes(id);

@@ -9067,6 +9067,10 @@ function Fundraising({ me, org }) {
 
   // members for owner matching
   const [members, setMembers]       = useState([]);
+  const [causes, setCauses]           = useState([]);
+  const [assigningEvent, setAssigningEvent] = useState(null);
+  const [assignCauseId, setAssignCauseId]   = useState('');
+  const [assignBusy, setAssignBusy]         = useState(false);
 
   const totalRaised = log.reduce((s, e) => s + (Number(e.amount) || 0), 0);
 
@@ -9078,11 +9082,34 @@ function Fundraising({ me, org }) {
       listFundingEvents(calCur.y, calCur.m),
     ]);
     setLog(l); setDrafts(d); setMembers(m); setCalEvents(ev);
+    listCauses().then(c => setCauses(c.filter(x => x.status === 'active'))).catch(() => null);
   }
   useEffect(() => { loadAll(); }, []);
   useEffect(() => {
     listFundingEvents(calCur.y, calCur.m).then(setCalEvents).catch(() => null);
   }, [calCur.y, calCur.m, calReloadKey]);
+
+  async function doAssignToCause() {
+    if (!assignCauseId || !assigningEvent) return;
+    setAssignBusy(true);
+    try {
+      // Create a cause_event linked to this funding_event
+      await supabase.from('cause_events').insert({
+        cause_id: assignCauseId,
+        department_id: me.department_id,
+        title: assigningEvent.title,
+        event_date: assigningEvent.date,
+        notes: assigningEvent.notes || '',
+        status: assigningEvent.date >= new Date().toISOString().split('T')[0] ? 'upcoming' : 'completed',
+        funding_event_id: assigningEvent.id,
+      });
+      // Update funding_event with cause reference
+      await supabase.from('funding_events').update({ cause_id: assignCauseId }).eq('id', assigningEvent.id);
+      setAssigningEvent(null); setAssignCauseId('');
+      setCalReloadKey(k => k + 1);
+    } catch(e) { console.error(e); }
+    finally { setAssignBusy(false); }
+  }
 
   // --- owner matching (same pattern as fire) ---
   function matchOwnerId(name) {
@@ -9584,6 +9611,23 @@ function Fundraising({ me, org }) {
           <div style={{ fontSize: 12, color: POA.textMuted, marginTop: 8 }}>
             {calEvents.length} event{calEvents.length !== 1 ? "s" : ""} in {MONTHS[calCur.m]} · tap an event to remove it
           </div>
+          {calEvents.length > 0 && (
+            <div style={{ marginTop: 10, borderTop: `0.5px solid ${POA.hairline}`, paddingTop: 10 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: POA.textMuted, marginBottom: 8 }}>Link events to a cause</div>
+              {calEvents.map(event => (
+                <div key={event.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0', borderBottom: `0.5px solid ${POA.hairline}` }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: POA.textPrimary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{event.title}</div>
+                    <div style={{ fontSize: 11, color: POA.textMuted }}>{event.date ? fmtShort(event.date) : ''}</div>
+                  </div>
+                  <button style={{ ...PS.btn, fontSize: 11, padding: '3px 8px', flexShrink: 0, color: event.cause_id ? POA.green : POA.btnText }}
+                    onClick={() => { setAssigningEvent(event); setAssignCauseId(event.cause_id || ''); }}>
+                    {event.cause_id ? '✓ Assigned' : '+ Assign to cause'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </Card>
       )}
 
@@ -9677,6 +9721,28 @@ function Fundraising({ me, org }) {
             </>
           )}
         </>
+      )}
+
+      {assigningEvent && (
+        <div onClick={() => setAssigningEvent(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.7)', zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background: 'linear-gradient(135deg, #0E1630, #0A1020)', border: `0.5px solid ${POA.hairline2}`, borderRadius: 16, maxWidth: 420, width: '100%', padding: '20px 22px', boxShadow: '0 20px 60px rgba(0,0,0,.6)' }}>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.12em', textTransform: 'uppercase', color: POA.accent, marginBottom: 8 }}>Assign to cause</div>
+            <div style={{ fontWeight: 700, fontSize: 16, color: POA.textPrimary, marginBottom: 14 }}>{assigningEvent.title}</div>
+            <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 6 }}>Which cause does this event support?</div>
+            <select value={assignCauseId} onChange={e => setAssignCauseId(e.target.value)} style={{ ...PS.input, marginBottom: 14 }}>
+              <option value=''>— Select a cause —</option>
+              {causes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button style={{ ...PS.btnPrimary }} disabled={assignBusy || !assignCauseId} onClick={doAssignToCause}>
+                {assignBusy ? 'Assigning…' : 'Assign to cause'}
+              </button>
+              <button style={PS.btn} onClick={() => setAssigningEvent(null)}>Cancel</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
