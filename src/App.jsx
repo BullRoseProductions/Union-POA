@@ -249,7 +249,7 @@ async function myActionItems(memberId) {
 }
 async function listCauses() {
   const { data, error } = await supabase.from('causes')
-    .select('*, cause_entries(*), point_person:members!causes_point_person_id_fkey(id, full_name, phone), main_contact:cause_contacts!causes_main_contact_id_fkey(id, name, organization, phone, email)')
+    .select('*, cause_entries(*), cause_contacts!cause_contacts_cause_id_fkey(*), point_person:members!causes_point_person_id_fkey(id, full_name, phone)')
     .order('sort', { ascending: true });
   if (error) throw error;
   return data || [];
@@ -1787,6 +1787,22 @@ function BoardDash({ me, org, setView }) {
   const [onCall, setOnCall]             = useState([]);
   const [calCur, setCalCur]             = useState({ y: today.getFullYear(), m: today.getMonth() });
   const [events, setEvents]             = useState([]);
+  const [overdueContacts, setOverdueContacts] = useState([]);
+
+  useEffect(() => {
+    supabase.from('cause_contacts')
+      .select('name, organization, last_contact_date, causes!cause_contacts_cause_id_fkey(name)')
+      .eq('department_id', me.department_id)
+      .eq('active', true)
+      .then(({ data }) => {
+        const overdue = (data || []).filter(c => {
+          if (!c.last_contact_date) return true;
+          const days = Math.floor((new Date() - new Date(c.last_contact_date)) / (1000 * 60 * 60 * 24));
+          return days > 60;
+        });
+        setOverdueContacts(overdue);
+      });
+  }, [me.department_id]);
 
   useEffect(() => {
     Promise.all([
@@ -2011,6 +2027,21 @@ function BoardDash({ me, org, setView }) {
             <div style={{ fontSize: 11, color: POA.red, flexShrink: 0 }}>Due {fmtShort(a.due_date)}</div>
           </div>
         ))}
+        {overdueContacts.length > 0 && (
+          <div style={{ marginTop: overdueActions.length > 0 ? 8 : 0 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: POA.amber, marginBottom: 4, letterSpacing: '.08em', textTransform: 'uppercase' }}>Cause contacts needing follow-up</div>
+            {overdueContacts.slice(0, 3).map((c, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 0', borderBottom: `0.5px solid ${POA.hairline}` }}>
+                <div style={{ width: 6, height: 6, borderRadius: '50%', background: POA.amber, flexShrink: 0 }} />
+                <div style={{ flex: 1, fontSize: 13, color: POA.textPrimary }}>{c.name}{c.organization ? ` · ${c.organization}` : ''}</div>
+                <div style={{ fontSize: 11, color: POA.amber, flexShrink: 0 }}>{c.causes?.name}</div>
+              </div>
+            ))}
+            {overdueContacts.length > 3 && (
+              <div style={{ fontSize: 11, color: POA.textMuted, marginTop: 4 }}>+{overdueContacts.length - 3} more needing follow-up</div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -3099,6 +3130,19 @@ function CauseDetail({ cause, me, onBack, onRefresh }) {
                   <div style={{ fontWeight: 700, fontSize: 15, color: POA.textPrimary }}>{c.name}</div>
                   {c.organization && <div style={{ fontSize: 12.5, color: POA.textMuted }}>{c.organization}</div>}
                   <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: POA.accentSoft, color: POA.accent, display: 'inline-block', marginTop: 4 }}>{c.role}</span>
+                  {(() => {
+                    if (!c.last_contact_date) return (
+                      <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: 'rgba(240,180,74,.12)', color: POA.amber, marginLeft: 6 }}>Never contacted</span>
+                    );
+                    const days = Math.floor((new Date() - new Date(c.last_contact_date)) / (1000 * 60 * 60 * 24));
+                    if (days > 60) return (
+                      <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: 'rgba(240,180,74,.12)', color: POA.amber, marginLeft: 6 }}>{days}d since contact</span>
+                    );
+                    if (days > 30) return (
+                      <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: 'rgba(219,165,37,.08)', color: POA.accent, marginLeft: 6 }}>Follow up soon</span>
+                    );
+                    return null;
+                  })()}
                 </div>
                 {manage && (
                   <button style={{ ...PS.btn, fontSize: 11, padding: '4px 8px' }} onClick={() => { setEditingContact(c); setCf({ name: c.name, organization: c.organization || '', role: c.role, phone: c.phone || '', email: c.email || '', amount_committed: c.amount_committed || '', amount_received: c.amount_received || '', last_contact_date: c.last_contact_date || '', relationship_notes: c.relationship_notes || '' }); setAddingContact(false); }}>
@@ -3406,6 +3450,13 @@ function CausesBoard({ me }) {
         const raised = (c.cause_entries || []).filter(e => e.kind === 'contribution' && e.amount).reduce((s, e) => s + Number(e.amount), 0);
         const goalPct = c.goal_amount ? Math.min(100, Math.round((raised / c.goal_amount) * 100)) : null;
         const lastEntry = (c.cause_entries || []).sort((a, b) => b.occurred_on > a.occurred_on ? 1 : -1)[0];
+        const allContacts = c.cause_contacts || [];
+        const overdueContacts = allContacts.filter(contact => {
+          if (!contact.active) return false;
+          if (!contact.last_contact_date) return true; // never contacted
+          const daysSince = Math.floor((new Date() - new Date(contact.last_contact_date)) / (1000 * 60 * 60 * 24));
+          return daysSince > 60;
+        });
         return (
           <div key={c.id} style={{ background: 'linear-gradient(160deg, #101828 0%, #0A1020 100%)', border: `0.5px solid ${POA.hairline2}`, borderLeft: `3px solid ${c.status === 'active' ? POA.accent : POA.amber}`, borderRadius: '0 13px 13px 0', padding: '16px 18px', marginBottom: 10, cursor: 'pointer', boxShadow: '0 2px 12px rgba(0,0,0,.4)' }}
             onClick={() => setSelectedCause(c)}>
@@ -3428,7 +3479,7 @@ function CausesBoard({ me }) {
             </div>
 
             {/* Stats row */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: goalPct !== null ? 10 : 0 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: goalPct !== null ? 10 : 0 }}>
               <div style={{ background: 'rgba(0,0,0,.2)', borderRadius: 8, padding: '8px 10px' }}>
                 <div style={{ fontWeight: 700, fontSize: 18, color: POA.green }}>{money(raised)}</div>
                 <div style={{ fontSize: 10, color: POA.textMuted, textTransform: 'uppercase', letterSpacing: '.06em' }}>Raised</div>
@@ -3438,8 +3489,12 @@ function CausesBoard({ me }) {
                 <div style={{ fontSize: 10, color: POA.textMuted, textTransform: 'uppercase', letterSpacing: '.06em' }}>Goal</div>
               </div>
               <div style={{ background: 'rgba(0,0,0,.2)', borderRadius: 8, padding: '8px 10px' }}>
-                <div style={{ fontWeight: 700, fontSize: 18, color: POA.textPrimary }}>{(c.cause_entries || []).length}</div>
-                <div style={{ fontSize: 10, color: POA.textMuted, textTransform: 'uppercase', letterSpacing: '.06em' }}>Activities</div>
+                <div style={{ fontWeight: 700, fontSize: 18, color: POA.textPrimary }}>{allContacts.filter(x => x.active).length}</div>
+                <div style={{ fontSize: 10, color: POA.textMuted, textTransform: 'uppercase', letterSpacing: '.06em' }}>Contacts</div>
+              </div>
+              <div style={{ background: overdueContacts.length > 0 ? 'rgba(240,180,74,.1)' : 'rgba(0,0,0,.2)', border: overdueContacts.length > 0 ? '0.5px solid rgba(240,180,74,.3)' : 'none', borderRadius: 8, padding: '8px 10px' }}>
+                <div style={{ fontWeight: 700, fontSize: 18, color: overdueContacts.length > 0 ? POA.amber : POA.textMuted }}>{overdueContacts.length}</div>
+                <div style={{ fontSize: 10, color: overdueContacts.length > 0 ? POA.amber : POA.textMuted, textTransform: 'uppercase', letterSpacing: '.06em' }}>Follow-up due</div>
               </div>
             </div>
 
