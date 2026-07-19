@@ -10673,10 +10673,6 @@ function OrgSettings({ me, org }) {
                 style={{ ...PS.btnPrimary, textDecoration: "none", justifyContent: "center" }}>
                 <Mail size={14} /> Email support
               </a>
-              <a href="https://bullroseproductions.com" target="_blank" rel="noreferrer"
-                style={{ ...PS.btn, textDecoration: "none", justifyContent: "center" }}>
-                BullRoseProductions.com ↗
-              </a>
             </div>
           </Card>
 
