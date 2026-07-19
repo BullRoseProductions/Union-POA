@@ -373,7 +373,7 @@ function MemberDash({ me, org, setView }) {
       const unseen = ann.filter(a => a.created_at > lastSeen).length;
       setNewCount(unseen);
     }).catch(() => null);
-    listVideos().then(v => setVideos(v.slice(0, 2))).catch(() => null);
+    listVideos().then(v => setVideos(v.slice(0, 3))).catch(() => null);
     myActionItems(me.id).then(items => setOpenActions(items.filter(i => i.status === "open").length));
     // attendance this quarter
     const qStart = new Date(today.getFullYear(), Math.floor(today.getMonth() / 3) * 3, 1);
@@ -643,23 +643,35 @@ function MemberDash({ me, org, setView }) {
         </Card>
       </div>
 
-      {/* Videos */}
+      {/* Video strip */}
       {videos.length > 0 && (
-        <Card style={{ marginBottom: 14 }}>
-          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: POA.accent, marginBottom: 10 }}>From your association</div>
-          {videos.map(v => (
-            <div key={v.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: `0.5px solid ${POA.hairline}` }}>
-              <div style={{ width: 44, height: 32, borderRadius: 6, background: POA.accentSoft, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                <Play size={16} color={POA.accent} />
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+            <p style={{ ...PS.kicker, margin: 0 }}>From your association</p>
+            <button style={{ ...PS.btn, fontSize: 11 }} onClick={() => setView('m_videos')}>
+              View all →
+            </button>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 10 }}>
+            {videos.slice(0, 3).map(v => (
+              <div key={v.id} style={{ background: 'linear-gradient(160deg, #101828 0%, #0A1020 100%)', border: `0.5px solid ${POA.hairline2}`, borderRadius: 12, overflow: 'hidden', cursor: 'pointer' }}
+                onClick={() => window.open(v.vimeo_url, '_blank')}>
+                <div style={{ background: 'rgba(0,0,0,.4)', aspectRatio: '16/9', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+                  {v.thumbnail_url ? (
+                    <img src={v.thumbnail_url} alt={v.title} style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', inset: 0 }} />
+                  ) : null}
+                  <div style={{ position: 'relative', width: 36, height: 36, borderRadius: '50%', background: 'rgba(219,165,37,.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 12px rgba(0,0,0,.5)' }}>
+                    <Play size={16} color='#06090A' fill='#06090A' style={{ marginLeft: 2 }} />
+                  </div>
+                </div>
+                <div style={{ padding: '10px 12px' }}>
+                  <div style={{ fontWeight: 600, fontSize: 13, color: POA.textPrimary, marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.title}</div>
+                  {v.series_name && <div style={{ fontSize: 11, color: POA.textMuted }}>{v.series_name}</div>}
+                </div>
               </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: POA.textPrimary }}>{v.title}</div>
-                {v.series_name && <div style={{ fontSize: 11, color: POA.textMuted }}>{v.series_name}</div>}
-              </div>
-              <button style={{ ...PS.btn, fontSize: 12, flexShrink: 0 }} onClick={() => window.open(v.vimeo_url, "_blank")}>Watch ↗</button>
-            </div>
-          ))}
-        </Card>
+            ))}
+          </div>
+        </div>
       )}
 
       {/* Quick actions */}
@@ -10190,7 +10202,7 @@ function MemberDocuments({ me }) {
 
 const ALL_VIEWS = [
   // member views
-  'm_dash','m_call','m_ask','m_partners','m_community',
+  'm_dash','m_videos','m_call','m_ask','m_partners','m_community',
   'm_benefits','m_events','m_card','m_vote','m_store','m_booking','m_correspondence','m_documents',
   // board views
   'b_dash','b_profile','b_attendance','b_meetings','b_stipend','b_causes',
@@ -11489,10 +11501,121 @@ function MyProfile({ me }) {
   );
 }
 
+function MemberVideos({ me, setView }) {
+  const [videos, setVideos]   = useState(null);
+  const [search, setSearch]   = useState('');
+  const [playing, setPlaying] = useState(null);
+
+  useEffect(() => { listVideos().then(setVideos).catch(() => setVideos([])); }, []);
+
+  const filtered = (videos || []).filter(v =>
+    !search || v.title.toLowerCase().includes(search.toLowerCase()) ||
+    (v.series_name || '').toLowerCase().includes(search.toLowerCase())
+  );
+
+  const grouped = {};
+  filtered.forEach(v => {
+    const key = v.series_name || 'General';
+    (grouped[key] = grouped[key] || []).push(v);
+  });
+
+  function vimeoEmbed(url) {
+    if (!url) return null;
+    const match = url.match(/vimeo\.com\/(\d+)/);
+    return match ? `https://player.vimeo.com/video/${match[1]}?autoplay=1` : null;
+  }
+
+  return (
+    <div>
+      <button onClick={() => setView('m_dash')} style={{ ...PS.btn, marginBottom: 16 }}>
+        <ArrowLeft size={13} /> Dashboard
+      </button>
+      <p style={{ ...PS.kicker, marginBottom: 4 }}>Video Hub</p>
+      <h1 style={{ fontFamily: 'inherit', fontSize: 24, fontWeight: 700, color: POA.textPrimary, margin: '0 0 4px' }}>
+        From your association
+      </h1>
+      <div style={{ fontSize: 13, color: POA.textMuted, marginBottom: 16 }}>
+        Training videos, updates, and resources from your board.
+      </div>
+
+      {!videos ? <Spinner /> : (
+        <>
+          {videos.length > 0 && (
+            <input value={search} onChange={e => setSearch(e.target.value)}
+              placeholder='Search videos…' style={{ ...PS.input, marginBottom: 16 }} />
+          )}
+
+          {filtered.length === 0 ? (
+            <Card>
+              <div style={{ color: POA.textMuted, fontSize: 13.5, textAlign: 'center', padding: '16px 0' }}>
+                {search ? `No videos match '${search}'` : 'No videos yet. Check back soon.'}
+              </div>
+            </Card>
+          ) : Object.entries(grouped).map(([series, seriesVideos]) => (
+            <div key={series} style={{ marginBottom: 20 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.14em', textTransform: 'uppercase', color: POA.textMuted, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ height: 1, width: 16, background: POA.accent, opacity: .4 }} />
+                {series}
+                <div style={{ height: 1, flex: 1, background: POA.hairline }} />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 }}>
+                {seriesVideos.map(v => (
+                  <div key={v.id} style={{ background: 'linear-gradient(160deg, #101828 0%, #0A1020 100%)', border: `0.5px solid ${POA.hairline2}`, borderRadius: 12, overflow: 'hidden' }}>
+                    <div style={{ background: 'rgba(0,0,0,.4)', aspectRatio: '16/9', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', position: 'relative' }}
+                      onClick={() => setPlaying(playing === v.id ? null : v.id)}>
+                      {playing === v.id && vimeoEmbed(v.vimeo_url) ? (
+                        <iframe src={vimeoEmbed(v.vimeo_url)} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 'none' }} allow='autoplay; fullscreen' title={v.title} />
+                      ) : (
+                        <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'rgba(219,165,37,.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 16px rgba(0,0,0,.5)' }}>
+                          <Play size={20} color='#06090A' fill='#06090A' style={{ marginLeft: 3 }} />
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ padding: '12px 14px' }}>
+                      <div style={{ fontWeight: 600, fontSize: 13.5, color: POA.textPrimary, marginBottom: 2 }}>{v.title}</div>
+                      {v.description && <div style={{ fontSize: 12, color: POA.textMuted, lineHeight: 1.5, marginBottom: 8 }}>{v.description}</div>}
+                      <button style={{ ...PS.btn, fontSize: 11, width: '100%', justifyContent: 'center' }}
+                        onClick={() => window.open(v.vimeo_url, '_blank')}>
+                        <Play size={11} /> Watch on Vimeo ↗
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </>
+      )}
+
+      {/* Video player modal */}
+      {playing && (() => {
+        const v = (videos || []).find(x => x.id === playing);
+        const embedUrl = v ? vimeoEmbed(v.vimeo_url) : null;
+        if (!embedUrl) return null;
+        return (
+          <div onClick={() => setPlaying(null)}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.9)', zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+            <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 800 }}>
+              <div style={{ aspectRatio: '16/9', borderRadius: 12, overflow: 'hidden' }}>
+                <iframe src={embedUrl} style={{ width: '100%', height: '100%', border: 'none' }} allow='autoplay; fullscreen' title={v?.title} />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
+                <div style={{ fontWeight: 600, fontSize: 15, color: POA.textPrimary }}>{v?.title}</div>
+                <button style={PS.btn} onClick={() => setPlaying(null)}><X size={14} /> Close</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+    </div>
+  );
+}
+
 function renderScreen(view, { me, org, setView }) {
   if (view.startsWith("m_")) {
     switch (view) {
       case "m_dash":     return <MemberDash me={me} org={org} setView={setView} />;
+      case "m_videos":   return <MemberVideos me={me} setView={setView} />;
       case "m_call":     return <WhoToCall me={me} />;
       case "m_ask":      return <AskB4C me={me} org={org} />;
       case "m_card":     return <MyCard me={me} org={org} />;
