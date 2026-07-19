@@ -9071,6 +9071,7 @@ function Fundraising({ me, org }) {
   const [assigningEvent, setAssigningEvent] = useState(null);
   const [assignCauseId, setAssignCauseId]   = useState('');
   const [assignBusy, setAssignBusy]         = useState(false);
+  const [assignErr, setAssignErr]           = useState('');
 
   const totalRaised = log.reduce((s, e) => s + (Number(e.amount) || 0), 0);
 
@@ -9091,7 +9092,7 @@ function Fundraising({ me, org }) {
 
   async function doAssignToCause() {
     if (!assignCauseId || !assigningEvent) return;
-    setAssignBusy(true);
+    setAssignBusy(true); setAssignErr('');
     try {
       // Create a cause_event linked to this funding_event
       await supabase.from('cause_events').insert({
@@ -9099,7 +9100,7 @@ function Fundraising({ me, org }) {
         department_id: me.department_id,
         title: assigningEvent.title,
         event_date: assigningEvent.date,
-        notes: assigningEvent.notes || '',
+        notes: assigningEvent.description || '',
         status: assigningEvent.date >= new Date().toISOString().split('T')[0] ? 'upcoming' : 'completed',
         funding_event_id: assigningEvent.id,
       });
@@ -9107,7 +9108,7 @@ function Fundraising({ me, org }) {
       await supabase.from('funding_events').update({ cause_id: assignCauseId }).eq('id', assigningEvent.id);
       setAssigningEvent(null); setAssignCauseId('');
       setCalReloadKey(k => k + 1);
-    } catch(e) { console.error(e); }
+    } catch(e) { setAssignErr(e.message); }
     finally { setAssignBusy(false); }
   }
 
@@ -9724,7 +9725,7 @@ function Fundraising({ me, org }) {
       )}
 
       {assigningEvent && (
-        <div onClick={() => setAssigningEvent(null)}
+        <div onClick={() => { setAssigningEvent(null); setAssignErr(''); }}
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.7)', zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
           <div onClick={e => e.stopPropagation()}
             style={{ background: 'linear-gradient(135deg, #0E1630, #0A1020)', border: `0.5px solid ${POA.hairline2}`, borderRadius: 16, maxWidth: 420, width: '100%', padding: '20px 22px', boxShadow: '0 20px 60px rgba(0,0,0,.6)' }}>
@@ -9735,11 +9736,12 @@ function Fundraising({ me, org }) {
               <option value=''>— Select a cause —</option>
               {causes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
+            {assignErr && <ErrBox msg={assignErr} />}
             <div style={{ display: 'flex', gap: 8 }}>
               <button style={{ ...PS.btnPrimary }} disabled={assignBusy || !assignCauseId} onClick={doAssignToCause}>
                 {assignBusy ? 'Assigning…' : 'Assign to cause'}
               </button>
-              <button style={PS.btn} onClick={() => setAssigningEvent(null)}>Cancel</button>
+              <button style={PS.btn} onClick={() => { setAssigningEvent(null); setAssignErr(''); }}>Cancel</button>
             </div>
           </div>
         </div>
