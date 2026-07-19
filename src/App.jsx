@@ -5120,7 +5120,7 @@ function VoteLink({ me, org, setView }) {
             Official votes and ballots from your board.
           </div>
         </div>
-        {manage && (
+        {canAdmin(me?.access) && (
           <button style={PS.btn} onClick={() => setEditing(v => !v)}>
             <Settings size={13} /> {editing ? "Cancel" : "Set vote link"}
           </button>
@@ -5130,7 +5130,7 @@ function VoteLink({ me, org, setView }) {
       <ErrBox msg={err} />
 
       {/* Board edit form */}
-      {editing && manage && (
+      {editing && canAdmin(me?.access) && (
         <Card style={{ marginBottom: 20 }}>
           <SectionTitle>Configure vote</SectionTitle>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
@@ -9864,7 +9864,6 @@ function BoardDocuments({ me }) {
   const [err, setErr]         = useState("");
   const [busy, setBusy]       = useState(false);
   const [viewing, setViewing] = useState(null);
-  const isAdmin               = canAdmin(me.access);
   const [f, setF] = useState({
     name: "", category: "General", visibility: "board_only",
     notes: "", file: null,
@@ -9935,7 +9934,7 @@ function BoardDocuments({ me }) {
     <div>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 18 }}>
         <PageTitle sub="Association documents — CBA, bylaws, policies, and member resources" />
-        {isAdmin && (
+        {canManage(me.access) && (
           <button style={PS.btn} onClick={() => { setAdding(!adding); setEditing(null); }}>
             <Plus size={13} /> Upload
           </button>
@@ -9944,7 +9943,7 @@ function BoardDocuments({ me }) {
       <ErrBox msg={err} />
 
       {/* Upload / Edit form */}
-      {(adding || editing) && isAdmin && (
+      {(adding || editing) && canManage(me.access) && (
         <Card style={{ marginBottom: 18 }}>
           <SectionTitle>{editing ? "Edit document" : "Upload document"}</SectionTitle>
           {!editing && (
@@ -9990,7 +9989,7 @@ function BoardDocuments({ me }) {
               {busy ? "Saving…" : editing ? "Save changes" : "Upload document"}
             </button>
             <button style={PS.btn} onClick={resetForm}>Cancel</button>
-            {editing && (
+            {editing && canAdmin(me.access) && (
               <button style={{ ...PS.btn, color: POA.red, marginLeft: "auto" }}
                 onClick={() => { doArchive(editing.id); resetForm(); }}>
                 Archive
@@ -10008,7 +10007,7 @@ function BoardDocuments({ me }) {
       {!docs ? <Spinner /> : docs.length === 0 && !adding ? (
         <Card>
           <div style={{ color: POA.textMuted, fontSize: 13.5 }}>
-            No documents uploaded yet. {isAdmin ? "Upload your CBA, bylaws, and member handbook to power Ask B4C." : "Check back when your admin has uploaded documents."}
+            No documents uploaded yet. {canManage(me.access) ? "Upload your CBA, bylaws, and member handbook to power Ask B4C." : "Check back when your board has uploaded documents."}
           </div>
         </Card>
       ) : (
@@ -10040,7 +10039,7 @@ function BoardDocuments({ me }) {
                         Open
                       </button>
                     )}
-                    {isAdmin && (
+                    {canManage(me.access) && (
                       <button style={{ ...PS.btn, fontSize: 12 }}
                         onClick={() => {
                           setEditing(doc);
