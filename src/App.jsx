@@ -8,7 +8,7 @@ import {
   BookOpen, Mail, Users, BarChart3, LogOut, Menu, X, ChevronRight, ChevronDown, ChevronUp,
   Sparkles, CheckCircle2, Clock, Loader2, Send, Building2,
   Plus, Pencil, Trash2, ArrowLeft, RefreshCw, FileText, QrCode, Settings, Upload,
-  KeyRound, Play, UserCircle, CalendarPlus,
+  KeyRound, Play, UserCircle, CalendarPlus, Filter, Download,
 } from "lucide-react";
 import { supabase } from "./lib/supabase";
 import { QRCodeCanvas } from "qrcode.react";
@@ -2013,12 +2013,12 @@ function BoardDash({ me, org, setView }) {
       </div>
 
       {/* Needs attention */}
-      <div style={{ background: overdueActions.length > 0 ? "rgba(239,106,100,.06)" : "rgba(70,199,147,.05)", border: `0.5px solid ${overdueActions.length > 0 ? "rgba(239,106,100,.2)" : "rgba(70,199,147,.15)"}`, borderLeft: `2.5px solid ${overdueActions.length > 0 ? POA.red : POA.green}`, borderRadius: "0 13px 13px 0", padding: "12px 16px" }}>
-        <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: ".14em", textTransform: "uppercase", color: overdueActions.length > 0 ? POA.red : POA.green, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
-          {overdueActions.length > 0 ? <AlertTriangle size={13} /> : <CheckCircle2 size={13} />}
-          Needs your attention ({overdueActions.length})
+      <div style={{ background: (overdueActions.length > 0 || overdueContacts.length > 0) ? "rgba(239,106,100,.06)" : "rgba(70,199,147,.05)", border: `0.5px solid ${(overdueActions.length > 0 || overdueContacts.length > 0) ? "rgba(239,106,100,.2)" : "rgba(70,199,147,.15)"}`, borderLeft: `2.5px solid ${(overdueActions.length > 0 || overdueContacts.length > 0) ? POA.red : POA.green}`, borderRadius: "0 13px 13px 0", padding: "12px 16px" }}>
+        <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: ".14em", textTransform: "uppercase", color: (overdueActions.length > 0 || overdueContacts.length > 0) ? POA.red : POA.green, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
+          {(overdueActions.length > 0 || overdueContacts.length > 0) ? <AlertTriangle size={13} /> : <CheckCircle2 size={13} />}
+          Needs your attention ({overdueActions.length + overdueContacts.length})
         </div>
-        {overdueActions.length === 0 ? (
+        {(overdueActions.length === 0 && overdueContacts.length === 0) ? (
           <div style={{ fontSize: 13, color: POA.textMuted }}>All caught up — no overdue action items.</div>
         ) : overdueActions.map(a => (
           <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0", borderBottom: `0.5px solid ${POA.hairline}` }}>
@@ -3525,6 +3525,12 @@ function CausesBoard({ me }) {
 function MembersBoard({ me }) {
   const [members, setMembers] = useState(null);
   const [q, setQ]             = useState("");
+  const [filterRank, setFilterRank]       = useState('');
+  const [filterDistrict, setFilterDistrict] = useState('');
+  const [filterStanding, setFilterStanding] = useState('');
+  const [filterStatus, setFilterStatus]   = useState('active');
+  const [showFilters, setShowFilters]     = useState(false);
+  const [copied, setCopied]               = useState(false);
   const [onCallData, setOnCallData]   = useState([]);
   const [showOnCall, setShowOnCall]   = useState(false);
   const [ocForm, setOcForm]           = useState([
@@ -3824,7 +3830,39 @@ function MembersBoard({ me }) {
     );
   }
 
-  const filtered = members.filter(m => !q || m.full_name?.toLowerCase().includes(q.toLowerCase()) || m.email?.toLowerCase().includes(q.toLowerCase()));
+  const filtered = members.filter(m => {
+    if (q && !m.full_name?.toLowerCase().includes(q.toLowerCase()) && !m.email?.toLowerCase().includes(q.toLowerCase())) return false;
+    if (filterRank && m.rank !== filterRank) return false;
+    if (filterDistrict && m.district !== filterDistrict) return false;
+    if (filterStanding && m.standing !== filterStanding) return false;
+    if (filterStatus && m.status !== filterStatus) return false;
+    return true;
+  });
+  const ranks = [...new Set(members.filter(m => m.rank).map(m => m.rank))].sort();
+  const districts = [...new Set(members.filter(m => m.district).map(m => m.district))].sort();
+  const standings = [...new Set(members.filter(m => m.standing).map(m => m.standing))].sort();
+
+  function copyEmails() {
+    const emails = filtered.filter(m => m.email).map(m => m.email).join(', ');
+    navigator.clipboard.writeText(emails).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 3000);
+    });
+  }
+
+  function exportCSV() {
+    const rows = [
+      ['Name', 'Email', 'Badge', 'Rank', 'District', 'Phone', 'Standing', 'Status'],
+      ...filtered.map(m => [m.full_name || '', m.email || '', m.badge || '', m.rank || '', m.district || '', m.phone || '', m.standing || '', m.status || ''])
+    ];
+    const csv = rows.map(r => r.map(v => `"${v}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'members.csv'; a.click();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <div>
       <PageTitle sub={isDeptAdmin(me.access) ? "Full roster — you can add and edit members" : "Your association's full roster"}>Members</PageTitle>
@@ -3965,6 +4003,63 @@ function MembersBoard({ me }) {
           </div>
         )}
       </Card>
+
+      {/* Filter bar */}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10, flexWrap: 'wrap' }}>
+        <button style={{ ...PS.btn, fontSize: 12 }} onClick={() => setShowFilters(v => !v)}>
+          <Filter size={13} /> Filters {(filterRank || filterDistrict || filterStanding || filterStatus !== 'active') ? '●' : ''}
+        </button>
+        <div style={{ fontSize: 12, color: POA.textMuted, flex: 1 }}>
+          {filtered.length} member{filtered.length !== 1 ? 's' : ''} match
+        </div>
+        <button style={{ ...PS.btn, fontSize: 12 }} onClick={copyEmails} disabled={filtered.length === 0}>
+          {copied ? '✓ Copied!' : <><Mail size={12} /> Copy emails</>}
+        </button>
+        <button style={{ ...PS.btn, fontSize: 12 }} onClick={exportCSV} disabled={filtered.length === 0}>
+          <Download size={12} /> Export CSV
+        </button>
+      </div>
+
+      {showFilters && (
+        <div style={{ background: 'rgba(255,255,255,.03)', border: `0.5px solid ${POA.hairline}`, borderRadius: 10, padding: '14px 16px', marginBottom: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 10 }}>
+            <div>
+              <div style={{ fontSize: 11, color: POA.textMuted, marginBottom: 4 }}>Rank</div>
+              <select value={filterRank} onChange={e => setFilterRank(e.target.value)} style={PS.input}>
+                <option value=''>All ranks</option>
+                {ranks.map(r => <option key={r} value={r}>{r}</option>)}
+              </select>
+            </div>
+            <div>
+              <div style={{ fontSize: 11, color: POA.textMuted, marginBottom: 4 }}>District</div>
+              <select value={filterDistrict} onChange={e => setFilterDistrict(e.target.value)} style={PS.input}>
+                <option value=''>All districts</option>
+                {districts.map(d => <option key={d} value={d}>{d}</option>)}
+              </select>
+            </div>
+            <div>
+              <div style={{ fontSize: 11, color: POA.textMuted, marginBottom: 4 }}>Standing</div>
+              <select value={filterStanding} onChange={e => setFilterStanding(e.target.value)} style={PS.input}>
+                <option value=''>All standings</option>
+                {standings.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+            <div>
+              <div style={{ fontSize: 11, color: POA.textMuted, marginBottom: 4 }}>Status</div>
+              <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={PS.input}>
+                <option value=''>All statuses</option>
+                <option value='active'>Active</option>
+                <option value='inactive'>Inactive</option>
+                <option value='retired'>Retired</option>
+              </select>
+            </div>
+          </div>
+          <button style={{ ...PS.btn, fontSize: 11, marginTop: 10 }}
+            onClick={() => { setFilterRank(''); setFilterDistrict(''); setFilterStanding(''); setFilterStatus('active'); }}>
+            Reset filters
+          </button>
+        </div>
+      )}
 
       <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search name or email…" style={{ ...PS.input, marginBottom: 14 }} />
       {filtered.map(m => (
