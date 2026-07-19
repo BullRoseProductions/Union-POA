@@ -2927,7 +2927,7 @@ function CauseDetail({ cause, me, onBack, onRefresh }) {
                     onClick={async () => {
                       if (!confirm('Archive this cause? It will be hidden from the active list but data is preserved.')) return;
                       await supabase.from('causes').update({ status: 'archived' }).eq('id', cause.id);
-                      onBack(); onRefresh();
+                      onBack();
                     }}>
                     Archive cause
                   </button>
@@ -2937,7 +2937,7 @@ function CauseDetail({ cause, me, onBack, onRefresh }) {
                     onClick={async () => {
                       if (!confirm('Permanently delete this cause and all its data? This cannot be undone.')) return;
                       await supabase.from('causes').delete().eq('id', cause.id);
-                      onBack(); onRefresh();
+                      onBack();
                     }}>
                     Delete cause
                   </button>
@@ -3282,7 +3282,7 @@ function CausesBoard({ me }) {
     return <CauseDetail
       cause={selectedCause}
       me={me}
-      onBack={() => setSelectedCause(null)}
+      onBack={() => { setSelectedCause(null); load(); }}
       onRefresh={async () => {
         await load();
         const updated = rows?.find(r => r.id === selectedCause.id);
