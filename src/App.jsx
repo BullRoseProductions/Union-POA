@@ -373,7 +373,15 @@ function MemberDash({ me, org, setView }) {
       const unseen = ann.filter(a => a.created_at > lastSeen).length;
       setNewCount(unseen);
     }).catch(() => null);
-    listVideos().then(v => setVideos(v.slice(0, 3))).catch(() => null);
+    listVideos().then(async vids => {
+      const top3 = vids.slice(0, 3);
+      setVideos(top3);
+      const withThumbs = await Promise.all(top3.map(async v => {
+        const thumb = await getVimeoThumb(v.vimeo_url);
+        return { ...v, thumbnail_url: thumb };
+      }));
+      setVideos(withThumbs);
+    }).catch(() => setVideos([]));
     myActionItems(me.id).then(items => setOpenActions(items.filter(i => i.status === "open").length));
     // attendance this quarter
     const qStart = new Date(today.getFullYear(), Math.floor(today.getMonth() / 3) * 3, 1);
@@ -11501,12 +11509,31 @@ function MyProfile({ me }) {
   );
 }
 
+async function getVimeoThumb(url) {
+  try {
+    const res = await fetch(`https://vimeo.com/api/oembed.json?url=${encodeURIComponent(url)}&width=400`);
+    const data = await res.json();
+    return data.thumbnail_url || null;
+  } catch { return null; }
+}
+
 function MemberVideos({ me, setView }) {
   const [videos, setVideos]   = useState(null);
   const [search, setSearch]   = useState('');
   const [playing, setPlaying] = useState(null);
 
-  useEffect(() => { listVideos().then(setVideos).catch(() => setVideos([])); }, []);
+  useEffect(() => {
+    listVideos().then(async vids => {
+      setVideos(vids);
+      // Fetch thumbnails in background
+      const withThumbs = await Promise.all(vids.map(async v => {
+        if (v.thumbnail_url) return v;
+        const thumb = await getVimeoThumb(v.vimeo_url);
+        return { ...v, thumbnail_url: thumb };
+      }));
+      setVideos(withThumbs);
+    }).catch(() => setVideos([]));
+  }, []);
 
   const filtered = (videos || []).filter(v =>
     !search || v.title.toLowerCase().includes(search.toLowerCase()) ||
@@ -11566,9 +11593,12 @@ function MemberVideos({ me, setView }) {
                       {playing === v.id && vimeoEmbed(v.vimeo_url) ? (
                         <iframe src={vimeoEmbed(v.vimeo_url)} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 'none' }} allow='autoplay; fullscreen' title={v.title} />
                       ) : (
-                        <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'rgba(219,165,37,.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 16px rgba(0,0,0,.5)' }}>
-                          <Play size={20} color='#06090A' fill='#06090A' style={{ marginLeft: 3 }} />
-                        </div>
+                        <>
+                          {v.thumbnail_url && <img src={v.thumbnail_url} alt={v.title} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
+                          <div style={{ position: 'relative', width: 44, height: 44, borderRadius: '50%', background: 'rgba(219,165,37,.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 16px rgba(0,0,0,.5)' }}>
+                            <Play size={20} color='#06090A' fill='#06090A' style={{ marginLeft: 3 }} />
+                          </div>
+                        </>
                       )}
                     </div>
                     <div style={{ padding: '12px 14px' }}>
