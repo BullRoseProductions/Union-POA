@@ -10666,10 +10666,10 @@ function OrgSettings({ me, org }) {
           <Card style={{ marginBottom: 14 }}>
             <SectionTitle>Get support</SectionTitle>
             <div style={{ fontSize: 13.5, color: POA.textSecondary, lineHeight: 1.7, marginBottom: 14 }}>
-              B4C is built and maintained by BullRose Productions. If something isn't working or you need help, reach out directly.
+              B4C is built and maintained by Big Bull Technology. If something isn't working or you need help, reach out directly.
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              <a href="mailto:ashlea@bullroseproductions.com"
+              <a href="mailto:support@b4thecall.com"
                 style={{ ...PS.btnPrimary, textDecoration: "none", justifyContent: "center" }}>
                 <Mail size={14} /> Email support
               </a>
@@ -10690,13 +10690,13 @@ function OrgSettings({ me, org }) {
           <Card style={{ marginBottom: 14 }}>
             <SectionTitle>Terms of use</SectionTitle>
             <div style={{ fontSize: 13.5, color: POA.textSecondary, lineHeight: 1.7 }}>
-              B4C is provided for use by authorized first responder associations and their members. By using this platform, you agree to use it only for lawful association business. Misuse, unauthorized access, or sharing of credentials is prohibited. BullRose Productions reserves the right to suspend access for violations of these terms.
+              B4C is provided for use by authorized first responder associations and their members. By using this platform, you agree to use it only for lawful association business. Misuse, unauthorized access, or sharing of credentials is prohibited. Big Bull Technology reserves the right to suspend access for violations of these terms.
             </div>
           </Card>
 
           <div style={{ fontSize: 11.5, color: POA.textMuted, textAlign: "center", lineHeight: 1.6 }}>
-            B4C · Before the Call · Built by BullRose Productions<br />
-            © {new Date().getFullYear()} BullRose Productions. All rights reserved.
+            B4C · Before the Call · Built by Big Bull Technology<br />
+            © {new Date().getFullYear()} Big Bull Technology. All rights reserved.
           </div>
         </div>
       )}
