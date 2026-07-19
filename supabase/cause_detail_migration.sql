@@ -43,3 +43,13 @@ alter table causes add column if not exists next_event_notes text;
 -- NOTE: RLS — add policies for cause_contacts and cause_events scoped to the
 -- member's department (mirror the existing cause_entries policies), or board
 -- users won't be able to read/insert rows even after the tables exist.
+
+-- Cause events <-> fundraising calendar sync.
+-- Link a cause_event to the funding_events row it created (for later updates).
+alter table cause_events add column if not exists funding_event_id uuid references funding_events(id);
+
+-- The sync writes these two funding_events columns; existing app usage only
+-- sets department_id/title/date/color/source_label, so add them if missing or the
+-- funding_events insert/update in saveEvent will be rejected.
+alter table funding_events add column if not exists description text;
+alter table funding_events add column if not exists link_url    text;

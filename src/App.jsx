@@ -2762,8 +2762,30 @@ function CauseDetail({ cause, me, onBack, onRefresh }) {
       };
       if (editingEvent) {
         await supabase.from('cause_events').update(row).eq('id', editingEvent.id);
+        // Update funding_events if linked
+        if (editingEvent.funding_event_id) {
+          await supabase.from('funding_events').update({
+            title: ef.title.trim(),
+            date: ef.event_date || null,
+            description: `${cause.name}: ${ef.notes.trim() || ''}`,
+          }).eq('id', editingEvent.funding_event_id);
+        }
       } else {
-        await supabase.from('cause_events').insert(row);
+        const { data: newEvent } = await supabase.from('cause_events').insert(row).select().single();
+        // Auto-add to fundraising calendar for upcoming events
+        if (ef.status === 'upcoming' && ef.event_date && newEvent) {
+          const { data: fe } = await supabase.from('funding_events').insert({
+            department_id: me.department_id,
+            title: ef.title.trim(),
+            date: ef.event_date,
+            description: `${cause.name}: ${ef.notes.trim() || ''}`,
+            link_url: cause.external_url || null,
+          }).select().single();
+          // Link them so we can update later
+          if (fe) {
+            await supabase.from('cause_events').update({ funding_event_id: fe.id }).eq('id', newEvent.id);
+          }
+        }
       }
       setEf(blankE); setAddingEvent(false); setEditingEvent(null);
       await load();
