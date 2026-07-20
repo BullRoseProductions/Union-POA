@@ -7955,37 +7955,29 @@ function PAAddOrg({ setView }) {
     }
     setBusy(true); setErr(''); setSuccess('');
     try {
-      // Create the department
-      const { data: dept, error: deptErr } = await supabase
-        .from('departments')
-        .insert({ name: f.name.trim(), org_type: f.org_type })
-        .select().single();
-      if (deptErr) throw deptErr;
+      const shortName = f.short_name.trim() ||
+        f.name.split(' ').map(w => w[0]).join('').toUpperCase();
 
-      // Seed org settings
-      await supabase.from('org_settings').insert([
-        { department_id: dept.id, key: 'org_name', value: f.name.trim() },
-        { department_id: dept.id, key: 'org_short_name', value: f.short_name.trim() || f.name.split(' ').map(w => w[0]).join('').toUpperCase() },
-      ]);
-
-      // Create the first admin member record
-      await supabase.from('members').insert({
-        department_id: dept.id,
-        email: f.admin_email.trim().toLowerCase(),
-        full_name: f.admin_name.trim() || 'Admin',
-        access: ['DeptAdmin', 'Board', 'Member'],
-        status: 'active',
-        standing: 'Good',
+      const { data: deptId, error: rpcErr } = await supabase.rpc('create_organization', {
+        org_name: f.name.trim(),
+        org_short_name: shortName,
+        org_type: f.org_type,
+        admin_email: f.admin_email.trim().toLowerCase(),
+        admin_name: f.admin_name.trim() || 'Admin',
       });
+      if (rpcErr) throw rpcErr;
 
-      // Send invite via the invite API
+      // Send invite email via serverless function
       await fetch('/api/invite-member', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: f.admin_email.trim(), full_name: f.admin_name.trim() || 'Admin' }),
+        body: JSON.stringify({
+          email: f.admin_email.trim(),
+          full_name: f.admin_name.trim() || 'Admin'
+        }),
       });
 
-      setSuccess(`✓ ${f.name} created successfully! Invite sent to ${f.admin_email}.`);
+      setSuccess(`✓ ${f.name} created! Invite sent to ${f.admin_email}.`);
       setF({ name: '', org_type: 'poa', admin_name: '', admin_email: '', short_name: '' });
     } catch(e) { setErr(e.message); }
     finally { setBusy(false); }
