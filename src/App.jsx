@@ -7936,8 +7936,128 @@ function PAOrgConfig() {
   );
 }
 
-function PAAddOrg() {
-  return <ComingSoon label="Add Organization — coming next" />;
+function PAAddOrg({ setView }) {
+  const [f, setF] = useState({
+    name: '',
+    org_type: 'poa',
+    admin_name: '',
+    admin_email: '',
+    short_name: '',
+  });
+  const [busy, setBusy]     = useState(false);
+  const [err, setErr]       = useState('');
+  const [success, setSuccess] = useState('');
+
+  async function doCreate() {
+    if (!f.name.trim() || !f.admin_email.trim()) {
+      setErr('Organization name and admin email are required.');
+      return;
+    }
+    setBusy(true); setErr(''); setSuccess('');
+    try {
+      // Create the department
+      const { data: dept, error: deptErr } = await supabase
+        .from('departments')
+        .insert({ name: f.name.trim(), org_type: f.org_type })
+        .select().single();
+      if (deptErr) throw deptErr;
+
+      // Seed org settings
+      await supabase.from('org_settings').insert([
+        { department_id: dept.id, key: 'org_name', value: f.name.trim() },
+        { department_id: dept.id, key: 'org_short_name', value: f.short_name.trim() || f.name.split(' ').map(w => w[0]).join('').toUpperCase() },
+      ]);
+
+      // Create the first admin member record
+      await supabase.from('members').insert({
+        department_id: dept.id,
+        email: f.admin_email.trim().toLowerCase(),
+        full_name: f.admin_name.trim() || 'Admin',
+        access: ['DeptAdmin', 'Board', 'Member'],
+        status: 'active',
+        standing: 'Good',
+      });
+
+      // Send invite via the invite API
+      await fetch('/api/invite-member', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: f.admin_email.trim(), full_name: f.admin_name.trim() || 'Admin' }),
+      });
+
+      setSuccess(`✓ ${f.name} created successfully! Invite sent to ${f.admin_email}.`);
+      setF({ name: '', org_type: 'poa', admin_name: '', admin_email: '', short_name: '' });
+    } catch(e) { setErr(e.message); }
+    finally { setBusy(false); }
+  }
+
+  return (
+    <div>
+      <button onClick={() => setView('pa_dash')} style={{ ...PS.btn, marginBottom: 16 }}>
+        <ArrowLeft size={13} /> PA Dashboard
+      </button>
+      <p style={{ ...PS.kicker, marginBottom: 4 }}>Project Admin</p>
+      <h1 style={{ fontFamily: 'inherit', fontSize: 24, fontWeight: 700, color: POA.textPrimary, margin: '0 0 16px' }}>
+        Add Organization
+      </h1>
+
+      <ErrBox msg={err} />
+      {success && (
+        <div style={{ background: 'rgba(70,199,147,.1)', border: '0.5px solid rgba(70,199,147,.3)', borderRadius: 10, padding: '12px 16px', fontSize: 13, color: POA.greenText, marginBottom: 16 }}>
+          {success}
+        </div>
+      )}
+
+      <Card>
+        <SectionTitle>Organization details</SectionTitle>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Organization name</div>
+            <input value={f.name} onChange={e => setF(x => ({ ...x, name: e.target.value }))}
+              style={PS.input} placeholder='e.g. Fort Worth Police Officers Association' />
+          </div>
+          <div>
+            <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Short name / abbreviation</div>
+            <input value={f.short_name} onChange={e => setF(x => ({ ...x, short_name: e.target.value }))}
+              style={PS.input} placeholder='e.g. FWPOA' />
+          </div>
+          <div>
+            <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Organization type</div>
+            <select value={f.org_type} onChange={e => setF(x => ({ ...x, org_type: e.target.value }))} style={PS.input}>
+              <option value='poa'>Police Officers Association (POA)</option>
+              <option value='fire'>Fire / EMS Department</option>
+            </select>
+          </div>
+        </div>
+
+        <SectionTitle>First admin</SectionTitle>
+        <div style={{ fontSize: 12.5, color: POA.textMuted, marginBottom: 12, lineHeight: 1.6 }}>
+          This person will receive an invite email and become the Department Admin for this organization.
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
+          <div>
+            <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Admin full name</div>
+            <input value={f.admin_name} onChange={e => setF(x => ({ ...x, admin_name: e.target.value }))}
+              style={PS.input} placeholder='Full name' />
+          </div>
+          <div>
+            <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Admin email</div>
+            <input type='email' value={f.admin_email} onChange={e => setF(x => ({ ...x, admin_email: e.target.value }))}
+              style={PS.input} placeholder='admin@department.gov' />
+          </div>
+        </div>
+
+        <button style={{ ...PS.btnPrimary, opacity: busy ? 0.7 : 1 }}
+          disabled={busy || !f.name.trim() || !f.admin_email.trim()}
+          onClick={doCreate}>
+          {busy ? 'Creating…' : <><Plus size={13} /> Create organization & send invite</>}
+        </button>
+        <div style={{ fontSize: 11.5, color: POA.textMuted, marginTop: 8, fontStyle: 'italic' }}>
+          Creates the organization, seeds default settings, and sends a magic link invite to the admin.
+        </div>
+      </Card>
+    </div>
+  );
 }
 
 function BoardCorrespondence({ me, members }) {
@@ -12031,7 +12151,7 @@ function renderScreen(view, { me, org, setView, setViewAs }) {
     case "pa_dash":         return <PADash setView={setView} setViewAs={setViewAs} />;
     case "pa_orgs":         return <PADash />;
     case "pa_config":       return <PAOrgConfig />;
-    case "pa_add":          return <PAAddOrg />;
+    case "pa_add":          return <PAAddOrg setView={setView} />;
     default:                return <ComingSoon label={view} />;
   }
 }
