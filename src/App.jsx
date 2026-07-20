@@ -8,7 +8,7 @@ import {
   BookOpen, Mail, Users, BarChart3, LogOut, Menu, X, ChevronRight, ChevronDown, ChevronUp,
   Sparkles, CheckCircle2, Clock, Loader2, Send, Building2,
   Plus, Pencil, Trash2, ArrowLeft, RefreshCw, FileText, QrCode, Settings, Upload,
-  KeyRound, Play, UserCircle, CalendarPlus, Filter, Download,
+  KeyRound, Play, UserCircle, CalendarPlus, Filter, Download, ExternalLink,
 } from "lucide-react";
 import { supabase } from "./lib/supabase";
 import { QRCodeCanvas } from "qrcode.react";
@@ -10908,6 +10908,33 @@ function OrgSettings({ me, org }) {
                 <Mail size={14} /> Email support
               </a>
             </div>
+          </Card>
+
+          <Card style={{ marginBottom: 12 }}>
+            <SectionTitle>Legal & Trust Center</SectionTitle>
+            <div style={{ fontSize: 13, color: POA.textMuted, marginBottom: 14, lineHeight: 1.6 }}>
+              B4C's full legal documentation, privacy policy, security practices, and responsible AI policy are published at the B4C Trust Center.
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              {[
+                { label: 'Terms of Service', url: 'https://www.b4thecall.com/legal/terms' },
+                { label: 'Privacy Policy', url: 'https://www.b4thecall.com/legal/privacy' },
+                { label: 'Responsible AI Policy', url: 'https://www.b4thecall.com/legal/responsible-ai' },
+                { label: 'Security Overview', url: 'https://www.b4thecall.com/legal/security' },
+                { label: 'Data Ownership', url: 'https://www.b4thecall.com/legal/data-ownership' },
+                { label: 'Acceptable Use', url: 'https://www.b4thecall.com/legal/acceptable-use' },
+              ].map(({ label, url }) => (
+                <a key={label} href={url} target='_blank' rel='noreferrer'
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', background: 'rgba(255,255,255,.03)', border: `0.5px solid ${POA.hairline}`, borderRadius: 8, textDecoration: 'none', color: POA.textSecondary, fontSize: 13 }}>
+                  <ExternalLink size={13} color={POA.accent} />
+                  {label}
+                </a>
+              ))}
+            </div>
+            <a href='https://www.b4thecall.com/legal' target='_blank' rel='noreferrer'
+              style={{ ...PS.btn, display: 'inline-flex', textDecoration: 'none', marginTop: 12, fontSize: 12 }}>
+              View full Trust Center ↗
+            </a>
           </Card>
 
           <Card style={{ marginBottom: 14 }}>
