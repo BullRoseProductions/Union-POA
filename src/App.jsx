@@ -12329,7 +12329,7 @@ export default function App() {
       }}>
         {/* Brand */}
         <div style={{ padding: "22px 18px 16px", borderBottom: '0.5px solid rgba(219,165,37,.10)', background: 'linear-gradient(180deg, rgba(219,165,37,.05) 0%, transparent 100%)', position: 'relative' }}>
-          <img src='/B4C-Yellow.png' alt='B4C' style={{ height: 56, objectFit: 'contain' }} />
+          <img src='/B4C-Yellow.png' alt='B4C' style={{ height: 40, objectFit: 'contain', display: 'block' }} />
           <div style={{ fontSize: 8, letterSpacing: '.2em', textTransform: 'uppercase', color: POA.textMuted, fontWeight: 600 }}>Before the Call</div>
           <div style={{ fontSize: 13.5, fontWeight: 700, color: POA.textPrimary, marginTop: 8 }}>{org?.name || "POA"}</div>
           <div style={{ fontSize: 11, color: POA.textMuted }}>{orgSettings.org_short_name || ""}</div>
@@ -12489,7 +12489,7 @@ function Login() {
     <div style={{ minHeight: "100vh", background: POA.pageBg, display: "grid", placeItems: "center", padding: 20, fontFamily: "'Inter', system-ui, sans-serif" }}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap'); * { box-sizing: border-box; } body { margin: 0; }`}</style>
       <div style={{ background: POA.card, border: `0.5px solid ${POA.hairline}`, borderRadius: 18, padding: "36px 32px", width: "100%", maxWidth: 400, boxShadow: "0 24px 60px rgba(0,0,0,.5)" }}>
-        <img src='/B4C-Yellow.png' alt='B4C' style={{ height: 120, objectFit: 'contain', display: 'block', margin: '0 auto 28px' }} />
+        <img src='/B4C-Yellow.png' alt='B4C' style={{ height: 110, objectFit: 'contain', display: 'block', margin: '0 auto 24px' }} />
         <div style={{ fontSize: 10, letterSpacing: ".2em", textTransform: "uppercase", color: POA.accent, fontWeight: 700, marginBottom: 10 }}>Before the Call · POA</div>
         <h1 style={{ fontFamily: "inherit", fontSize: 26, fontWeight: 700, color: POA.textPrimary, margin: "0 0 8px" }}>Your association, in one place.</h1>
         <p style={{ fontSize: 13.5, color: POA.textMuted, lineHeight: 1.6, margin: "0 0 20px" }}>Sign in with your association email — magic link, password, or set one for the first time.</p>
