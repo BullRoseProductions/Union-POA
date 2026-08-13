@@ -8813,15 +8813,27 @@ function vimeoEmbedUrl(url) {
 
 // Calls Claude through the /api/claude serverless proxy (mirrors /api/draft-minutes).
 // The ANTHROPIC_API_KEY lives server-side only — never shipped in the browser bundle.
-async function callClaudeAI(systemPrompt, userContent, temperature) {
-  const res = await fetch("/api/claude", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ system: systemPrompt, content: userContent, ...(temperature != null ? { temperature } : {}) }),
-  });
-  if (!res.ok) throw new Error(await res.text());
-  const data = await res.json().catch(() => ({}));
-  return (data.text || "").trim();
+async function callClaudeAI(systemPrompt, userContent, temperature, tries = 3) {
+  let lastErr;
+  for (let attempt = 0; attempt < tries; attempt++) {
+    try {
+      const res = await fetch("/api/claude", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ system: systemPrompt, content: userContent, ...(temperature != null ? { temperature } : {}) }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json().catch(() => ({}));
+      const text = (data.text || "").trim();
+      if (!text) throw new Error("empty response");
+      return text;
+    } catch (e) {
+      lastErr = e;
+      // Back off and retry transient upstream failures (overloaded / rate-limited / empty)
+      if (attempt < tries - 1) await new Promise(r => setTimeout(r, 600 * (attempt + 1)));
+    }
+  }
+  throw lastErr;
 }
 
 function SocialMedia({ me, org }) {
@@ -9665,13 +9677,22 @@ function Fundraising({ me, org }) {
     const previouslyShown = shownIdeas.length > 0 ? shownIdeas.join(', ') : 'none';
     const user = `[Request ID: ${seed}] Association: ${org?.name || 'POA'}\nGoal: ${goalAmt || 'not specified'}\nEffort level: ${effortLevel}\nTarget date: ${targetDate || 'flexible'}\nWhat they're raising for: ${detail}\nRecently run — do NOT suggest these again: ${recent}\nAlready shown in this session — do NOT repeat these: ${previouslyShown}\nIdea inspiration (use as creative springboard, do NOT copy verbatim — invent fresh variations): \n${sampleIdeas}`;
     try {
-      const raw = await callClaudeAI(BRAINSTORM_SYS, user, 1.0);
-      const clean = raw.replace(/```json|```/g, "").trim();
-      const parsed = JSON.parse(clean);
-      if (!Array.isArray(parsed)) throw new Error("bad format");
+      let parsed = null, lastErr;
+      for (let attempt = 0; attempt < 3 && !parsed; attempt++) {
+        try {
+          const raw = await callClaudeAI(BRAINSTORM_SYS, user, 0.7);
+          // Robustly pull the JSON array out of the reply (handles ```json fences and stray prose)
+          const start = raw.indexOf("["), end = raw.lastIndexOf("]");
+          if (start === -1 || end <= start) throw new Error("no array in response");
+          const arr = JSON.parse(raw.slice(start, end + 1));
+          if (!Array.isArray(arr) || arr.length === 0) throw new Error("empty array");
+          parsed = arr;
+        } catch (err) { lastErr = err; }
+      }
+      if (!parsed) throw lastErr || new Error("no ideas");
       setIdeas(parsed); setPhase("ideas");
       setShownIdeas(prev => [...prev, ...parsed.map(i => i.name)].slice(-40));
-    } catch { setErr("Couldn't brainstorm ideas right now — check ANTHROPIC_API_KEY in Vercel."); }
+    } catch { setErr("The AI response came back incomplete — please try again."); }
     finally { setLoading(false); }
   }
 
@@ -11179,7 +11200,7 @@ function BoardCommunity({ me }) {
       const prompt = `Write a warm, brief community post for a police officers' association. Type: ${KIND_META[f.kind]?.label}. Headline: "${f.title}"${member ? `. Officer: ${member.full_name}` : ""}. Keep it genuine, celebratory, and under 60 words. Just the post body, no headline.`;
       const body = await callClaudeAI("You write warm community posts for police officers' associations. Be genuine, brief, and celebratory. Return only the post body text.", prompt);
       setF(x => ({ ...x, body }));
-    } catch(e) { setErr("AI draft failed — check ANTHROPIC_API_KEY."); }
+    } catch(e) { setErr("AI draft failed — please try again."); }
     finally { setAiLoading(false); }
   }
 
