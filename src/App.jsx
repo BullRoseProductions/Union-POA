@@ -8584,6 +8584,7 @@ function StipendLog({ me, org }) {
   const [aiId, setAiId]       = useState(null);
   const [entryFor, setEntryFor] = useState(null);
   const [entry, setEntry]     = useState({ description: "", hours: "", occurred_on: "" });
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const monthStart = new Date(cur.y, cur.m, 1);
   const fmtD = d => d.toISOString().split("T")[0];
@@ -8626,6 +8627,15 @@ function StipendLog({ me, org }) {
     } catch (e) { setErr(e.message); }
   }
   useEffect(() => { load(); }, [periodMonth]);
+
+  // Who may see the whole roster + approve/pay: DeptAdmin/ProjectAdmin, or the
+  // holder of the President or Treasurer position. Everyone else sees only their own.
+  useEffect(() => {
+    if ((me?.access || []).some(r => r === "DeptAdmin" || r === "ProjectAdmin")) { setIsAdmin(true); return; }
+    supabase.from("board_positions").select("id")
+      .in("title", ["President", "Treasurer"]).eq("holder_member_id", me?.id).limit(1)
+      .then(({ data }) => setIsAdmin(!!(data && data.length))).catch(() => {});
+  }, []);
 
   function shiftMonth(delta) {
     setCur(c => { const d = new Date(c.y, c.m + delta, 1); return { y: d.getFullYear(), m: d.getMonth() }; });
@@ -8670,12 +8680,12 @@ function StipendLog({ me, org }) {
       const entryText = a.entries.length
         ? a.entries.map(e => `${e.occurred_on}: ${e.description}${e.hours ? ` (${e.hours}h)` : ""}`).join("; ")
         : "none logged";
-      const sys = "You write a brief, factual one-paragraph justification that a board member's monthly stipend was earned, for an audit record. Use ONLY the numbers provided — never invent figures. 2-3 sentences, plain and professional. No preamble, no markdown.";
+      const sys = "You write a brief, warm but factual summary of what a board member did this month, for the association's own record — a record of their service, not a defense of their pay. Use ONLY the facts provided; never invent figures. 2-3 sentences, plain and professional. Do not use the words justify, justified, earned, prove, or proof, and do not mention the stipend amount. No preamble, no markdown.";
       const user = `Member: ${s.members?.full_name || "Board member"} (${s.position_label}), ${org?.name || "the association"}.
-Month: ${monthLabel}. Stipend: ${money(s.amount) || "$0"}.
-Tracked this month: ${a.meetings} meeting check-ins, ${a.actionsDone} action items completed, ${a.actionsOpen} still owned and open.
+Month: ${monthLabel}.
+This month: ${a.meetings} meeting check-ins, ${a.actionsDone} action items completed${a.actionsOpen ? `, ${a.actionsOpen} still in progress` : ""}.
 Off-app work logged: ${entryText}.
-Write the justification.`;
+Write a short summary of their month of service.`;
       const text = await callClaudeAI(sys, user);
       const { error } = await supabase.from("stipends").update({ note: text }).eq("id", s.id);
       if (error) throw error;
@@ -8714,7 +8724,7 @@ Write the justification.`;
 
   return (
     <div>
-      <PageTitle sub="Board pay, earned and on the record — every stipend backed by the month's work">Stipend Log</PageTitle>
+      <PageTitle sub={isAdmin ? "Board pay and the work behind it — a private record, visible to the Treasurer, President, and admin" : "Your board stipend and the work you logged this month"}>Stipend Log</PageTitle>
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 16 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -8722,6 +8732,7 @@ Write the justification.`;
           <div style={{ fontWeight: 700, fontSize: 16, color: POA.textPrimary, minWidth: 150, textAlign: "center" }}>{monthLabel}</div>
           <button style={PS.btn} onClick={() => shiftMonth(1)}>›</button>
         </div>
+        {isAdmin && (
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           {[["Owed", totals.total, POA.accent], ["Approved", totals.approved, POA.accentBright], ["Paid", totals.paid, POA.green]].map(([label, val, c]) => (
             <div key={label} style={{ ...PS.card, padding: "8px 14px", minWidth: 92 }}>
@@ -8730,6 +8741,7 @@ Write the justification.`;
             </div>
           ))}
         </div>
+        )}
       </div>
 
       <ErrBox msg={err} />
@@ -8738,9 +8750,9 @@ Write the justification.`;
         <Card>
           <div style={{ fontSize: 13.5, color: POA.textMuted, lineHeight: 1.6 }}>
             No stipends recorded for {monthLabel}.{" "}
-            {manage ? "Roll last month's board pay forward, then review each against the month's work." : "Nothing to show yet."}
+            {isAdmin ? "Roll last month's board pay forward to start the month." : "No stipend has been recorded for you this month yet."}
           </div>
-          {manage && (
+          {isAdmin && (
             <button style={{ ...PS.btnPrimary, marginTop: 12 }} disabled={genBusy} onClick={generate}>
               {genBusy ? "Generating…" : `Generate ${monthLabel} stipends`}
             </button>
@@ -8770,7 +8782,7 @@ Write the justification.`;
                 </div>
 
                 <div style={{ marginTop: 14, padding: "12px 14px", background: POA.accentSoft, border: `0.5px solid ${POA.hairline2}`, borderRadius: 10 }}>
-                  <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: POA.accent, marginBottom: 8 }}>Proof of work · {monthShort}</div>
+                  <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: POA.accent, marginBottom: 8 }}>This month's work · {monthShort}</div>
                   <div style={{ display: "flex", gap: 18, flexWrap: "wrap", alignItems: "center" }}>
                     {proof.map(p => (
                       <div key={p.label}>
@@ -8795,28 +8807,28 @@ Write the justification.`;
                   <div style={{ marginTop: 12, fontSize: 13.5, color: POA.textSecondary, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{s.note}</div>
                 )}
 
-                {manage && (
-                  <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
-                    {s.status === "pending" && (
-                      <button style={PS.btnPrimary} disabled={busyId === s.id} onClick={() => doApprove(s.id)}>
-                        <CheckCircle2 size={14} /> {busyId === s.id ? "…" : "Approve"}
-                      </button>
-                    )}
-                    {s.status === "approved" && (
-                      <button style={PS.btnPrimary} disabled={busyId === s.id} onClick={() => doPay(s.id)}>
-                        <DollarSign size={14} /> {busyId === s.id ? "…" : "Mark paid"}
-                      </button>
-                    )}
+                <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
+                  {isAdmin && s.status === "pending" && (
+                    <button style={PS.btnPrimary} disabled={busyId === s.id} onClick={() => doApprove(s.id)}>
+                      <CheckCircle2 size={14} /> {busyId === s.id ? "…" : "Approve"}
+                    </button>
+                  )}
+                  {isAdmin && s.status === "approved" && (
+                    <button style={PS.btnPrimary} disabled={busyId === s.id} onClick={() => doPay(s.id)}>
+                      <DollarSign size={14} /> {busyId === s.id ? "…" : "Mark paid"}
+                    </button>
+                  )}
+                  {isAdmin && (
                     <button style={PS.btn} disabled={aiId === s.id} onClick={() => draftJustification(s)}>
-                      <Sparkles size={13} /> {aiId === s.id ? "Drafting…" : s.note ? "Redraft justification" : "Draft justification"}
+                      <Sparkles size={13} /> {aiId === s.id ? "Drafting…" : s.note ? "Redraft summary" : "Draft summary"}
                     </button>
-                    <button style={PS.btn} onClick={() => { setEntryFor(entryFor === s.id ? null : s.id); setEntry({ description: "", hours: "", occurred_on: "" }); }}>
-                      <Plus size={13} /> Log off-app work
-                    </button>
-                  </div>
-                )}
+                  )}
+                  <button style={PS.btn} onClick={() => { setEntryFor(entryFor === s.id ? null : s.id); setEntry({ description: "", hours: "", occurred_on: "" }); }}>
+                    <Plus size={13} /> Log off-app work
+                  </button>
+                </div>
 
-                {manage && entryFor === s.id && (
+                {entryFor === s.id && (
                   <div style={{ marginTop: 12, padding: "12px 14px", background: POA.card2, border: `0.5px solid ${POA.hairline2}`, borderRadius: 10 }}>
                     <div style={{ display: "grid", gridTemplateColumns: "2fr 64px 140px", gap: 8 }}>
                       <input placeholder="What did they do? (e.g. City Council meeting)" value={entry.description} onChange={e => setEntry(x => ({ ...x, description: e.target.value }))} style={PS.input} />
@@ -8831,7 +8843,9 @@ Write the justification.`;
           })}
 
           <div style={{ fontSize: 11.5, color: POA.textMuted, marginTop: 16, lineHeight: 1.6, fontStyle: "italic" }}>
-            Proof-of-work counts pull from live records — meeting check-ins and completed action items — plus any off-app work logged here. The amount is the position's flat monthly rate; the activity shows it was earned. Treasurer approves, then marks paid. Every status change is stamped and recorded.
+            {isAdmin
+              ? "Activity counts pull from live records — meeting check-ins and completed action items — plus any off-app work logged. The amount is the position's flat monthly rate; the activity is simply the record of what each person did this month. The Treasurer approves, then marks paid, and every status change is stamped. Stipends are private — each member sees only their own."
+              : "This is your stipend and your month's work. Use 'Log off-app work' to add anything the app didn't already capture — outside meetings, hours, representation. Only you and the officers who approve stipends can see this."}
           </div>
         </>
       )}
