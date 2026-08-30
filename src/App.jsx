@@ -8597,7 +8597,7 @@ function StipendLog({ me, org }) {
     try {
       const { data: rows, error } = await supabase
         .from("stipends")
-        .select("*, members(full_name, badge, district)")
+        .select("*, members!member_id(full_name, badge, district)")
         .eq("period_month", periodMonth)
         .order("position_label");
       if (error) throw error;
