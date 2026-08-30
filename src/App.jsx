@@ -8574,6 +8574,271 @@ function MemberCorrespondence({ me }) {
   );
 }
 
+function StipendLog({ me, org }) {
+  const today = new Date();
+  const [cur, setCur]         = useState({ y: today.getFullYear(), m: today.getMonth() });
+  const [stipends, setStipends] = useState(null);
+  const [err, setErr]         = useState("");
+  const [busyId, setBusyId]   = useState(null);
+  const [genBusy, setGenBusy] = useState(false);
+  const [aiId, setAiId]       = useState(null);
+  const [entryFor, setEntryFor] = useState(null);
+  const [entry, setEntry]     = useState({ description: "", hours: "", occurred_on: "" });
+
+  const monthStart = new Date(cur.y, cur.m, 1);
+  const fmtD = d => d.toISOString().split("T")[0];
+  const periodMonth = fmtD(monthStart);            // 'YYYY-MM-01'
+  const monthLabel  = monthStart.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  const monthShort  = monthStart.toLocaleDateString("en-US", { month: "short" });
+  const manage = canManage(me?.access);
+
+  async function load() {
+    setStipends(null); setErr("");
+    try {
+      const { data: rows, error } = await supabase
+        .from("stipends")
+        .select("*, members(full_name, badge, district)")
+        .eq("period_month", periodMonth)
+        .order("position_label");
+      if (error) throw error;
+
+      const startISO = monthStart.toISOString();
+      const endISO   = new Date(cur.y, cur.m + 1, 1).toISOString();
+
+      const enriched = await Promise.all((rows || []).map(async (s) => {
+        const mid = s.member_id;
+        const [att, actDone, actOpen, entries] = await Promise.all([
+          supabase.from("event_attendance").select("id", { count: "exact", head: true })
+            .eq("member_id", mid).gte("checked_in_at", startISO).lt("checked_in_at", endISO),
+          supabase.from("action_items").select("id", { count: "exact", head: true })
+            .eq("owner_member_id", mid).eq("status", "done").gte("completed_at", startISO).lt("completed_at", endISO),
+          supabase.from("action_items").select("id", { count: "exact", head: true })
+            .eq("owner_member_id", mid).eq("status", "open"),
+          supabase.from("stipend_entries").select("*")
+            .eq("member_id", mid).eq("period_month", periodMonth).order("occurred_on"),
+        ]);
+        return { ...s, activity: {
+          meetings: att.count || 0, actionsDone: actDone.count || 0,
+          actionsOpen: actOpen.count || 0, entries: entries.data || [],
+        } };
+      }));
+      setStipends(enriched);
+    } catch (e) { setErr(e.message); }
+  }
+  useEffect(() => { load(); }, [periodMonth]);
+
+  function shiftMonth(delta) {
+    setCur(c => { const d = new Date(c.y, c.m + delta, 1); return { y: d.getFullYear(), m: d.getMonth() }; });
+  }
+
+  // Roll last month's board pay forward into this month as pending rows.
+  async function generate() {
+    setGenBusy(true); setErr("");
+    try {
+      const { data: prior } = await supabase.from("stipends")
+        .select("member_id, position_label, amount, period_month")
+        .lt("period_month", periodMonth).order("period_month", { ascending: false }).limit(60);
+      const latest = prior && prior.length ? prior[0].period_month : null;
+      const source = (prior || []).filter(r => r.period_month === latest);
+      if (!source.length) { setErr("No prior month to roll forward from. Add the first month's stipends in Supabase, then future months generate from here."); return; }
+      const insertRows = source.map(r => ({
+        department_id: me.department_id, member_id: r.member_id, position_label: r.position_label,
+        period_month: periodMonth, amount: r.amount, status: "pending",
+      }));
+      const { error } = await supabase.from("stipends").insert(insertRows);
+      if (error) throw error;
+      await load();
+    } catch (e) { setErr(e.message); }
+    finally { setGenBusy(false); }
+  }
+
+  async function doApprove(id) {
+    setBusyId(id); setErr("");
+    try { const { error } = await supabase.rpc("approve_stipend", { p_stipend: id }); if (error) throw error; await load(); }
+    catch (e) { setErr(e.message); } finally { setBusyId(null); }
+  }
+  async function doPay(id) {
+    setBusyId(id); setErr("");
+    try { const { error } = await supabase.rpc("mark_stipend_paid", { p_stipend: id }); if (error) throw error; await load(); }
+    catch (e) { setErr(e.message); } finally { setBusyId(null); }
+  }
+
+  async function draftJustification(s) {
+    setAiId(s.id); setErr("");
+    try {
+      const a = s.activity;
+      const entryText = a.entries.length
+        ? a.entries.map(e => `${e.occurred_on}: ${e.description}${e.hours ? ` (${e.hours}h)` : ""}`).join("; ")
+        : "none logged";
+      const sys = "You write a brief, factual one-paragraph justification that a board member's monthly stipend was earned, for an audit record. Use ONLY the numbers provided — never invent figures. 2-3 sentences, plain and professional. No preamble, no markdown.";
+      const user = `Member: ${s.members?.full_name || "Board member"} (${s.position_label}), ${org?.name || "the association"}.
+Month: ${monthLabel}. Stipend: ${money(s.amount) || "$0"}.
+Tracked this month: ${a.meetings} meeting check-ins, ${a.actionsDone} action items completed, ${a.actionsOpen} still owned and open.
+Off-app work logged: ${entryText}.
+Write the justification.`;
+      const text = await callClaudeAI(sys, user);
+      const { error } = await supabase.from("stipends").update({ note: text }).eq("id", s.id);
+      if (error) throw error;
+      await load();
+    } catch (e) { setErr("Couldn't draft the justification — try again."); }
+    finally { setAiId(null); }
+  }
+
+  async function addEntry(s) {
+    if (!entry.description.trim()) return;
+    setBusyId(s.id); setErr("");
+    try {
+      const { error } = await supabase.from("stipend_entries").insert({
+        department_id: me.department_id, member_id: s.member_id, period_month: periodMonth,
+        occurred_on: entry.occurred_on || fmtD(today), description: entry.description.trim(),
+        hours: entry.hours ? Number(entry.hours) : null, created_by: me.id,
+      });
+      if (error) throw error;
+      setEntryFor(null); setEntry({ description: "", hours: "", occurred_on: "" });
+      await load();
+    } catch (e) { setErr(e.message); } finally { setBusyId(null); }
+  }
+
+  const totals = (stipends || []).reduce((acc, s) => {
+    acc.total += Number(s.amount || 0);
+    if (s.status === "approved") acc.approved += Number(s.amount || 0);
+    if (s.status === "paid") acc.paid += Number(s.amount || 0);
+    return acc;
+  }, { total: 0, approved: 0, paid: 0 });
+
+  const statusPill = (st) => {
+    const map = { pending: [POA.amber, "Pending"], approved: [POA.accent, "Approved"], paid: [POA.green, "Paid"] };
+    const [c, label] = map[st] || [POA.textMuted, st];
+    return <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".04em", textTransform: "uppercase", color: c, border: `1px solid ${c}55`, background: `${c}18`, borderRadius: 999, padding: "3px 10px" }}>{label}</span>;
+  };
+
+  return (
+    <div>
+      <PageTitle sub="Board pay, earned and on the record — every stipend backed by the month's work">Stipend Log</PageTitle>
+
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <button style={PS.btn} onClick={() => shiftMonth(-1)}>‹</button>
+          <div style={{ fontWeight: 700, fontSize: 16, color: POA.textPrimary, minWidth: 150, textAlign: "center" }}>{monthLabel}</div>
+          <button style={PS.btn} onClick={() => shiftMonth(1)}>›</button>
+        </div>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          {[["Owed", totals.total, POA.accent], ["Approved", totals.approved, POA.accentBright], ["Paid", totals.paid, POA.green]].map(([label, val, c]) => (
+            <div key={label} style={{ ...PS.card, padding: "8px 14px", minWidth: 92 }}>
+              <div style={{ fontWeight: 700, fontSize: 18, color: c, lineHeight: 1 }}>{money(val) || "$0"}</div>
+              <div style={{ fontSize: 10.5, color: POA.textMuted, marginTop: 3, textTransform: "uppercase", letterSpacing: ".06em" }}>{label} · {monthShort}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <ErrBox msg={err} />
+
+      {!stipends ? <Spinner /> : stipends.length === 0 ? (
+        <Card>
+          <div style={{ fontSize: 13.5, color: POA.textMuted, lineHeight: 1.6 }}>
+            No stipends recorded for {monthLabel}.{" "}
+            {manage ? "Roll last month's board pay forward, then review each against the month's work." : "Nothing to show yet."}
+          </div>
+          {manage && (
+            <button style={{ ...PS.btnPrimary, marginTop: 12 }} disabled={genBusy} onClick={generate}>
+              {genBusy ? "Generating…" : `Generate ${monthLabel} stipends`}
+            </button>
+          )}
+        </Card>
+      ) : (
+        <>
+          {stipends.map(s => {
+            const a = s.activity;
+            const proof = [
+              { n: a.meetings, label: "meeting check-ins" },
+              { n: a.actionsDone, label: "action items completed" },
+              { n: a.entries.length, label: "off-app entries" },
+            ];
+            return (
+              <Card key={s.id} style={{ marginBottom: 14 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: 15.5, color: POA.textPrimary }}>{s.members?.full_name || "—"}</div>
+                    <div style={{ fontSize: 12.5, color: POA.accent, marginTop: 2 }}>{s.position_label}
+                      {s.members?.badge ? <span style={{ color: POA.textMuted }}>  ·  Badge {s.members.badge}</span> : null}</div>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontWeight: 700, fontSize: 20, color: POA.textPrimary, lineHeight: 1 }}>{money(s.amount) || "$0"}</div>
+                    <div style={{ marginTop: 6 }}>{statusPill(s.status)}</div>
+                  </div>
+                </div>
+
+                <div style={{ marginTop: 14, padding: "12px 14px", background: POA.accentSoft, border: `0.5px solid ${POA.hairline2}`, borderRadius: 10 }}>
+                  <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: POA.accent, marginBottom: 8 }}>Proof of work · {monthShort}</div>
+                  <div style={{ display: "flex", gap: 18, flexWrap: "wrap", alignItems: "center" }}>
+                    {proof.map(p => (
+                      <div key={p.label}>
+                        <span style={{ fontWeight: 700, fontSize: 17, color: p.n > 0 ? POA.textPrimary : POA.textMuted }}>{p.n}</span>
+                        <span style={{ fontSize: 12, color: POA.textMuted, marginLeft: 6 }}>{p.label}</span>
+                      </div>
+                    ))}
+                    {a.actionsOpen > 0 && <span style={{ fontSize: 12, color: POA.textMuted }}>({a.actionsOpen} still open)</span>}
+                  </div>
+                  {a.entries.length > 0 && (
+                    <div style={{ marginTop: 10, borderTop: `1px dashed ${POA.hairline2}`, paddingTop: 8 }}>
+                      {a.entries.map(e => (
+                        <div key={e.id} style={{ fontSize: 12.5, color: POA.textSecondary, marginTop: 3 }}>
+                          <span style={{ color: POA.textMuted }}>{e.occurred_on}</span> — {e.description}{e.hours ? <span style={{ color: POA.textMuted }}> ({e.hours}h)</span> : null}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {s.note && (
+                  <div style={{ marginTop: 12, fontSize: 13.5, color: POA.textSecondary, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{s.note}</div>
+                )}
+
+                {manage && (
+                  <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
+                    {s.status === "pending" && (
+                      <button style={PS.btnPrimary} disabled={busyId === s.id} onClick={() => doApprove(s.id)}>
+                        <CheckCircle2 size={14} /> {busyId === s.id ? "…" : "Approve"}
+                      </button>
+                    )}
+                    {s.status === "approved" && (
+                      <button style={PS.btnPrimary} disabled={busyId === s.id} onClick={() => doPay(s.id)}>
+                        <DollarSign size={14} /> {busyId === s.id ? "…" : "Mark paid"}
+                      </button>
+                    )}
+                    <button style={PS.btn} disabled={aiId === s.id} onClick={() => draftJustification(s)}>
+                      <Sparkles size={13} /> {aiId === s.id ? "Drafting…" : s.note ? "Redraft justification" : "Draft justification"}
+                    </button>
+                    <button style={PS.btn} onClick={() => { setEntryFor(entryFor === s.id ? null : s.id); setEntry({ description: "", hours: "", occurred_on: "" }); }}>
+                      <Plus size={13} /> Log off-app work
+                    </button>
+                  </div>
+                )}
+
+                {manage && entryFor === s.id && (
+                  <div style={{ marginTop: 12, padding: "12px 14px", background: POA.card2, border: `0.5px solid ${POA.hairline2}`, borderRadius: 10 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "2fr 64px 140px", gap: 8 }}>
+                      <input placeholder="What did they do? (e.g. City Council meeting)" value={entry.description} onChange={e => setEntry(x => ({ ...x, description: e.target.value }))} style={PS.input} />
+                      <input placeholder="hrs" value={entry.hours} onChange={e => setEntry(x => ({ ...x, hours: e.target.value }))} style={PS.input} />
+                      <input type="date" value={entry.occurred_on} onChange={e => setEntry(x => ({ ...x, occurred_on: e.target.value }))} style={PS.input} />
+                    </div>
+                    <button style={{ ...PS.btnPrimary, marginTop: 8 }} disabled={busyId === s.id} onClick={() => addEntry(s)}>Add entry</button>
+                  </div>
+                )}
+              </Card>
+            );
+          })}
+
+          <div style={{ fontSize: 11.5, color: POA.textMuted, marginTop: 16, lineHeight: 1.6, fontStyle: "italic" }}>
+            Proof-of-work counts pull from live records — meeting check-ins and completed action items — plus any off-app work logged here. The amount is the position's flat monthly rate; the activity shows it was earned. Treasurer approves, then marks paid. Every status change is stamped and recorded.
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function ValueLedger({ me }) {
   const today = new Date();
   const qStart = new Date(today.getFullYear(), Math.floor(today.getMonth() / 3) * 3, 1);
@@ -12179,7 +12444,7 @@ function renderScreen(view, { me, org, setView, setViewAs }) {
     case "b_members":       return <MembersBoard me={me} />;
     case "b_documents":     return <BoardDocuments me={me} />;
     case "b_attendance":    return <MeetingAttendance me={me} />;
-    case "b_stipend":       return <ComingSoon label="Stipend Log" />;
+    case "b_stipend":       return <StipendLog me={me} org={org} />;
     case "b_fundraising":   return <Fundraising me={me} org={org} />;
     case "b_social":        return <SocialMedia me={me} org={org} />;
     case "b_building":      return <POABuilding me={me} org={org} />;

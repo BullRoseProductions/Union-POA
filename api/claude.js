@@ -7,13 +7,14 @@ export default async function handler(req, res) {
   const key = process.env.ANTHROPIC_API_KEY
   if (!key) return res.status(501).send('ANTHROPIC_API_KEY is not set')
 
-  const { system = '', content = '', max_tokens = 4000, temperature } = req.body || {}
+  const { system = '', content = '', max_tokens = 4000 } = req.body || {}
   if (!content) return res.status(400).send('content is required')
 
+  // NOTE: claude-sonnet-5 deprecated the `temperature` parameter — sending it
+  // returns a 400 invalid_request_error, so we intentionally do not forward it.
   const upstreamBody = JSON.stringify({
     model: 'claude-sonnet-5',
     max_tokens,
-    ...(temperature != null ? { temperature } : {}),
     system: system || undefined,
     messages: [{ role: 'user', content }],
   })
