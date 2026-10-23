@@ -25,48 +25,51 @@ const APP = "Before the Call";
 
 /* ---------- POA palette (violet-dark, mirrors FIRE token shape) ---------- */
 const POA = {
-  pageBg: "radial-gradient(130% 100% at 100% 0%, #0D1428 0%, #070C18 42%, #04070F 100%)",
-  sidebar: "linear-gradient(180deg, #060B1A 0%, #030610 100%)",
-  sidebarSolid: "#030610",
-  card: "#0A1020",
-  card2: "#0E1630",
+  // Midnight & Champagne Gold — darker, deeper navy, less glow
+  pageBg: "radial-gradient(1200px 520px at 72% -12%, rgba(23,42,73,.18) 0%, transparent 60%), linear-gradient(180deg, #05080F 0%, #04070E 60%)",
+  sidebar: "linear-gradient(158deg, #0C1120 0%, #070B16 55%, #05080F 100%)",
+  sidebarSolid: "#05080F",
+  card: "#081321",
+  card2: "#0E1B31",
   hairline: "rgba(255,255,255,.07)",
   hairline2: "rgba(255,255,255,.12)",
-  cardShadow: "0 4px 20px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.04)",
-  cardRadius: 13,
-  textPrimary: "#F5F0E8",
-  textSecondary: "#B8B0A0",
-  textMuted: "#706860",
-  textMuted2: "#8A8278",
-  accent: "#DBA525",
+  cardShadow: "inset 0 1px 0 rgba(255,255,255,.07), inset 0 -16px 30px -18px #000, 0 2px 7px rgba(0,0,0,.4), 0 24px 48px -20px #000",
+  cardRadius: 14,
+  textPrimary: "#F6F1E6",
+  textSecondary: "#B6C2D4",
+  textMuted: "#8491A7",
+  textMuted2: "#9AA6BA",
+  accent: "#E4B84F",
   accentDim: "#8A6510",
-  accentSoft: "rgba(219,165,37,.10)",
-  accentGlow: "rgba(219,165,37,.20)",
-  accentBright: "#F0C84A",
-  green: "#46C793",
-  greenText: "#7AD8B0",
-  amber: "#E8A030",
-  amberText: "#D4904A",
-  red: "#EF6A64",
-  redText: "#E58A90",
+  accentSoft: "rgba(228,184,79,.10)",
+  accentGlow: "rgba(228,184,79,.22)",
+  accentBright: "#FFD77E",
+  green: "#34E3AB",
+  greenText: "#8AF0C9",
+  amber: "#FFBE52",
+  amberText: "#FFCF86",
+  red: "#FF6B79",
+  redText: "#FFA6AD",
+  blue: "#67B0FF",
   track: "rgba(255,255,255,.06)",
   btnBg: "rgba(255,255,255,.04)",
   btnBorder: "rgba(255,255,255,.10)",
   inputBorder: "rgba(255,255,255,.10)",
-  btnText: "#E0D8C8",
-  btnIcon: "#908878",
-  navLabel: "rgba(192,184,168,.7)",
+  btnText: "#E7EDF5",
+  btnIcon: "#90A0B5",
+  navLabel: "rgba(182,194,212,.72)",
+  display: "'Plus Jakarta Sans', 'Inter', system-ui, sans-serif",
   white: "#fff",
 };
 
 /* ---------- Style recipes (same shape as fire's FS) ---------- */
 const PS = {
   card: {
-    background: "linear-gradient(135deg, #0E1630 0%, #0A1020 100%)",
-    border: "0.5px solid rgba(255,255,255,.10)",
-    borderRadius: 13,
+    background: "linear-gradient(158deg, #0E1B31 0%, #081321 52%, #03080F 100%)",
+    border: "1px solid rgba(255,255,255,.08)",
+    borderRadius: 14,
     padding: "14px 16px",
-    boxShadow: "0 4px 20px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.04)",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,.07), inset 0 -16px 30px -18px #000, 0 2px 7px rgba(0,0,0,.4), 0 22px 44px -20px #000",
     position: "relative",
   },
   btn: {
@@ -91,13 +94,13 @@ const PS = {
     padding: "8px 16px",
     borderRadius: 8,
     border: "none",
-    background: "linear-gradient(135deg, #DBA525, #C49B2A)",
-    color: "#06090A",
+    background: "linear-gradient(#F3CF6A, #CB9D3C)",
+    color: "#1C1708",
     fontSize: 13,
-    fontWeight: 700,
+    fontWeight: 800,
     cursor: "pointer",
     fontFamily: "inherit",
-    boxShadow: "0 2px 10px rgba(219,165,37,.3), inset 0 1px 0 rgba(255,255,255,.12)",
+    boxShadow: "inset 0 1px 0 #FFF3CF, 0 6px 14px -8px rgba(228,184,79,.5), 0 1px 2px rgba(0,0,0,.4)",
   },
   input: {
     width: "100%",
@@ -983,7 +986,7 @@ function WhoToCall({ me }) {
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 10 }}>
               {catContacts.map(c => (
-                <div key={c.id} style={{ background: "linear-gradient(135deg, #0E1630 0%, #0A1020 100%)", border: `0.5px solid ${POA.hairline2}`, borderRadius: 12, padding: "14px 15px", boxShadow: "0 2px 12px rgba(0,0,0,.3), inset 0 1px 0 rgba(255,255,255,.04)", position: "relative", display: "flex", flexDirection: "column", gap: 4 }}>
+                <div key={c.id} style={{ background: "linear-gradient(158deg, #0E1B31 0%, #081321 52%, #03080F 100%)", border: `0.5px solid ${POA.hairline2}`, borderRadius: 12, padding: "14px 15px", boxShadow: "0 2px 12px rgba(0,0,0,.3), inset 0 1px 0 rgba(255,255,255,.04)", position: "relative", display: "flex", flexDirection: "column", gap: 4 }}>
                   {/* Category color top bar */}
                   <div style={{ position: "absolute", top: 0, left: 16, right: 16, height: 2, background: CAT_COLOR[cat] || POA.accent, borderRadius: "0 0 3px 3px", opacity: .6 }} />
                   <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: CAT_COLOR[cat] || POA.accent, marginTop: 4 }}>{c.role}</div>
@@ -1875,22 +1878,22 @@ function BoardDash({ me, org, setView }) {
 
   return (
     <div>
-      {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 20 }}>
-        <div style={{ width: 50, height: 50, borderRadius: 12, background: "linear-gradient(135deg, rgba(219,165,37,.2), rgba(219,165,37,.05))", border: "1px solid rgba(219,165,37,.3)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Rajdhani',sans-serif", fontSize: 14, fontWeight: 700, color: POA.accent, flexShrink: 0, boxShadow: "0 0 16px rgba(219,165,37,.1)" }}>
-          {orgInitials}
-        </div>
-        <div>
-          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".14em", textTransform: "uppercase", color: POA.accent }}>Board · {org?.name || "Your Association"}</div>
-          <div style={{ fontSize: 22, fontWeight: 700, color: POA.textPrimary, lineHeight: 1.2 }}>
+      {/* Hero */}
+      <div style={{ position: "relative", overflow: "hidden", borderRadius: 18, padding: "22px 26px", marginBottom: 16,
+        background: "radial-gradient(640px 260px at 90% 14%, rgba(90,70,31,.22), transparent 62%), radial-gradient(520px 320px at 4% 128%, rgba(22,50,89,.80), transparent 60%), linear-gradient(118deg,#162A4D 0%,#0E1D38 40%,#081225 72%,#040A16 100%)",
+        border: "1px solid #273A5C", boxShadow: "inset 0 1px 0 rgba(255,255,255,.08), inset 0 0 90px -36px rgba(228,184,79,.30), 0 28px 58px -24px #000" }}>
+        <div aria-hidden style={{ position: "absolute", right: "2.5%", bottom: -46, fontFamily: POA.display, fontStyle: "italic", fontWeight: 800, fontSize: 150, lineHeight: 1, letterSpacing: "-.07em", color: "#0C1A30", textShadow: "0 1px 1px rgba(255,255,255,.07), 0 -1px 1px rgba(0,0,0,.6)", pointerEvents: "none", userSelect: "none" }}>B4C</div>
+        <div style={{ position: "relative", zIndex: 1 }}>
+          <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".22em", textTransform: "uppercase", color: POA.accent, marginBottom: 7 }}>Board · {org?.name || "Your Association"}</div>
+          <div style={{ fontFamily: POA.display, fontSize: 34, fontWeight: 700, letterSpacing: "-.025em", color: "#FAF3E2", lineHeight: 1.12, textShadow: "0 2px 12px rgba(0,0,0,.45)" }}>
             Good {today.getHours() < 12 ? "morning" : today.getHours() < 17 ? "afternoon" : "evening"}, {me.full_name?.split(" ")[0]}.
           </div>
-          <div style={{ fontSize: 12, color: POA.textMuted }}>Association oversight at a glance.</div>
+          <div style={{ fontSize: 13, color: POA.textSecondary, marginTop: 5 }}>Association oversight, beautifully organized.</div>
         </div>
       </div>
 
       {/* Health strip */}
-      <div style={{ background: "linear-gradient(135deg, rgba(219,165,37,.08), rgba(219,165,37,.02))", border: "0.5px solid rgba(219,165,37,.2)", borderRadius: 13, padding: "14px 18px", marginBottom: 14, display: "flex", alignItems: "center", gap: 18, boxShadow: "0 0 24px rgba(219,165,37,.05), inset 0 1px 0 rgba(219,165,37,.08)" }}>
+      <div style={{ background: "radial-gradient(440px 190px at 15% 46%, rgba(74,54,28,.20), transparent 60%), radial-gradient(420px 260px at 98% 120%, rgba(20,48,86,.60), transparent 62%), linear-gradient(120deg,#0F2038,#0A1526 55%,#04091600)", border: "1px solid #4E4028", borderRadius: 14, padding: "15px 18px", marginBottom: 14, display: "flex", alignItems: "center", gap: 18, boxShadow: "inset 0 1px 0 rgba(255,255,255,.07), inset 0 0 70px -32px rgba(228,184,79,.30), 0 24px 48px -20px #000" }}>
         <div style={{ position: "relative", width: 54, height: 54, flexShrink: 0 }}>
           <svg width="54" height="54" viewBox="0 0 54 54" style={{ transform: "rotate(-90deg)" }}>
             <circle cx="27" cy="27" r="21" fill="none" stroke="rgba(255,255,255,.06)" strokeWidth="5" />
@@ -1914,18 +1917,31 @@ function BoardDash({ me, org, setView }) {
       </div>
 
       {/* Stat cards */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 9, marginBottom: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 16 }}>
         {[
-          { n: activeMembers.length, label: "Active members",    color: POA.accent },
-          { n: `${standingPct}%`,    label: "Good standing",     color: POA.green },
-          { n: openActions.length,   label: "Open action items", color: POA.amber },
-          { n: activeCauses.length,  label: "Active causes",     color: POA.accentBright },
-        ].map(s => (
-          <div key={s.label} style={{ background: "linear-gradient(160deg, #101828 0%, #0A1020 100%)", border: "0.5px solid rgba(255,255,255,.10)", borderRadius: 11, padding: "13px 14px", boxShadow: "0 2px 12px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.04)" }}>
-            <div style={{ fontFamily: "inherit", fontWeight: 700, fontSize: 26, color: s.color, lineHeight: 1 }}>{s.n}</div>
-            <div style={{ fontSize: 10, color: POA.textMuted, marginTop: 5, textTransform: "uppercase", letterSpacing: ".06em" }}>{s.label}</div>
-          </div>
-        ))}
+          { n: activeMembers.length, label: "Active members",    Icon: Users,         tone: "info" },
+          { n: `${standingPct}%`,    label: "Good standing",     Icon: CheckCircle2,  tone: "good" },
+          { n: openActions.length,   label: "Open action items", Icon: ClipboardList, tone: "warn" },
+          { n: activeCauses.length,  label: "Active causes",     Icon: Heart,         tone: "gold" },
+        ].map(s => {
+          const tile = {
+            info: { bg: "linear-gradient(150deg,#2F74C6,#17406F 48%,#0D2135)", bd: "#5AA0E8", fg: "#E4F2FF", gl: "rgba(103,176,255,.53)" },
+            good: { bg: "linear-gradient(150deg,#1E8F6A,#0F4A39 48%,#0D2233)", bd: "#3AD7A0", fg: "#E2FFF3", gl: "rgba(52,227,171,.53)" },
+            warn: { bg: "linear-gradient(150deg,#C58F2C,#604413 46%,#1B2740)", bd: "#FFC558", fg: "#FFF1CA", gl: "rgba(255,190,82,.53)" },
+            gold: { bg: "linear-gradient(150deg,#B08736,#53401D 44%,#182540)", bd: "#D4A844", fg: "#FFFBE8", gl: "rgba(228,184,79,.47)" },
+          }[s.tone];
+          return (
+            <div key={s.label} style={{ ...PS.card, padding: "14px 15px", display: "flex", alignItems: "center", gap: 13 }}>
+              <div style={{ width: 46, height: 46, borderRadius: 13, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: tile.bg, border: `1px solid ${tile.bd}`, color: tile.fg, boxShadow: `inset 0 1px 0 rgba(255,255,255,.25), inset 0 -8px 14px -8px #000, 0 7px 18px -7px ${tile.gl}` }}>
+                <s.Icon size={21} />
+              </div>
+              <div>
+                <div style={{ fontFamily: POA.display, fontWeight: 800, fontSize: 28, color: "#F8F2E2", lineHeight: 1 }}>{s.n}</div>
+                <div style={{ fontSize: 11, color: POA.textSecondary, marginTop: 5 }}>{s.label}</div>
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       {/* On-call strip */}
@@ -1973,7 +1989,7 @@ function BoardDash({ me, org, setView }) {
       {/* Feed + Calendar */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1.3fr", gap: 12, marginBottom: 16 }}>
         {/* Feed */}
-        <div style={{ background: "linear-gradient(135deg, #0E1630 0%, #0A1020 100%)", border: "0.5px solid rgba(255,255,255,.10)", borderRadius: 13, padding: "14px 16px", boxShadow: "0 4px 20px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.04)" }}>
+        <div style={{ background: "linear-gradient(158deg, #0E1B31 0%, #081321 52%, #03080F 100%)", border: "0.5px solid rgba(255,255,255,.10)", borderRadius: 13, padding: "14px 16px", boxShadow: "0 4px 20px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.04)" }}>
           <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: ".14em", textTransform: "uppercase", color: POA.accent, marginBottom: 10 }}>Feed</div>
           {announcements.length === 0 ? (
             <div style={{ fontSize: 13, color: POA.textMuted }}>No announcements yet.</div>
@@ -1991,7 +2007,7 @@ function BoardDash({ me, org, setView }) {
         </div>
 
         {/* Mini calendar */}
-        <div style={{ background: "linear-gradient(135deg, #0E1630 0%, #0A1020 100%)", border: "0.5px solid rgba(255,255,255,.10)", borderRadius: 13, padding: "14px 16px", boxShadow: "0 4px 20px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.04)" }}>
+        <div style={{ background: "linear-gradient(158deg, #0E1B31 0%, #081321 52%, #03080F 100%)", border: "0.5px solid rgba(255,255,255,.10)", borderRadius: 13, padding: "14px 16px", boxShadow: "0 4px 20px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.04)" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
             <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: ".14em", textTransform: "uppercase", color: POA.accent }}>Calendar</div>
             <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
@@ -12568,14 +12584,15 @@ export default function App() {
   if (me === null) return <NotOnRoster session={session} />;
 
   return (
-    <div style={{ display: "flex", minHeight: "100vh", background: "radial-gradient(ellipse 80% 60% at 50% -10%, #0D1830 0%, #04070F 60%)", fontFamily: "'Inter', system-ui, sans-serif", color: POA.textPrimary }}>
+    <div style={{ display: "flex", minHeight: "100vh", background: "radial-gradient(1200px 520px at 72% -12%, rgba(23,42,73,.18) 0%, transparent 60%), linear-gradient(180deg, #05080F 0%, #04070E 60%)", fontFamily: "'Inter', system-ui, sans-serif", color: POA.textPrimary }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Rajdhani:wght@600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,500;0,600;0,700;0,800;1,700;1,800&family=Inter:wght@400;500;600;700;800&family=Rajdhani:wght@600;700&display=swap');
         * { box-sizing: border-box; }
         body { margin: 0; }
+        h1, h2 { font-family: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif !important; letter-spacing: -0.02em; }
         @keyframes spin { to { transform: rotate(360deg); } }
         ::-webkit-scrollbar { width: 0; }
-        .nav-item:hover { background: rgba(219,165,37,.08) !important; }
+        .nav-item:hover { background: rgba(228,184,79,.08) !important; }
         @media (max-width: 768px) {
           .mobile-menu-btn { display: flex !important; }
           .app-sidebar {
