@@ -133,7 +133,7 @@ const PS = {
     fontWeight: 700,
     letterSpacing: ".14em",
     textTransform: "uppercase",
-    color: "#DBA525",
+    color: "#E4B84F",
     marginBottom: 8,
   },
 };
@@ -177,6 +177,7 @@ const MEMBER_NAV = [
   { id: "m_ask",      label: "Ask B4C",          Icon: MessageSquare },
   { id: "m_partners", label: "Trusted Partners", Icon: Handshake },
   { id: "m_community", label: "Community",        Icon: Users },
+  { id: "m_outreach",  label: "Community Outreach", Icon: Handshake },
   { id: "m_benefits", label: "Benefits",         Icon: Shield },
   { id: "m_events",   label: "Events",           Icon: Calendar },
   { id: "m_card",     label: "My Card",          Icon: CreditCard },
@@ -194,7 +195,7 @@ const BOARD_NAV = [
   { id: "b_meetings",     label: "Agenda & Minutes",  Icon: ClipboardList },
   { id: "b_stipend",      label: "Stipend Log",       Icon: DollarSign },
   { id: "b_causes",       label: "Causes",            Icon: Heart },
-  { id: "b_fundraising",  label: "Fundraising",       Icon: Megaphone },
+  { id: "b_fundraising",  label: "Fundraisers & Outreach",       Icon: Megaphone },
   { id: "b_social",       label: "Social & Media",    Icon: BarChart3 },
   { id: "b_building",     label: "POA Building",      Icon: Building2 },
   { id: "b_continuity",   label: "Board Continuity",  Icon: BookOpen },
@@ -292,11 +293,20 @@ function ErrBox({ msg }) {
 function SectionTitle({ children }) {
   return <p style={PS.kicker}>{children}</p>;
 }
-function PageTitle({ children, sub }) {
-  return <div style={{ marginBottom: 22 }}>
-    <h1 style={{ fontFamily: "inherit", fontSize: 24, fontWeight: 700, color: POA.textPrimary, margin: "0 0 4px" }}>{children}</h1>
-    {sub && <div style={{ fontSize: 13.5, color: POA.textMuted }}>{sub}</div>}
-  </div>;
+function PageTitle({ children, sub, icon: Icon }) {
+  return (
+    <div style={{ position: "relative", overflow: "hidden", borderRadius: 16, padding: "17px 22px 17px 24px", marginBottom: 20,
+      background: "radial-gradient(520px 200px at 92% 8%, rgba(90,70,31,.16), transparent 60%), linear-gradient(118deg,#121F3A 0%,#0C1831 46%,#070E1F 100%)",
+      border: "1px solid #223758", boxShadow: "inset 0 1px 0 rgba(255,255,255,.07), inset 0 0 70px -36px rgba(228,184,79,.22), 0 18px 40px -22px #000",
+      display: "flex", alignItems: "center", gap: 15 }}>
+      <div style={{ position: "absolute", left: 0, top: 13, bottom: 13, width: 3, borderRadius: "0 3px 3px 0", background: "linear-gradient(#FFD77E,#C89A3B)", boxShadow: "0 0 14px rgba(228,184,79,.5)" }} />
+      {Icon && (<div style={{ width: 46, height: 46, flexShrink: 0, borderRadius: 13, display: "grid", placeItems: "center", background: "linear-gradient(150deg,#B08736,#53401D 44%,#182540)", border: "1px solid #D4A844", color: "#FFF6DC", boxShadow: "inset 0 1px 0 rgba(255,236,184,.6), inset 0 -8px 14px -8px #000, 0 7px 18px -7px rgba(228,184,79,.5)" }}><Icon size={22} /></div>)}
+      <div style={{ minWidth: 0 }}>
+        <h1 style={{ fontFamily: POA.display, fontSize: 25, fontWeight: 700, letterSpacing: "-.02em", color: "#FAF3E2", margin: 0, lineHeight: 1.12 }}>{children}</h1>
+        {sub && <div style={{ fontSize: 13, color: POA.textSecondary, marginTop: 4 }}>{sub}</div>}
+      </div>
+    </div>
+  );
 }
 function Card({ children, style, onClick }) {
   return <div style={{ ...PS.card, padding: "16px 18px", marginBottom: 10, ...style }} onClick={onClick}>{children}</div>;
@@ -310,6 +320,40 @@ function StatRow({ stats }) {
       </div>
     ))}
   </div>;
+}
+function CardHead({ icon: Icon, children, right, count }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 13 }}>
+      {Icon && (
+        <div style={{ width: 30, height: 30, borderRadius: 9, flexShrink: 0, display: "grid", placeItems: "center", background: "radial-gradient(circle at 35% 25%, #1A2740, #0A1120)", border: "1px solid rgba(228,184,79,.28)", color: POA.accentBright, boxShadow: "inset 0 1px 0 rgba(255,255,255,.06), inset 0 -4px 10px -6px #000" }}>
+          <Icon size={15} />
+        </div>
+      )}
+      <h2 style={{ fontFamily: POA.display, fontWeight: 700, fontSize: 14.5, margin: 0, letterSpacing: ".01em", color: "#F3EAD6", position: "relative", paddingBottom: 5 }}>
+        {children}
+        <span style={{ position: "absolute", left: 0, bottom: 0, width: 20, height: 2, borderRadius: 2, background: "linear-gradient(90deg,#FFD77E,#C89A3B)", boxShadow: "0 0 10px rgba(228,184,79,.5)" }} />
+      </h2>
+      {count != null && <span style={{ background: "linear-gradient(#F3CF6A,#CB9D3C)", color: "#1C1708", fontSize: 11, fontWeight: 800, borderRadius: 999, minWidth: 18, height: 18, display: "grid", placeItems: "center", padding: "0 5px" }}>{count}</span>}
+      {right && <div style={{ marginLeft: "auto" }}>{right}</div>}
+    </div>
+  );
+}
+function StatChip({ label, value, tone, caption, pct }) {
+  const vc = tone === "good" ? POA.greenText : tone === "warn" ? POA.amberText : tone === "red" ? POA.redText : "#F6F1E6";
+  const fill = tone === "good" ? "linear-gradient(90deg,#1E8F6A,#34E3AB)" : tone === "warn" ? "linear-gradient(90deg,#9A7322,#FFBE52)" : "linear-gradient(90deg,#AD812E,#FFD77E)";
+  return (
+    <div style={{ ...PS.card, padding: "12px 14px" }}>
+      <div style={{ fontSize: 11, color: POA.textSecondary }}>{label}</div>
+      <div style={{ fontFamily: POA.display, fontWeight: 800, fontSize: 23, lineHeight: 1, marginTop: 7, color: vc, fontVariantNumeric: "tabular-nums" }}>{value}</div>
+      {pct != null ? (
+        <div style={{ height: 6, borderRadius: 4, background: "#0A0F1A", border: "1px solid rgba(255,255,255,.06)", overflow: "hidden", marginTop: 8 }}>
+          <div style={{ height: "100%", width: `${Math.max(0, Math.min(100, pct))}%`, borderRadius: 4, background: fill }} />
+        </div>
+      ) : caption ? (
+        <div style={{ fontSize: 10, color: POA.textMuted, marginTop: 4 }}>{caption}</div>
+      ) : null}
+    </div>
+  );
 }
 function ComingSoon({ label }) {
   return <div style={{ textAlign: "center", padding: "60px 20px", color: POA.textMuted }}>
@@ -547,7 +591,7 @@ function MemberDash({ me, org, setView }) {
               <div style={{ fontSize: 11, fontWeight: 700, color: POA.accent }}>{attPct}%</div>
             </div>
             <div style={{ height: 6, background: POA.track, borderRadius: 3, overflow: "hidden", marginBottom: 8 }}>
-              <div style={{ height: "100%", width: `${attPct}%`, background: "linear-gradient(90deg, #DBA525, #F0C84A)", borderRadius: 3, boxShadow: "0 0 6px rgba(219,165,37,.4)" }} />
+              <div style={{ height: "100%", width: `${attPct}%`, background: "linear-gradient(90deg, #E4B84F, #F0C84A)", borderRadius: 3, boxShadow: "0 0 6px rgba(219,165,37,.4)" }} />
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 3, marginBottom: 6 }}>
               {Array.from({ length: attGoal }, (_, i) => {
@@ -667,7 +711,7 @@ function MemberDash({ me, org, setView }) {
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 10 }}>
             {videos.slice(0, 3).map(v => (
-              <div key={v.id} style={{ background: 'linear-gradient(160deg, #101828 0%, #0A1020 100%)', border: `0.5px solid ${POA.hairline2}`, borderRadius: 12, overflow: 'hidden', cursor: 'pointer' }}
+              <div key={v.id} style={{ background: 'linear-gradient(158deg, #0E1B31 0%, #081321 52%, #03080F 100%)', border: `0.5px solid ${POA.hairline2}`, borderRadius: 12, overflow: 'hidden', cursor: 'pointer' }}
                 onClick={() => setPlayingVideo(playingVideo === v.id ? null : v.id)}>
                 {playingVideo === v.id && v.vimeo_url ? (() => {
                   const match = v.vimeo_url.match(/vimeo\.com\/(\d+)/);
@@ -749,7 +793,7 @@ function WhoToCall({ me }) {
   const [err, setErr]           = useState("");
   const [busy, setBusy]         = useState(false);
   const [showCatMgr, setShowCatMgr] = useState(false);
-  const [catForm, setCatForm]   = useState({ label: "", color: "#DBA525" });
+  const [catForm, setCatForm]   = useState({ label: "", color: "#E4B84F" });
   const [catBusy, setCatBusy]   = useState(false);
   const manage                  = canManage(me?.access);
 
@@ -833,7 +877,7 @@ function WhoToCall({ me }) {
         color: catForm.color,
         sort: categories.length + 1,
       });
-      setCatForm({ label: "", color: "#DBA525" });
+      setCatForm({ label: "", color: "#E4B84F" });
       await load();
     } catch(e) { setErr(e.message); }
     finally { setCatBusy(false); }
@@ -1071,7 +1115,7 @@ function WhoToCall({ me }) {
         <div onClick={() => setRequesting(null)}
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.7)', zIndex: 60, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 16px', overflowY: 'auto' }}>
           <div onClick={e => e.stopPropagation()}
-            style={{ background: 'linear-gradient(135deg, #0E1630, #0A1020)', border: `0.5px solid ${POA.hairline2}`, borderRadius: 16, maxWidth: 480, width: '100%', padding: '20px 22px', boxShadow: '0 20px 60px rgba(0,0,0,.6)' }}>
+            style={{ background: 'linear-gradient(158deg, #0E1B31 0%, #081321 52%, #03080F 100%)', border: `0.5px solid ${POA.hairline2}`, borderRadius: 16, maxWidth: 480, width: '100%', padding: '20px 22px', boxShadow: '0 20px 60px rgba(0,0,0,.6)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <div>
                 <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.12em', textTransform: 'uppercase', color: POA.accent }}>Request a meeting</div>
@@ -1256,7 +1300,7 @@ function AskB4C({ me, org }) {
               <div key={i} style={{ marginBottom: 10, display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start" }}>
                 <div style={{ maxWidth: "82%", background: m.role === "user"
                   ? "linear-gradient(135deg, rgba(219,165,37,.2), rgba(219,165,37,.08))"
-                  : "linear-gradient(135deg, #0E1630, #0A1020)",
+                  : "linear-gradient(158deg, #0E1B31 0%, #081321 52%, #03080F 100%)",
                   border: `0.5px solid ${m.role === "user" ? "rgba(219,165,37,.3)" : POA.hairline2}`,
                   borderRadius: m.role === "user" ? "14px 14px 4px 14px" : "14px 14px 14px 4px",
                   padding: "10px 14px", fontSize: 13.5, color: POA.textPrimary, lineHeight: 1.65,
@@ -1414,7 +1458,7 @@ function MyCard({ me, org }) {
     <div>
       <PageTitle sub="Your digital membership card">My Card</PageTitle>
       {!showBack && (
-      <div style={{ position: "relative", background: "linear-gradient(160deg, #111D35 0%, #0A1020 60%, #060911 100%)", border: "1px solid rgba(219,165,37,.35)", borderRadius: 20, padding: "28px 26px", marginBottom: 12, boxShadow: "0 0 60px rgba(219,165,37,.08), 0 20px 60px rgba(0,0,0,.7), 0 4px 12px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.06)", overflow: "hidden", minHeight: 220 }}>
+      <div style={{ position: "relative", background: "linear-gradient(158deg, #0E1B31 0%, #081321 52%, #03080F 100%)", border: "1px solid rgba(219,165,37,.35)", borderRadius: 20, padding: "28px 26px", marginBottom: 12, boxShadow: "0 0 60px rgba(219,165,37,.08), 0 20px 60px rgba(0,0,0,.7), 0 4px 12px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.06)", overflow: "hidden", minHeight: 220 }}>
 
         {/* Ambient glow top-right */}
         <div style={{ position: "absolute", top: -60, right: -60, width: 220, height: 220, borderRadius: "50%", background: "radial-gradient(circle, rgba(219,165,37,.08) 0%, transparent 70%)", pointerEvents: "none" }} />
@@ -1437,7 +1481,7 @@ function MyCard({ me, org }) {
                 </div>
               )}
               <div>
-                <div style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: 14, fontWeight: 700, letterSpacing: ".1em", background: "linear-gradient(135deg, #F0C84A 0%, #DBA525 60%, #A87A18 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text", filter: "drop-shadow(0 0 6px rgba(219,165,37,.2))" }}>
+                <div style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: 14, fontWeight: 700, letterSpacing: ".1em", background: "linear-gradient(135deg, #F0C84A 0%, #E4B84F 60%, #A87A18 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text", filter: "drop-shadow(0 0 6px rgba(219,165,37,.2))" }}>
                   {shortName}
                 </div>
                 <div style={{ fontSize: 10, color: POA.textMuted, letterSpacing: ".04em" }}>{orgName}</div>
@@ -1509,7 +1553,7 @@ function MyCard({ me, org }) {
       </button>
 
       {showBack && (
-        <div style={{ position: 'relative', background: 'linear-gradient(160deg, #111D35 0%, #0A1020 60%, #060911 100%)', border: '1px solid rgba(219,165,37,.3)', borderRadius: 20, padding: '28px 26px', marginBottom: 12, boxShadow: '0 0 40px rgba(219,165,37,.06), 0 8px 32px rgba(0,0,0,.6)', overflow: 'hidden' }}>
+        <div style={{ position: 'relative', background: 'linear-gradient(158deg, #0E1B31 0%, #081321 52%, #03080F 100%)', border: '1px solid rgba(219,165,37,.3)', borderRadius: 20, padding: '28px 26px', marginBottom: 12, boxShadow: '0 0 40px rgba(219,165,37,.06), 0 8px 32px rgba(0,0,0,.6)', overflow: 'hidden' }}>
           <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: 'linear-gradient(90deg, transparent, rgba(219,165,37,.6), transparent)', borderRadius: '20px 20px 0 0' }} />
           <SectionTitle>Member rights</SectionTitle>
           <div style={{ fontSize: 13.5, color: POA.textSecondary, lineHeight: 1.75, marginBottom: 16 }}>
@@ -1723,9 +1767,9 @@ function MemberEvents({ me, setView }) {
       <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 16 }}>
         {[
           { label: "Meeting", color: KIND_COLOR.meeting || POA.accent },
-          { label: "Community", color: KIND_COLOR.community || "#46C793" },
+          { label: "Community", color: KIND_COLOR.community || "#34E3AB" },
           { label: "Fundraiser", color: POA.amber },
-          { label: "Training", color: KIND_COLOR.training || "#46C793" },
+          { label: "Training", color: KIND_COLOR.training || "#34E3AB" },
         ].map(({ label, color }) => (
           <div key={label} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: POA.textMuted }}>
             <div style={{ width: 8, height: 8, borderRadius: "50%", background: color }} />
@@ -1892,29 +1936,40 @@ function BoardDash({ me, org, setView }) {
         </div>
       </div>
 
-      {/* Health strip */}
-      <div style={{ background: "radial-gradient(440px 190px at 15% 46%, rgba(74,54,28,.20), transparent 60%), radial-gradient(420px 260px at 98% 120%, rgba(20,48,86,.60), transparent 62%), linear-gradient(120deg,#0F2038,#0A1526 55%,#04091600)", border: "1px solid #4E4028", borderRadius: 14, padding: "15px 18px", marginBottom: 14, display: "flex", alignItems: "center", gap: 18, boxShadow: "inset 0 1px 0 rgba(255,255,255,.07), inset 0 0 70px -32px rgba(228,184,79,.30), 0 24px 48px -20px #000" }}>
-        <div style={{ position: "relative", width: 54, height: 54, flexShrink: 0 }}>
-          <svg width="54" height="54" viewBox="0 0 54 54" style={{ transform: "rotate(-90deg)" }}>
-            <circle cx="27" cy="27" r="21" fill="none" stroke="rgba(255,255,255,.06)" strokeWidth="5" />
-            <circle cx="27" cy="27" r="21" fill="none" stroke="url(#gold-grad-dash)" strokeWidth="5"
-              strokeDasharray={`${(standingPct / 100) * 132} 132`} strokeLinecap="round" />
-            <defs>
-              <linearGradient id="gold-grad-dash" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#F0C84A" />
-                <stop offset="100%" stopColor="#DBA525" />
-              </linearGradient>
-            </defs>
-          </svg>
-          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color: POA.textPrimary }}>{standingPct}%</div>
-        </div>
-        <div>
-          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".14em", textTransform: "uppercase", color: POA.accent, marginBottom: 4 }}>Association Health</div>
-          <div style={{ fontSize: 13, color: POA.textSecondary, lineHeight: 1.55 }}>
-            {goodStanding.length} of {activeMembers.length} in good standing · {minutesFiled} minutes filed · {activeCauses.length} active cause{activeCauses.length !== 1 ? "s" : ""}
+      {/* Next Meeting spotlight */}
+      {(() => {
+        const d = nextMeeting?.scheduled_at ? new Date(nextMeeting.scheduled_at) : null;
+        const today0 = new Date(new Date().toDateString());
+        const diff = d ? Math.round((new Date(d.toDateString()) - today0) / 86400000) : null;
+        const rel = diff === null ? "" : diff < 0 ? "Happening now" : diff === 0 ? "Today" : diff === 1 ? "Tomorrow" : `In ${diff} days`;
+        return (
+          <div style={{ background: "radial-gradient(440px 190px at 15% 46%, rgba(74,54,28,.20), transparent 60%), radial-gradient(420px 260px at 98% 120%, rgba(20,48,86,.60), transparent 62%), linear-gradient(120deg,#0F2038,#0A1526 55%,#04091600)", border: "1px solid #4E4028", borderRadius: 14, padding: "16px 18px", marginBottom: 14, display: "flex", alignItems: "center", gap: 18, boxShadow: "inset 0 1px 0 rgba(255,255,255,.07), inset 0 0 70px -32px rgba(228,184,79,.30), 0 24px 48px -20px #000" }}>
+            <div style={{ width: 64, height: 64, flexShrink: 0, borderRadius: 14, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "linear-gradient(150deg,#B08736,#53401D 44%,#182540)", border: "1px solid #D4A844", boxShadow: "inset 0 1px 0 rgba(255,236,184,.6), inset 0 -8px 14px -8px #000, 0 7px 18px -7px rgba(228,184,79,.5)" }}>
+              {d ? (<>
+                <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".1em", color: "#2A2110" }}>{d.toLocaleDateString(undefined, { month: "short" }).toUpperCase()}</div>
+                <div style={{ fontFamily: POA.display, fontSize: 26, fontWeight: 800, lineHeight: 1, color: "#1C1708" }}>{d.getDate()}</div>
+              </>) : <Calendar size={26} color="#FFF3D4" />}
+            </div>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".18em", textTransform: "uppercase", color: POA.accent, marginBottom: 5 }}>Next Meeting{rel ? ` · ${rel}` : ""}</div>
+              {nextMeeting ? (
+                <>
+                  <div style={{ fontFamily: POA.display, fontSize: 20, fontWeight: 700, color: "#F8F1DF", lineHeight: 1.15, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{nextMeeting.title || "Association meeting"}</div>
+                  <div style={{ fontSize: 12.5, color: POA.textSecondary, marginTop: 3 }}>{d ? d.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" }) : ""}{d ? ` · ${d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}` : ""}</div>
+                </>
+              ) : (
+                <>
+                  <div style={{ fontFamily: POA.display, fontSize: 20, fontWeight: 700, color: "#F8F1DF", lineHeight: 1.15 }}>No meeting scheduled</div>
+                  <div style={{ fontSize: 12.5, color: POA.textSecondary, marginTop: 3 }}>Schedule your next board or membership meeting.</div>
+                </>
+              )}
+            </div>
+            <button style={{ ...PS.btnPrimary, flexShrink: 0 }} onClick={() => setView(nextMeeting ? "b_meetings" : "b_attendance")}>
+              {nextMeeting ? "View agenda" : "Schedule"} <ChevronRight size={14} />
+            </button>
           </div>
-        </div>
-      </div>
+        );
+      })()}
 
       {/* Stat cards */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 16 }}>
@@ -1970,9 +2025,9 @@ function BoardDash({ me, org, setView }) {
           { id: "b_attendance",    label: "Meetings & Events", Icon: CalendarCheck, status: nextMeeting ? `Next: ${fmtShort(nextMeeting.scheduled_at)}` : "Nothing scheduled" },
           { id: "b_causes",        label: "Causes",            Icon: Heart,         status: activeCauses.length ? `${activeCauses.length} active` : "No active causes" },
           { id: "b_correspondence",label: "Correspondence",    Icon: Mail,          status: announcements.length ? `${announcements.length} sent` : "No announcements" },
-          { id: "b_fundraising",   label: "Fundraising",       Icon: DollarSign,    status: "Plan your next event" },
+          { id: "b_fundraising",   label: "Fundraisers & Outreach",       Icon: DollarSign,    status: "Plan your next event" },
         ].map(({ id, label, Icon, status }) => (
-          <div key={id} style={{ background: "linear-gradient(160deg, #0E1830 0%, #080F20 100%)", border: "0.5px solid rgba(255,255,255,.07)", borderTop: `1.5px solid ${POA.accent}`, borderRadius: "0 0 11px 11px", padding: "12px 13px", cursor: "pointer", boxShadow: "0 0 20px rgba(0,0,0,.4)" }}
+          <div key={id} style={{ background: "linear-gradient(158deg, #0E1B31 0%, #081321 52%, #03080F 100%)", border: "0.5px solid rgba(255,255,255,.07)", borderTop: `1.5px solid ${POA.accent}`, borderRadius: "0 0 11px 11px", padding: "12px 13px", cursor: "pointer", boxShadow: "0 0 20px rgba(0,0,0,.4)" }}
             onClick={() => setView(id)}>
             <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 4 }}>
               <Icon size={14} color={POA.accent} />
@@ -2349,13 +2404,7 @@ Draft professional minutes from these notes.`;
 
   return (
     <div>
-      <p style={{ ...PS.kicker, marginBottom: 4 }}>Agenda & Minutes</p>
-      <h1 style={{ fontFamily: "inherit", fontSize: 24, fontWeight: 700, color: POA.textPrimary, margin: "0 0 4px" }}>
-        Meetings
-      </h1>
-      <div style={{ fontSize: 13, color: POA.textMuted, marginBottom: 20 }}>
-        Draft agendas before the meeting · file minutes after · track action items.
-      </div>
+      <PageTitle icon={ClipboardList} sub="Draft agendas before the meeting · file minutes after · track action items.">Meetings</PageTitle>
 
       {/* Tabs */}
       <div style={{ display: "flex", gap: 6, marginBottom: 20 }}>
@@ -2471,7 +2520,7 @@ Draft professional minutes from these notes.`;
             <div onClick={() => { setAgOpen(null); setAgEditing(false); }}
               style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.7)", zIndex: 60, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 16px", overflowY: "auto" }}>
               <div onClick={e => e.stopPropagation()}
-                style={{ background: "linear-gradient(135deg, #0E1630, #0A1020)", border: `0.5px solid ${POA.hairline2}`, borderRadius: 16, maxWidth: 720, width: "100%", padding: "20px 22px", boxShadow: "0 20px 60px rgba(0,0,0,.6)" }}>
+                style={{ background: "linear-gradient(158deg, #0E1B31 0%, #081321 52%, #03080F 100%)", border: `0.5px solid ${POA.hairline2}`, borderRadius: 16, maxWidth: 720, width: "100%", padding: "20px 22px", boxShadow: "0 20px 60px rgba(0,0,0,.6)" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 14 }}>
                   <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".12em", textTransform: "uppercase", color: POA.accent }}>{agOpen.title || "Agenda"}</div>
                   <div style={{ display: "flex", gap: 8 }}>
@@ -2604,7 +2653,7 @@ Draft professional minutes from these notes.`;
             <div onClick={() => { setMnOpen(null); setMnEditing(false); }}
               style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.7)", zIndex: 60, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 16px", overflowY: "auto" }}>
               <div onClick={e => e.stopPropagation()}
-                style={{ background: "linear-gradient(135deg, #0E1630, #0A1020)", border: `0.5px solid ${POA.hairline2}`, borderRadius: 16, maxWidth: 720, width: "100%", padding: "20px 22px", boxShadow: "0 20px 60px rgba(0,0,0,.6)" }}>
+                style={{ background: "linear-gradient(158deg, #0E1B31 0%, #081321 52%, #03080F 100%)", border: `0.5px solid ${POA.hairline2}`, borderRadius: 16, maxWidth: 720, width: "100%", padding: "20px 22px", boxShadow: "0 20px 60px rgba(0,0,0,.6)" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 14 }}>
                   <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".12em", textTransform: "uppercase", color: POA.accent }}>{mnOpen.title || "Minutes"}</div>
                   <div style={{ display: "flex", gap: 8 }}>
@@ -2929,7 +2978,7 @@ function CauseDetail({ cause, me, onBack, onRefresh }) {
           { label: 'From sponsors', value: money(contribFromContacts), color: POA.accent },
           { label: 'Goal', value: cause.goal_amount ? money(cause.goal_amount) : '—', color: POA.textMuted },
         ].map(s => (
-          <div key={s.label} style={{ background: 'linear-gradient(160deg, #101828 0%, #0A1020 100%)', border: `0.5px solid ${POA.hairline2}`, borderRadius: 11, padding: '12px 14px' }}>
+          <div key={s.label} style={{ background: 'linear-gradient(158deg, #0E1B31 0%, #081321 52%, #03080F 100%)', border: `0.5px solid ${POA.hairline2}`, borderRadius: 11, padding: '12px 14px' }}>
             <div style={{ fontWeight: 700, fontSize: 22, color: s.color, lineHeight: 1 }}>{s.value}</div>
             <div style={{ fontSize: 10, color: POA.textMuted, marginTop: 5, textTransform: 'uppercase', letterSpacing: '.06em' }}>{s.label}</div>
           </div>
@@ -3491,7 +3540,7 @@ function CausesBoard({ me }) {
           return daysSince > 60;
         });
         return (
-          <div key={c.id} style={{ background: 'linear-gradient(160deg, #101828 0%, #0A1020 100%)', border: `0.5px solid ${POA.hairline2}`, borderLeft: `3px solid ${c.status === 'active' ? POA.accent : POA.amber}`, borderRadius: '0 13px 13px 0', padding: '16px 18px', marginBottom: 10, cursor: 'pointer', boxShadow: '0 2px 12px rgba(0,0,0,.4)' }}
+          <div key={c.id} style={{ background: 'linear-gradient(158deg, #0E1B31 0%, #081321 52%, #03080F 100%)', border: `0.5px solid ${POA.hairline2}`, borderLeft: `3px solid ${c.status === 'active' ? POA.accent : POA.amber}`, borderRadius: '0 13px 13px 0', padding: '16px 18px', marginBottom: 10, cursor: 'pointer', boxShadow: '0 2px 12px rgba(0,0,0,.4)' }}
             onClick={() => setSelectedCause(c)}>
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
               <div style={{ flex: 1 }}>
@@ -4225,7 +4274,7 @@ const DOW    = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 const KIND_COLOR = {
   meeting:   "#9B6BE6",
   board:     "#5a3f8c",
-  training:  "#46C793",
+  training:  "#34E3AB",
   community: "#F0B44A",
   general:   "#57B6E0",
   other:     "#7A7296",
@@ -4556,12 +4605,16 @@ function MeetingAttendance({ me }) {
         </div>
       )}
 
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 20 }}>
-        <div>
-          <p style={{ ...PS.kicker, marginBottom: 4 }}>Meetings & Events</p>
-          <h1 style={{ fontFamily: "inherit", fontSize: 24, fontWeight: 700, color: POA.textPrimary, margin: 0 }}>
-            {MONTHS[cur.m]} {cur.y}
-          </h1>
+      <div style={{ position: "relative", overflow: "hidden", borderRadius: 16, padding: "17px 22px 17px 24px", marginBottom: 20, background: "radial-gradient(520px 200px at 92% 8%, rgba(90,70,31,.16), transparent 60%), linear-gradient(118deg,#121F3A 0%,#0C1831 46%,#070E1F 100%)", border: "1px solid #223758", boxShadow: "inset 0 1px 0 rgba(255,255,255,.07), inset 0 0 70px -36px rgba(228,184,79,.22), 0 18px 40px -22px #000", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14 }}>
+        <div style={{ position: "absolute", left: 0, top: 13, bottom: 13, width: 3, borderRadius: "0 3px 3px 0", background: "linear-gradient(#FFD77E,#C89A3B)", boxShadow: "0 0 14px rgba(228,184,79,.5)" }} />
+        <div style={{ display: "flex", alignItems: "center", gap: 14, position: "relative", zIndex: 1 }}>
+          <div style={{ width: 46, height: 46, flexShrink: 0, borderRadius: 13, display: "grid", placeItems: "center", background: "linear-gradient(150deg,#B08736,#53401D 44%,#182540)", border: "1px solid #D4A844", color: "#FFF6DC", boxShadow: "inset 0 1px 0 rgba(255,236,184,.6), inset 0 -8px 14px -8px #000, 0 7px 18px -7px rgba(228,184,79,.5)" }}><CalendarCheck size={22} /></div>
+          <div>
+            <p style={{ ...PS.kicker, marginBottom: 2 }}>Meetings & Events</p>
+            <h1 style={{ fontFamily: POA.display, fontSize: 24, fontWeight: 700, letterSpacing: "-.02em", color: "#FAF3E2", margin: 0, lineHeight: 1.1 }}>
+              {MONTHS[cur.m]} {cur.y}
+            </h1>
+          </div>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           {canManage(me.access) && (
@@ -4677,7 +4730,7 @@ function MeetingAttendance({ me }) {
             {cells.slice(w * 7, w * 7 + 7).map((d, i) => {
               const evts = d ? (byDay[d] || []) : [];
               return (
-                <div key={i} style={{ minHeight: 72, background: isToday(d) ? "rgba(155,107,230,.12)" : "transparent", border: `0.5px solid ${isToday(d) ? POA.accent : POA.hairline}`, borderRadius: 8, padding: "5px 6px" }}>
+                <div key={i} style={{ minHeight: 72, background: isToday(d) ? "rgba(228,184,79,.14)" : "transparent", border: `0.5px solid ${isToday(d) ? POA.accent : POA.hairline}`, borderRadius: 8, padding: "5px 6px" }}>
                   {d && (
                     <>
                       <div style={{ fontSize: 12, fontWeight: isToday(d) ? 700 : 400, color: isToday(d) ? POA.accent : POA.textMuted, marginBottom: 4 }}>{d}</div>
@@ -5494,7 +5547,7 @@ function Store({ me }) {
 
   function ItemCard({ item }) {
     return (
-      <div style={{ background: "linear-gradient(160deg, #101828 0%, #0A1020 100%)", border: `0.5px solid ${POA.hairline2}`, borderRadius: 12, padding: "14px 14px", boxShadow: "0 2px 12px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.03)", display: "flex", flexDirection: "column", gap: 6, position: "relative" }}>
+      <div style={{ background: "linear-gradient(158deg, #0E1B31 0%, #081321 52%, #03080F 100%)", border: `0.5px solid ${POA.hairline2}`, borderRadius: 12, padding: "14px 14px", boxShadow: "0 2px 12px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.03)", display: "flex", flexDirection: "column", gap: 6, position: "relative" }}>
         {item.image_url && (
           <div style={{ width: "100%", height: 120, borderRadius: 8, overflow: "hidden", marginBottom: 4, background: "rgba(0,0,0,.3)" }}>
             <img src={item.image_url} alt={item.name}
@@ -5690,7 +5743,7 @@ function PlanEditor({ position, plan, activityLog, onSave, onGenerate, onClose, 
     <div onClick={onClose}
       style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.8)', zIndex: 60, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '20px 16px', overflowY: 'auto' }}>
       <div onClick={e => e.stopPropagation()}
-        style={{ background: 'linear-gradient(135deg, #0E1630, #060911)', border: `0.5px solid ${POA.hairline2}`, borderRadius: 16, maxWidth: 800, width: '100%', padding: '20px 22px', boxShadow: '0 20px 60px rgba(0,0,0,.7)' }}>
+        style={{ background: 'linear-gradient(158deg, #0E1B31 0%, #081321 52%, #03080F 100%)', border: `0.5px solid ${POA.hairline2}`, borderRadius: 16, maxWidth: 800, width: '100%', padding: '20px 22px', boxShadow: '0 20px 60px rgba(0,0,0,.7)' }}>
 
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16 }}>
@@ -6240,7 +6293,7 @@ Fill in any missing sections and improve what's there. Keep it practical for who
         const holderName = holder?.full_name || p.holder_name || null;
         return (
           <div key={p.id} style={{ marginBottom: 10 }}>
-            <div style={{ background: 'linear-gradient(160deg, #101828 0%, #0A1020 100%)', border: `0.5px solid ${POA.hairline2}`, borderLeft: `3px solid ${statusColor[p.status] || POA.accent}`, borderRadius: '0 13px 13px 0', padding: '16px 18px', boxShadow: '0 2px 12px rgba(0,0,0,.4)' }}>
+            <div style={{ background: 'linear-gradient(158deg, #0E1B31 0%, #081321 52%, #03080F 100%)', border: `0.5px solid ${POA.hairline2}`, borderLeft: `3px solid ${statusColor[p.status] || POA.accent}`, borderRadius: '0 13px 13px 0', padding: '16px 18px', boxShadow: '0 2px 12px rgba(0,0,0,.4)' }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 700, fontSize: 16, color: POA.textPrimary, marginBottom: 4 }}>{p.title}</div>
@@ -6376,7 +6429,7 @@ Fill in any missing sections and improve what's there. Keep it practical for who
         <div onClick={() => setOpenPkg(null)}
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.7)', zIndex: 60, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 16px', overflowY: 'auto' }}>
           <div onClick={e => e.stopPropagation()}
-            style={{ background: 'linear-gradient(135deg, #0E1630, #0A1020)', border: `0.5px solid ${POA.hairline2}`, borderRadius: 16, maxWidth: 720, width: '100%', padding: '20px 22px', boxShadow: '0 20px 60px rgba(0,0,0,.6)' }}>
+            style={{ background: 'linear-gradient(158deg, #0E1B31 0%, #081321 52%, #03080F 100%)', border: `0.5px solid ${POA.hairline2}`, borderRadius: 16, maxWidth: 720, width: '100%', padding: '20px 22px', boxShadow: '0 20px 60px rgba(0,0,0,.6)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginBottom: 14 }}>
               <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.12em', textTransform: 'uppercase', color: POA.accent }}>{openPkg.title}</div>
               <button style={{ ...PS.btn, padding: '5px 10px' }} onClick={() => setOpenPkg(null)}><X size={13} /></button>
@@ -7745,7 +7798,7 @@ function PADash({ setView, setViewAs }) {
           { n: poaOrgs, label: 'POA', color: POA.accent },
           { n: fireOrgs, label: 'Fire/EMS', color: POA.amber },
         ].map(s => (
-          <div key={s.label} style={{ background: 'linear-gradient(160deg, #101828 0%, #0A1020 100%)', border: `0.5px solid ${POA.hairline2}`, borderRadius: 11, padding: '13px 14px' }}>
+          <div key={s.label} style={{ background: 'linear-gradient(158deg, #0E1B31 0%, #081321 52%, #03080F 100%)', border: `0.5px solid ${POA.hairline2}`, borderRadius: 11, padding: '13px 14px' }}>
             <div style={{ fontWeight: 700, fontSize: 26, color: s.color, lineHeight: 1 }}>{s.n}</div>
             <div style={{ fontSize: 10, color: POA.textMuted, marginTop: 5, textTransform: 'uppercase', letterSpacing: '.06em' }}>{s.label}</div>
           </div>
@@ -7757,7 +7810,7 @@ function PADash({ setView, setViewAs }) {
         const s = stats[dept.id] || {};
         const healthPct = s.totalMembers ? Math.round((s.goodStanding / s.totalMembers) * 100) : 0;
         return (
-          <div key={dept.id} style={{ background: 'linear-gradient(160deg, #101828 0%, #0A1020 100%)', border: `0.5px solid ${POA.hairline2}`, borderRadius: 13, padding: '16px 18px', marginBottom: 12, boxShadow: '0 2px 12px rgba(0,0,0,.4)' }}>
+          <div key={dept.id} style={{ background: 'linear-gradient(158deg, #0E1B31 0%, #081321 52%, #03080F 100%)', border: `0.5px solid ${POA.hairline2}`, borderRadius: 13, padding: '16px 18px', marginBottom: 12, boxShadow: '0 2px 12px rgba(0,0,0,.4)' }}>
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 14 }}>
               <div>
                 <div style={{ fontWeight: 700, fontSize: 16, color: POA.textPrimary, marginBottom: 2 }}>{dept.name}</div>
@@ -7813,7 +7866,7 @@ function PADash({ setView, setViewAs }) {
             ].map(({ label, id, icon: Icon }) => (
               <button key={id}
                 onClick={() => { setViewAs('board'); setView(id); }}
-                style={{ background: 'linear-gradient(160deg, #101828, #0A1020)', border: `0.5px solid ${POA.hairline2}`, borderRadius: 10, padding: '12px 10px', cursor: 'pointer', textAlign: 'center', boxShadow: '0 2px 8px rgba(0,0,0,.3)' }}>
+                style={{ background: 'linear-gradient(158deg, #0E1B31 0%, #081321 52%, #03080F 100%)', border: `0.5px solid ${POA.hairline2}`, borderRadius: 10, padding: '12px 10px', cursor: 'pointer', textAlign: 'center', boxShadow: '0 2px 8px rgba(0,0,0,.3)' }}>
                 <Icon size={18} color={POA.accent} style={{ marginBottom: 6, display: 'block', margin: '0 auto 6px' }} />
                 <div style={{ fontSize: 11, color: POA.textSecondary, fontWeight: 500 }}>{label}</div>
               </button>
@@ -7851,7 +7904,7 @@ function PAOrgConfig() {
     { key: 'b_meetings', label: 'Agenda & Minutes', group: 'Board' },
     { key: 'b_stipend', label: 'Stipend Log', group: 'Board' },
     { key: 'b_causes', label: 'Causes', group: 'Board' },
-    { key: 'b_fundraising', label: 'Fundraising', group: 'Board' },
+    { key: 'b_fundraising', label: 'Fundraisers & Community Outreach', group: 'Board' },
     { key: 'b_social', label: 'Social & Media', group: 'Board' },
     { key: 'b_building', label: 'POA Building', group: 'Board' },
     { key: 'b_continuity', label: 'Board Continuity', group: 'Board' },
@@ -9154,7 +9207,7 @@ function SocialMedia({ me, org }) {
   const [err, setErr]           = useState("");
   const [busy, setBusy]         = useState(false);
 
-  const COLORS = ["#9B6BE6","#46C793","#57B6E0","#F0B44A","#EF6A64","#B48AEF","#7AD8B0","#E8A87C"];
+  const COLORS = ["#9B6BE6","#34E3AB","#57B6E0","#F0B44A","#EF6A64","#B48AEF","#7AD8B0","#E8A87C"];
 
   async function loadAll() {
     const [p, c, v] = await Promise.all([
@@ -9498,7 +9551,7 @@ function SocialMedia({ me, org }) {
   );
 }
 
-const FUNDRAISER_COLORS = ["#F0B44A","#9B6BE6","#46C793","#57B6E0","#EF6A64","#B48AEF"];
+const FUNDRAISER_COLORS = ["#F0B44A","#9B6BE6","#34E3AB","#57B6E0","#EF6A64","#B48AEF"];
 
 const POA_IDEA_BANK = [
   // Community Experiences
@@ -9853,6 +9906,353 @@ function FundraisingPlanDisplay({ text }) {
   return <div style={{ padding: "2px 0" }}>{els}</div>;
 }
 
+function OutreachView({ me, org }) {
+  const manage = canManage(me.access);
+  const myId = me.id;
+  const [events, setEvents]   = useState(null);
+  const [slots, setSlots]     = useState([]);
+  const [signups, setSignups] = useState([]);
+  const [needs, setNeeds]     = useState([]);
+  const [claims, setClaims]   = useState([]);
+  const [sel, setSel]         = useState(null);
+  const [err, setErr]         = useState("");
+  const [busy, setBusy]       = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const [claimQty, setClaimQty] = useState({});
+
+  const blank = { title: "", event_date: "", start_time: "", location: "", description: "", signup_mode: "rsvp" };
+  const [f, setF] = useState(blank);
+  const [formSlots, setFormSlots] = useState([]);
+  const [formNeeds, setFormNeeds] = useState([]);
+
+  async function load() {
+    try {
+      const dept = me.department_id;
+      const [ev, sl, su, nd, cl] = await Promise.all([
+        supabase.from("outreach_events").select("*").eq("department_id", dept).order("event_date", { ascending: true, nullsFirst: false }),
+        supabase.from("outreach_slots").select("*").eq("department_id", dept).order("sort"),
+        supabase.from("outreach_signups").select("*, members(full_name)").eq("department_id", dept),
+        supabase.from("outreach_needs").select("*").eq("department_id", dept).order("sort"),
+        supabase.from("outreach_claims").select("*, members(full_name)").eq("department_id", dept),
+      ]);
+      if (ev.error) throw ev.error;
+      setEvents(ev.data || []); setSlots(sl.data || []); setSignups(su.data || []); setNeeds(nd.data || []); setClaims(cl.data || []);
+    } catch (e) { setErr(e.message); setEvents([]); }
+  }
+  useEffect(() => { load(); }, [me.department_id]);
+
+  const evSlots   = id => slots.filter(s => s.event_id === id);
+  const evSignups = id => signups.filter(s => s.event_id === id);
+  const evNeeds   = id => needs.filter(n => n.event_id === id);
+  const evClaims  = id => claims.filter(c => c.event_id === id);
+  const fmtT = t => { if (!t) return ""; const [h, m] = t.split(":"); const hr = parseInt(h); return `${hr > 12 ? hr - 12 : hr || 12}:${m}${hr >= 12 ? "pm" : "am"}`; };
+
+  async function createEvent() {
+    if (!f.title.trim()) { setErr("Give the event a title."); return; }
+    setBusy(true); setErr("");
+    try {
+      const { data: ev, error } = await supabase.from("outreach_events").insert({
+        department_id: me.department_id, title: f.title.trim(), description: f.description.trim() || null,
+        location: f.location.trim() || null, event_date: f.event_date || null, start_time: f.start_time || null,
+        signup_mode: f.signup_mode, created_by: me.id,
+      }).select().single();
+      if (error) throw error;
+      if (f.signup_mode !== "rsvp") {
+        const rows = formSlots.filter(s => s.label.trim()).map((s, i) => ({
+          event_id: ev.id, department_id: me.department_id, label: s.label.trim(),
+          start_time: f.signup_mode === "shifts" ? (s.start_time || null) : null,
+          end_time: f.signup_mode === "shifts" ? (s.end_time || null) : null,
+          capacity: s.capacity ? parseInt(s.capacity) : null, sort: i,
+        }));
+        if (rows.length) { const r = await supabase.from("outreach_slots").insert(rows); if (r.error) throw r.error; }
+      }
+      const nrows = formNeeds.filter(n => n.item.trim()).map((n, i) => ({
+        event_id: ev.id, department_id: me.department_id, item: n.item.trim(),
+        qty_needed: n.qty_needed ? parseInt(n.qty_needed) : 1, unit: (n.unit || "").trim() || null, sort: i,
+      }));
+      if (nrows.length) { const r = await supabase.from("outreach_needs").insert(nrows); if (r.error) throw r.error; }
+      setShowForm(false); setF(blank); setFormSlots([]); setFormNeeds([]);
+      await load(); setSel(ev.id);
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  }
+  async function deleteEvent(id) {
+    setBusy(true); setErr("");
+    try { const r = await supabase.from("outreach_events").delete().eq("id", id); if (r.error) throw r.error; setSel(null); await load(); }
+    catch (e) { setErr(e.message); } finally { setBusy(false); }
+  }
+  async function toggleRsvp(ev) {
+    const mine = evSignups(ev.id).find(s => s.member_id === myId && !s.slot_id);
+    setBusy(true); setErr("");
+    try {
+      if (mine) { const r = await supabase.from("outreach_signups").delete().eq("id", mine.id); if (r.error) throw r.error; }
+      else { const r = await supabase.from("outreach_signups").insert({ event_id: ev.id, department_id: me.department_id, member_id: myId }); if (r.error) throw r.error; }
+      await load();
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  }
+  async function toggleSlot(ev, slot) {
+    const mine = evSignups(ev.id).find(s => s.member_id === myId && s.slot_id === slot.id);
+    const taken = evSignups(ev.id).filter(s => s.slot_id === slot.id).length;
+    setBusy(true); setErr("");
+    try {
+      if (mine) { const r = await supabase.from("outreach_signups").delete().eq("id", mine.id); if (r.error) throw r.error; }
+      else {
+        if (slot.capacity && taken >= slot.capacity) { setErr("That slot is already full."); setBusy(false); return; }
+        const r = await supabase.from("outreach_signups").insert({ event_id: ev.id, slot_id: slot.id, department_id: me.department_id, member_id: myId }); if (r.error) throw r.error;
+      }
+      await load();
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  }
+  async function removeSignup(id) {
+    setBusy(true); try { await supabase.from("outreach_signups").delete().eq("id", id); await load(); } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  }
+  async function claimNeed(ev, need) {
+    const q = parseInt(claimQty[need.id]); if (!q || q < 1) { setErr("Enter how many you'll bring."); return; }
+    setBusy(true); setErr("");
+    try { const r = await supabase.from("outreach_claims").insert({ need_id: need.id, event_id: ev.id, department_id: me.department_id, member_id: myId, qty: q }); if (r.error) throw r.error; setClaimQty(x => ({ ...x, [need.id]: "" })); await load(); }
+    catch (e) { setErr(e.message); } finally { setBusy(false); }
+  }
+  async function unclaim(id) {
+    setBusy(true); try { await supabase.from("outreach_claims").delete().eq("id", id); await load(); } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  }
+
+  const STBADGE = { upcoming: { c: POA.green, bg: "rgba(52,227,171,.12)", bd: "rgba(52,227,171,.3)", t: "Upcoming" }, completed: { c: POA.textMuted, bg: "rgba(255,255,255,.05)", bd: POA.hairline, t: "Completed" }, archived: { c: POA.textMuted, bg: "rgba(255,255,255,.04)", bd: POA.hairline, t: "Archived" } };
+
+  if (events === null) return <Spinner />;
+
+  // ===================== DETAIL =====================
+  if (sel) {
+    const ev = events.find(e => e.id === sel);
+    if (!ev) { return (<div><button style={PS.btn} onClick={() => setSel(null)}><ArrowLeft size={13} /> Back</button></div>); }
+    const d = ev.event_date ? new Date(ev.event_date + "T12:00:00") : null;
+    const sg = evSignups(ev.id);
+    const mySlotIds = sg.filter(s => s.member_id === myId && s.slot_id).map(s => s.slot_id);
+    const myRsvp = sg.find(s => s.member_id === myId && !s.slot_id);
+    const nds = evNeeds(ev.id);
+    const cls = evClaims(ev.id);
+    const st = STBADGE[ev.status] || STBADGE.upcoming;
+    return (
+      <div>
+        <button style={{ ...PS.btn, marginBottom: 14 }} onClick={() => setSel(null)}><ArrowLeft size={13} /> All outreach</button>
+        <ErrBox msg={err} />
+
+        <div style={{ ...PS.card, marginBottom: 14, display: "flex", alignItems: "flex-start", gap: 14 }}>
+          <div style={{ width: 54, height: 54, flexShrink: 0, borderRadius: 13, display: "grid", placeItems: "center", background: "linear-gradient(150deg,#B08736,#53401D 44%,#182540)", border: "1px solid #D4A844", color: "#FFF6DC", boxShadow: "inset 0 1px 0 rgba(255,236,184,.5), 0 7px 18px -7px rgba(228,184,79,.5)" }}><Handshake size={24} /></div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <h2 style={{ fontFamily: POA.display, fontSize: 20, fontWeight: 700, color: "#F8F1DF", margin: 0 }}>{ev.title}</h2>
+              <span style={{ fontSize: 10, fontWeight: 700, color: st.c, background: st.bg, border: `1px solid ${st.bd}`, borderRadius: 999, padding: "3px 9px" }}>{st.t}</span>
+            </div>
+            <div style={{ fontSize: 12.5, color: POA.textSecondary, marginTop: 5 }}>
+              {d ? d.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" }) : "Date TBD"}{ev.start_time ? ` · ${fmtT(ev.start_time)}` : ""}{ev.location ? ` · ${ev.location}` : ""}
+            </div>
+            {ev.description && <div style={{ fontSize: 13, color: POA.textSecondary, marginTop: 8, lineHeight: 1.55 }}>{ev.description}</div>}
+          </div>
+          {manage && <button style={{ ...PS.btn, flexShrink: 0 }} onClick={() => { if (window.confirm("Delete this outreach event? Sign-ups and donation claims will be removed.")) deleteEvent(ev.id); }}><Trash2 size={13} /> Delete</button>}
+        </div>
+
+        <Card style={{ marginBottom: 14 }}>
+          <CardHead icon={Users} count={sg.length || undefined}>{ev.signup_mode === "rsvp" ? "Who's coming" : ev.signup_mode === "shifts" ? "Shifts" : "Roles"}</CardHead>
+          {ev.signup_mode === "rsvp" ? (
+            <div>
+              <button style={{ ...(myRsvp ? PS.btn : PS.btnPrimary), marginBottom: sg.length ? 12 : 0 }} disabled={busy} onClick={() => toggleRsvp(ev)}>
+                {myRsvp ? <><CheckCircle2 size={14} /> You're in — tap to cancel</> : <><CheckCircle2 size={14} /> I'll be there</>}
+              </button>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+                {sg.map(s => (
+                  <span key={s.id} style={{ fontSize: 12, color: POA.textPrimary, background: "rgba(255,255,255,.04)", border: `0.5px solid ${POA.hairline}`, borderRadius: 999, padding: "4px 11px", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    {s.members?.full_name || "Member"}{manage && <X size={11} style={{ cursor: "pointer", color: POA.textMuted }} onClick={() => removeSignup(s.id)} />}
+                  </span>
+                ))}
+                {sg.length === 0 && <div style={{ fontSize: 12, color: POA.textMuted }}>No one signed up yet — be the first.</div>}
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+              {evSlots(ev.id).length === 0 && <div style={{ fontSize: 12, color: POA.textMuted }}>No {ev.signup_mode === "shifts" ? "shifts" : "roles"} set up yet.</div>}
+              {evSlots(ev.id).map(slot => {
+                const taken = sg.filter(s => s.slot_id === slot.id);
+                const mineHere = mySlotIds.includes(slot.id);
+                const full = slot.capacity && taken.length >= slot.capacity && !mineHere;
+                return (
+                  <div key={slot.id} style={{ border: `0.5px solid ${POA.hairline}`, background: "rgba(255,255,255,.02)", borderRadius: 10, padding: "11px 13px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: POA.textPrimary }}>{slot.label}</div>
+                        <div style={{ fontSize: 11, color: POA.textMuted, marginTop: 2 }}>
+                          {slot.start_time ? <><Clock size={10} style={{ verticalAlign: "-1px" }} /> {fmtT(slot.start_time)}{slot.end_time ? `–${fmtT(slot.end_time)}` : ""} · </> : ""}
+                          {taken.length}{slot.capacity ? ` / ${slot.capacity}` : ""} signed up
+                        </div>
+                      </div>
+                      <button style={{ ...(mineHere ? PS.btn : PS.btnPrimary), padding: "6px 12px", fontSize: 12, opacity: full ? .5 : 1 }} disabled={busy || full} onClick={() => toggleSlot(ev, slot)}>
+                        {mineHere ? "Leave" : full ? "Full" : "Join"}
+                      </button>
+                    </div>
+                    {taken.length > 0 && (
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 9 }}>
+                        {taken.map(s => (
+                          <span key={s.id} style={{ fontSize: 11, color: POA.textSecondary, background: "rgba(255,255,255,.04)", border: `0.5px solid ${POA.hairline}`, borderRadius: 999, padding: "3px 9px", display: "inline-flex", alignItems: "center", gap: 5 }}>
+                            {s.members?.full_name || "Member"}{manage && <X size={10} style={{ cursor: "pointer", color: POA.textMuted }} onClick={() => removeSignup(s.id)} />}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Card>
+
+        {nds.length > 0 && (
+          <Card>
+            <CardHead icon={ShoppingBag}>Donations needed</CardHead>
+            <div style={{ display: "flex", flexDirection: "column", gap: 11 }}>
+              {nds.map(need => {
+                const nc = cls.filter(c => c.need_id === need.id);
+                const got = nc.reduce((a, c) => a + (c.qty || 0), 0);
+                const pct = need.qty_needed ? Math.min(100, Math.round((got / need.qty_needed) * 100)) : 0;
+                const mine = nc.filter(c => c.member_id === myId);
+                const done = got >= need.qty_needed;
+                return (
+                  <div key={need.id} style={{ border: `0.5px solid ${POA.hairline}`, background: "rgba(255,255,255,.02)", borderRadius: 10, padding: "11px 13px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: POA.textPrimary }}>{need.item}</div>
+                      <div style={{ fontSize: 12, color: done ? POA.greenText : POA.amberText, fontWeight: 700, fontFamily: POA.display }}>{got} / {need.qty_needed}{need.unit ? ` ${need.unit}` : ""}</div>
+                    </div>
+                    <div style={{ height: 6, borderRadius: 4, background: "#0A0F1A", border: `1px solid ${POA.hairline}`, overflow: "hidden", margin: "8px 0" }}>
+                      <div style={{ height: "100%", width: `${pct}%`, borderRadius: 4, background: done ? "linear-gradient(90deg,#1E8F6A,#34E3AB)" : "linear-gradient(90deg,#AD812E,#FFD77E)" }} />
+                    </div>
+                    {nc.length > 0 && <div style={{ fontSize: 11, color: POA.textMuted, marginBottom: mine.length || !done ? 8 : 0 }}>{nc.map(c => `${c.members?.full_name || "Member"} (${c.qty})`).join(" · ")}</div>}
+                    {mine.length > 0 && (
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: done ? 0 : 8 }}>
+                        {mine.map(c => <span key={c.id} style={{ fontSize: 11, color: POA.greenText, background: "rgba(52,227,171,.1)", border: "0.5px solid rgba(52,227,171,.3)", borderRadius: 999, padding: "3px 9px", display: "inline-flex", alignItems: "center", gap: 5 }}>You're bringing {c.qty} <X size={10} style={{ cursor: "pointer" }} onClick={() => unclaim(c.id)} /></span>)}
+                      </div>
+                    )}
+                    {!done && (
+                      <div style={{ display: "flex", gap: 7, alignItems: "center" }}>
+                        <input type="number" min="1" placeholder="Qty" value={claimQty[need.id] || ""} onChange={e => setClaimQty(x => ({ ...x, [need.id]: e.target.value }))} style={{ ...PS.input, width: 80, padding: "7px 10px" }} />
+                        <button style={{ ...PS.btn, padding: "7px 13px" }} disabled={busy} onClick={() => claimNeed(ev, need)}>I'll bring these</button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+        )}
+      </div>
+    );
+  }
+
+  // ===================== FORM =====================
+  if (showForm) {
+    const isSlots = f.signup_mode !== "rsvp";
+    return (
+      <div>
+        <button style={{ ...PS.btn, marginBottom: 14 }} onClick={() => setShowForm(false)}><ArrowLeft size={13} /> Cancel</button>
+        <ErrBox msg={err} />
+        <Card>
+          <CardHead icon={Handshake}>New outreach event</CardHead>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <label style={PS.kicker}>Title</label>
+              <input value={f.title} onChange={e => setF({ ...f, title: e.target.value })} style={PS.input} placeholder="e.g. Holiday Toy Drive for Kids" />
+            </div>
+            <div><label style={PS.kicker}>Date</label><input type="date" value={f.event_date} onChange={e => setF({ ...f, event_date: e.target.value })} style={PS.input} /></div>
+            <div><label style={PS.kicker}>Start time</label><input type="time" value={f.start_time} onChange={e => setF({ ...f, start_time: e.target.value })} style={PS.input} /></div>
+            <div style={{ gridColumn: "1 / -1" }}><label style={PS.kicker}>Location</label><input value={f.location} onChange={e => setF({ ...f, location: e.target.value })} style={PS.input} placeholder="e.g. Fort Worth Community Center" /></div>
+            <div style={{ gridColumn: "1 / -1" }}><label style={PS.kicker}>Description</label><textarea value={f.description} onChange={e => setF({ ...f, description: e.target.value })} style={{ ...PS.textarea, minHeight: 72 }} placeholder="What's the event, who's it for, what should volunteers know?" /></div>
+          </div>
+
+          <label style={PS.kicker}>How do people sign up?</label>
+          <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
+            {[["rsvp", "One-tap RSVP"], ["roles", "Pick a role"], ["shifts", "Time shifts"]].map(([k, l]) => (
+              <button key={k} onClick={() => setF({ ...f, signup_mode: k })} style={{ ...(f.signup_mode === k ? PS.btnPrimary : PS.btn), padding: "8px 14px" }}>{l}</button>
+            ))}
+          </div>
+
+          {isSlots && (
+            <div style={{ marginBottom: 14 }}>
+              <label style={PS.kicker}>{f.signup_mode === "shifts" ? "Shifts (label, time, capacity)" : "Roles (label, capacity)"}</label>
+              {formSlots.map((s, i) => (
+                <div key={i} style={{ display: "flex", gap: 7, alignItems: "center", marginBottom: 7 }}>
+                  <input value={s.label} onChange={e => setFormSlots(a => a.map((x, j) => j === i ? { ...x, label: e.target.value } : x))} style={{ ...PS.input, flex: 1 }} placeholder={f.signup_mode === "shifts" ? "e.g. Morning setup" : "e.g. Hand out toys"} />
+                  {f.signup_mode === "shifts" && <input type="time" value={s.start_time || ""} onChange={e => setFormSlots(a => a.map((x, j) => j === i ? { ...x, start_time: e.target.value } : x))} style={{ ...PS.input, width: 120 }} />}
+                  {f.signup_mode === "shifts" && <input type="time" value={s.end_time || ""} onChange={e => setFormSlots(a => a.map((x, j) => j === i ? { ...x, end_time: e.target.value } : x))} style={{ ...PS.input, width: 120 }} />}
+                  <input type="number" min="1" value={s.capacity || ""} onChange={e => setFormSlots(a => a.map((x, j) => j === i ? { ...x, capacity: e.target.value } : x))} style={{ ...PS.input, width: 80 }} placeholder="Cap" />
+                  <button style={{ ...PS.btn, padding: "7px 9px" }} onClick={() => setFormSlots(a => a.filter((_, j) => j !== i))}><Trash2 size={13} /></button>
+                </div>
+              ))}
+              <button style={{ ...PS.btn, fontSize: 12 }} onClick={() => setFormSlots(a => [...a, { label: "", start_time: "", end_time: "", capacity: "" }])}><Plus size={12} /> Add {f.signup_mode === "shifts" ? "shift" : "role"}</button>
+            </div>
+          )}
+
+          <label style={PS.kicker}>Donations needed (optional)</label>
+          {formNeeds.map((n, i) => (
+            <div key={i} style={{ display: "flex", gap: 7, alignItems: "center", marginBottom: 7 }}>
+              <input value={n.item} onChange={e => setFormNeeds(a => a.map((x, j) => j === i ? { ...x, item: e.target.value } : x))} style={{ ...PS.input, flex: 1 }} placeholder="e.g. Toys for ages 5–8" />
+              <input type="number" min="1" value={n.qty_needed || ""} onChange={e => setFormNeeds(a => a.map((x, j) => j === i ? { ...x, qty_needed: e.target.value } : x))} style={{ ...PS.input, width: 80 }} placeholder="Qty" />
+              <input value={n.unit || ""} onChange={e => setFormNeeds(a => a.map((x, j) => j === i ? { ...x, unit: e.target.value } : x))} style={{ ...PS.input, width: 100 }} placeholder="unit" />
+              <button style={{ ...PS.btn, padding: "7px 9px" }} onClick={() => setFormNeeds(a => a.filter((_, j) => j !== i))}><Trash2 size={13} /></button>
+            </div>
+          ))}
+          <button style={{ ...PS.btn, fontSize: 12, marginBottom: 16 }} onClick={() => setFormNeeds(a => [...a, { item: "", qty_needed: "", unit: "" }])}><Plus size={12} /> Add donation item</button>
+
+          <div style={{ display: "flex", gap: 8 }}>
+            <button style={PS.btnPrimary} disabled={busy} onClick={createEvent}>{busy ? "Saving…" : "Create outreach event"}</button>
+            <button style={PS.btn} onClick={() => setShowForm(false)}>Cancel</button>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  // ===================== LIST =====================
+  return (
+    <div>
+      <ErrBox msg={err} />
+      {manage && (
+        <button style={{ ...PS.btnPrimary, marginBottom: 14 }} onClick={() => { setShowForm(true); setF(blank); setFormSlots([]); setFormNeeds([]); setErr(""); }}>
+          <Plus size={14} /> New outreach event
+        </button>
+      )}
+      {events.length === 0 ? (
+        <Card><div style={{ color: POA.textMuted, fontSize: 13 }}>No community outreach events yet.{manage ? " Create one to start lining up volunteers and donations." : " Check back soon — your board is planning community events."}</div></Card>
+      ) : (
+        <div style={{ display: "grid", gap: 12 }}>
+          {events.map(ev => {
+            const d = ev.event_date ? new Date(ev.event_date + "T12:00:00") : null;
+            const vol = evSignups(ev.id).length;
+            const nds = evNeeds(ev.id);
+            const st = STBADGE[ev.status] || STBADGE.upcoming;
+            return (
+              <div key={ev.id} style={{ ...PS.card, cursor: "pointer", display: "flex", alignItems: "center", gap: 14 }} onClick={() => setSel(ev.id)}>
+                <div style={{ width: 52, height: 52, flexShrink: 0, borderRadius: 12, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: d ? "linear-gradient(150deg,#B08736,#53401D 44%,#182540)" : "rgba(255,255,255,.04)", border: `1px solid ${d ? "#D4A844" : POA.hairline}`, color: d ? "#1C1708" : POA.textMuted }}>
+                  {d ? <><span style={{ fontSize: 9, fontWeight: 800, letterSpacing: ".08em", color: "#2A2110" }}>{d.toLocaleDateString(undefined, { month: "short" }).toUpperCase()}</span><span style={{ fontFamily: POA.display, fontSize: 21, fontWeight: 800, lineHeight: 1, color: "#1C1708" }}>{d.getDate()}</span></> : <Calendar size={22} />}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <div style={{ fontFamily: POA.display, fontSize: 16, fontWeight: 700, color: "#F3EAD6" }}>{ev.title}</div>
+                    <span style={{ fontSize: 9.5, fontWeight: 700, color: st.c, background: st.bg, border: `1px solid ${st.bd}`, borderRadius: 999, padding: "2px 8px" }}>{st.t}</span>
+                  </div>
+                  <div style={{ fontSize: 12, color: POA.textSecondary, marginTop: 3 }}>
+                    {d ? d.toLocaleDateString(undefined, { weekday: "short", month: "long", day: "numeric" }) : "Date TBD"}{ev.location ? ` · ${ev.location}` : ""}
+                  </div>
+                  <div style={{ fontSize: 11.5, color: POA.textMuted, marginTop: 5, display: "flex", gap: 12 }}>
+                    <span><Users size={11} style={{ verticalAlign: "-1px" }} /> {vol} signed up</span>
+                    {nds.length > 0 && <span><ShoppingBag size={11} style={{ verticalAlign: "-1px" }} /> {nds.length} donation need{nds.length !== 1 ? "s" : ""}</span>}
+                  </div>
+                </div>
+                <ChevronRight size={16} color={POA.textMuted} style={{ flexShrink: 0 }} />
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Fundraising({ me, org }) {
   const today = new Date();
 
@@ -9882,6 +10282,7 @@ function Fundraising({ me, org }) {
   const [calOpen, setCalOpen]       = useState(true);
   const [logOpen, setLogOpen]       = useState(false);
   const [draftsOpen, setDraftsOpen] = useState(false);
+  const [otab, setOtab] = useState("fundraisers");
 
   // calendar state
   const [calCur, setCalCur]         = useState({ y: today.getFullYear(), m: today.getMonth() });
@@ -10125,7 +10526,13 @@ function Fundraising({ me, org }) {
 
   return (
     <div>
-      <PageTitle sub="Plan fundraisers, write the appeals, line up sponsors">Fundraising</PageTitle>
+      <PageTitle icon={Megaphone} sub="Plan fundraisers and community outreach — appeals, sponsors, and events">Fundraisers &amp; Community Outreach</PageTitle>
+      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+        {[["fundraisers", "Fundraisers"], ["outreach", "Community Outreach"]].map(([k, l]) => (
+          <button key={k} onClick={() => setOtab(k)} style={{ ...(otab === k ? PS.btnPrimary : PS.btn), padding: "9px 18px" }}>{l}</button>
+        ))}
+      </div>
+      {otab === "outreach" ? <OutreachView me={me} org={org} /> : (<>
       <ErrBox msg={err} />
 
       {/* ── PLANNER ── */}
@@ -10211,7 +10618,7 @@ function Fundraising({ me, org }) {
                 </div>
 
                 {/* Prominent operationalize button */}
-                <div style={{ background: "rgba(155,107,230,.08)", border: `1px solid ${POA.accentDim}`, borderRadius: 12, padding: "14px 16px", marginBottom: 12 }}>
+                <div style={{ background: "rgba(228,184,79,.10)", border: `1px solid ${POA.accentDim}`, borderRadius: 12, padding: "14px 16px", marginBottom: 12 }}>
                   <div style={{ fontWeight: 700, fontSize: 14, color: POA.textPrimary, marginBottom: 4 }}>Ready to turn this into real work?</div>
                   <div style={{ fontSize: 13, color: POA.textMuted, marginBottom: 12, lineHeight: 1.55 }}>
                     Extract action items with owners and due dates, plus calendar milestones — review them before anything gets added to the app.
@@ -10392,7 +10799,7 @@ function Fundraising({ me, org }) {
       {/* ── FUNDRAISING CALENDAR (collapsible) ── */}
       <div onClick={() => setCalOpen(v => !v)}
         style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", marginBottom: calOpen ? 10 : 16 }}>
-        <p style={{ ...PS.kicker, margin: 0 }}>Fundraising calendar</p>
+        <p style={{ ...PS.kicker, margin: 0 }}>Fundraisers &amp; outreach calendar</p>
         {calOpen ? <ChevronUp size={15} color={POA.textMuted} /> : <ChevronDown size={15} color={POA.textMuted} />}
       </div>
       {calOpen && (
@@ -10437,7 +10844,7 @@ function Fundraising({ me, org }) {
           {Array.from({ length: calCells.length / 7 }, (_, w) => (
             <div key={w} style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 2, marginBottom: 2 }}>
               {calCells.slice(w*7, w*7+7).map((d, i) => (
-                <div key={i} style={{ minHeight: 64, background: isTodayCal(d) ? "rgba(155,107,230,.12)" : "transparent", border: `0.5px solid ${isTodayCal(d) ? POA.accent : POA.hairline}`, borderRadius: 7, padding: "4px 5px" }}>
+                <div key={i} style={{ minHeight: 64, background: isTodayCal(d) ? "rgba(228,184,79,.14)" : "transparent", border: `0.5px solid ${isTodayCal(d) ? POA.accent : POA.hairline}`, borderRadius: 7, padding: "4px 5px" }}>
                   {d && (
                     <>
                       <div style={{ fontSize: 11, fontWeight: isTodayCal(d) ? 700 : 400, color: isTodayCal(d) ? POA.accent : POA.textMuted, marginBottom: 3 }}>{d}</div>
@@ -10573,7 +10980,7 @@ function Fundraising({ me, org }) {
         <div onClick={() => { setAssigningEvent(null); setAssignErr(''); }}
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.7)', zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
           <div onClick={e => e.stopPropagation()}
-            style={{ background: 'linear-gradient(135deg, #0E1630, #0A1020)', border: `0.5px solid ${POA.hairline2}`, borderRadius: 16, maxWidth: 420, width: '100%', padding: '20px 22px', boxShadow: '0 20px 60px rgba(0,0,0,.6)' }}>
+            style={{ background: 'linear-gradient(158deg, #0E1B31 0%, #081321 52%, #03080F 100%)', border: `0.5px solid ${POA.hairline2}`, borderRadius: 16, maxWidth: 420, width: '100%', padding: '20px 22px', boxShadow: '0 20px 60px rgba(0,0,0,.6)' }}>
             <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.12em', textTransform: 'uppercase', color: POA.accent, marginBottom: 8 }}>Assign to cause</div>
             <div style={{ fontWeight: 700, fontSize: 16, color: POA.textPrimary, marginBottom: 14 }}>{assigningEvent.title}</div>
             <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 6 }}>Which cause does this event support?</div>
@@ -10591,6 +10998,7 @@ function Fundraising({ me, org }) {
           </div>
         </div>
       )}
+      </>)}
     </div>
   );
 }
@@ -10798,7 +11206,7 @@ function BoardDocuments({ me }) {
         <div onClick={() => setViewing(null)}
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.85)', zIndex: 60, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', padding: '20px 16px', overflowY: 'auto' }}>
           <div onClick={e => e.stopPropagation()}
-            style={{ background: 'linear-gradient(135deg, #0E1630, #0A1020)', border: `0.5px solid ${POA.hairline2}`, borderRadius: 16, maxWidth: 860, width: '100%', padding: '16px 18px', boxShadow: '0 20px 60px rgba(0,0,0,.6)' }}>
+            style={{ background: 'linear-gradient(158deg, #0E1B31 0%, #081321 52%, #03080F 100%)', border: `0.5px solid ${POA.hairline2}`, borderRadius: 16, maxWidth: 860, width: '100%', padding: '16px 18px', boxShadow: '0 20px 60px rgba(0,0,0,.6)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
               <div>
                 <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.12em', textTransform: 'uppercase', color: POA.accent, marginBottom: 2 }}>Document</div>
@@ -10913,7 +11321,7 @@ function MemberDocuments({ me }) {
         <div onClick={() => setViewing(null)}
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.85)', zIndex: 60, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', padding: '20px 16px', overflowY: 'auto' }}>
           <div onClick={e => e.stopPropagation()}
-            style={{ background: 'linear-gradient(135deg, #0E1630, #0A1020)', border: `0.5px solid ${POA.hairline2}`, borderRadius: 16, maxWidth: 860, width: '100%', padding: '16px 18px', boxShadow: '0 20px 60px rgba(0,0,0,.6)' }}>
+            style={{ background: 'linear-gradient(158deg, #0E1B31 0%, #081321 52%, #03080F 100%)', border: `0.5px solid ${POA.hairline2}`, borderRadius: 16, maxWidth: 860, width: '100%', padding: '16px 18px', boxShadow: '0 20px 60px rgba(0,0,0,.6)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
               <div>
                 <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.12em', textTransform: 'uppercase', color: POA.accent, marginBottom: 2 }}>Document</div>
@@ -10956,7 +11364,7 @@ function MemberDocuments({ me }) {
 const ALL_VIEWS = [
   // member views
   'm_dash','m_videos','m_call','m_ask','m_partners','m_community',
-  'm_benefits','m_events','m_card','m_vote','m_store','m_booking','m_correspondence','m_documents',
+  'm_benefits','m_events','m_card','m_vote','m_store','m_booking','m_correspondence','m_documents','m_outreach',
   // board views
   'b_dash','b_profile','b_attendance','b_meetings','b_stipend','b_causes',
   'b_fundraising','b_social','b_building','b_continuity',
@@ -10994,7 +11402,7 @@ function OrgSettings({ me, org }) {
     org_website: "",
     org_founded: "",
     org_logo_url: "",
-    org_primary_color: "#DBA525",
+    org_primary_color: "#E4B84F",
   });
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -11126,12 +11534,12 @@ function OrgSettings({ me, org }) {
             <div style={{ marginBottom: 12 }}>
               <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 4 }}>Association color</div>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <input type="color" value={settings.org_primary_color || "#DBA525"}
+                <input type="color" value={settings.org_primary_color || "#E4B84F"}
                   onChange={e => setSettings(s => ({ ...s, org_primary_color: e.target.value }))}
                   style={{ width: 44, height: 36, borderRadius: 7, border: `0.5px solid ${POA.hairline}`, background: "transparent", cursor: "pointer", padding: 2 }} />
-                <input value={settings.org_primary_color || "#DBA525"}
+                <input value={settings.org_primary_color || "#E4B84F"}
                   onChange={e => setSettings(s => ({ ...s, org_primary_color: e.target.value }))}
-                  style={{ ...PS.input, maxWidth: 120 }} placeholder="#DBA525" />
+                  style={{ ...PS.input, maxWidth: 120 }} placeholder="#E4B84F" />
                 <div style={{ fontSize: 12, color: POA.textMuted }}>Used for future per-org theming</div>
               </div>
             </div>
@@ -11188,9 +11596,9 @@ function OrgSettings({ me, org }) {
           <Card style={{ marginBottom: 14 }}>
             <SectionTitle>Brand color</SectionTitle>
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <div style={{ width: 40, height: 40, borderRadius: 9, background: settings.org_primary_color || "#DBA525", border: `0.5px solid ${POA.hairline}`, boxShadow: `0 0 16px ${settings.org_primary_color || "#DBA525"}40` }} />
+              <div style={{ width: 40, height: 40, borderRadius: 9, background: settings.org_primary_color || "#E4B84F", border: `0.5px solid ${POA.hairline}`, boxShadow: `0 0 16px ${settings.org_primary_color || "#E4B84F"}40` }} />
               <div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: POA.textPrimary }}>{settings.org_primary_color || "#DBA525"}</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: POA.textPrimary }}>{settings.org_primary_color || "#E4B84F"}</div>
                 <div style={{ fontSize: 12, color: POA.textMuted }}>Primary association color</div>
               </div>
             </div>
@@ -11279,13 +11687,13 @@ function OrgSettings({ me, org }) {
 
 const KIND_META = {
   birthday:     { label: "Birthday",          emoji: "🎂", color: "#F0C84A" },
-  retirement:   { label: "Retirement",         emoji: "🏅", color: "#DBA525" },
-  promotion:    { label: "Promotion",          emoji: "⭐", color: "#46C793" },
+  retirement:   { label: "Retirement",         emoji: "🏅", color: "#E4B84F" },
+  promotion:    { label: "Promotion",          emoji: "⭐", color: "#34E3AB" },
   spotlight:    { label: "Officer Spotlight",  emoji: "🌟", color: "#57B6E0" },
   memorial:     { label: "In Memoriam",        emoji: "🕯️", color: "#9CA3AF" },
-  new_hire:     { label: "Welcome",            emoji: "👋", color: "#46C793" },
+  new_hire:     { label: "Welcome",            emoji: "👋", color: "#34E3AB" },
   family:       { label: "Family News",        emoji: "❤️", color: "#EF6A64" },
-  achievement:  { label: "Achievement",        emoji: "🏆", color: "#DBA525" },
+  achievement:  { label: "Achievement",        emoji: "🏆", color: "#E4B84F" },
   announcement: { label: "Announcement",       emoji: "📢", color: "#57B6E0" },
 };
 
@@ -11987,17 +12395,24 @@ function MyProfile({ me }) {
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20 }}>
-        <div>
-          <p style={{ ...PS.kicker, marginBottom: 4 }}>My Profile</p>
-          <h1 style={{ fontFamily: 'inherit', fontSize: 24, fontWeight: 700, color: POA.textPrimary, margin: 0 }}>
-            {me.full_name}
-          </h1>
-          <div style={{ fontSize: 13, color: POA.textMuted, marginTop: 4 }}>
-            {(me.access || []).filter(r => r !== 'Member' && r !== 'ProjectAdmin').join(' · ')}
-            {me.badge ? ` · Badge ${me.badge}` : ''}
-          </div>
+      <div style={{ position: "relative", overflow: "hidden", borderRadius: 16, padding: "20px 24px", marginBottom: 14, background: "radial-gradient(560px 220px at 92% 6%, rgba(90,70,31,.20), transparent 60%), linear-gradient(118deg,#13223E 0%,#0C1831 46%,#060D1D 100%)", border: "1px solid #223758", boxShadow: "inset 0 1px 0 rgba(255,255,255,.08), inset 0 0 80px -36px rgba(228,184,79,.26), 0 20px 44px -22px #000", display: "flex", alignItems: "center", gap: 17 }}>
+        <div aria-hidden style={{ position: "absolute", right: 26, top: "50%", transform: "translateY(-52%)", fontFamily: POA.display, fontWeight: 800, fontSize: 150, lineHeight: 0.8, letterSpacing: "-.03em", color: "rgba(228,184,79,.05)", pointerEvents: "none", userSelect: "none" }}>{initials(me.full_name)}</div>
+        <div style={{ position: "absolute", left: 0, top: 16, bottom: 16, width: 3, borderRadius: "0 3px 3px 0", background: "linear-gradient(#FFD77E,#C89A3B)", boxShadow: "0 0 14px rgba(228,184,79,.5)" }} />
+        <div style={{ position: "relative", zIndex: 1, width: 72, height: 72, flexShrink: 0, borderRadius: 18, display: "grid", placeItems: "center", background: "linear-gradient(135deg,#2A3346,#121824)", border: "1px solid #6E5A30", color: POA.accentBright, fontFamily: POA.display, fontWeight: 800, fontSize: 27, boxShadow: "inset 0 1px 0 rgba(255,236,184,.3), 0 8px 22px -8px #000" }}>{initials(me.full_name)}</div>
+        <div style={{ position: "relative", zIndex: 1, minWidth: 0, flex: 1 }}>
+          <p style={{ ...PS.kicker, marginBottom: 3 }}>Member File</p>
+          <h1 style={{ fontFamily: POA.display, fontSize: 30, fontWeight: 700, letterSpacing: "-.02em", color: "#FAF3E2", margin: 0, lineHeight: 1 }}>{me.full_name}</h1>
+          <div style={{ fontSize: 13, color: POA.textSecondary, marginTop: 6 }}>{(me.access || []).filter(r => r !== 'Member' && r !== 'ProjectAdmin').join(' · ')}{me.badge ? ` · Badge ${me.badge}` : ''}</div>
+          <div style={{ width: 36, height: 2, borderRadius: 2, background: "linear-gradient(90deg,#FFD77E,#C89A3B)", marginTop: 11, boxShadow: "0 0 10px rgba(228,184,79,.5)" }} />
         </div>
+        {me.standing && <span style={{ position: "relative", zIndex: 1, alignSelf: "flex-start", display: "flex", alignItems: "center", gap: 6, fontSize: 11, fontWeight: 700, padding: "5px 11px", borderRadius: 999, flexShrink: 0, color: POA.greenText, background: "rgba(52,227,171,.1)", border: "1px solid rgba(52,227,171,.3)" }}><span style={{ width: 7, height: 7, borderRadius: "50%", background: POA.green, boxShadow: "0 0 8px " + POA.green }} />{me.standing}</span>}
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 16 }}>
+        <StatChip label="Role" value={(me.access || []).filter(r => r !== 'Member' && r !== 'ProjectAdmin')[0] || 'Member'} />
+        <StatChip label="Badge" value={me.badge || '—'} />
+        <StatChip label="Open action items" value={actions.length} tone={actions.length ? 'warn' : 'good'} caption={actions.length ? 'assigned to you' : 'all clear'} />
+        <StatChip label="Meeting requests" value={pendingRequests.length} caption={pendingRequests.length ? 'awaiting your reply' : 'none pending'} />
       </div>
 
       <ErrBox msg={err} />
@@ -12008,7 +12423,7 @@ function MyProfile({ me }) {
       )}
 
       <Card style={{ marginBottom: 14 }}>
-        <p style={{ ...PS.kicker, margin: '0 0 12px' }}>My availability</p>
+        <CardHead icon={Calendar}>My Availability</CardHead>
         <div style={{ fontSize: 12, color: POA.textMuted, marginBottom: 12 }}>
           Members see these times when they request a meeting with you.
         </div>
@@ -12205,13 +12620,7 @@ function MyProfile({ me }) {
       </Card>
 
       {/* Meeting requests */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-        <p style={{ ...PS.kicker, margin: 0 }}>
-          Meeting requests {pendingRequests.length > 0 && (
-            <span style={{ background: POA.red, color: '#fff', fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 999, marginLeft: 6 }}>{pendingRequests.length}</span>
-          )}
-        </p>
-      </div>
+      <CardHead icon={Mail} count={pendingRequests.length || undefined}>Meeting Requests</CardHead>
 
       {requests.length === 0 ? (
         <Card style={{ marginBottom: 14 }}>
@@ -12290,7 +12699,7 @@ function MyProfile({ me }) {
       )}
 
       {/* My open action items */}
-      <p style={{ ...PS.kicker, margin: '16px 0 8px' }}>My open action items ({actions.length})</p>
+      <div style={{ marginTop: 16 }}><CardHead icon={ClipboardList} count={actions.length || undefined}>My Open Action Items</CardHead></div>
       {actions.length === 0 ? (
         <Card>
           <div style={{ color: POA.textMuted, fontSize: 13.5 }}>No open action items assigned to you.</div>
@@ -12392,7 +12801,7 @@ function MemberVideos({ me, setView }) {
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 }}>
                 {seriesVideos.map(v => (
-                  <div key={v.id} style={{ background: 'linear-gradient(160deg, #101828 0%, #0A1020 100%)', border: `0.5px solid ${POA.hairline2}`, borderRadius: 12, overflow: 'hidden' }}>
+                  <div key={v.id} style={{ background: 'linear-gradient(158deg, #0E1B31 0%, #081321 52%, #03080F 100%)', border: `0.5px solid ${POA.hairline2}`, borderRadius: 12, overflow: 'hidden' }}>
                     <div style={{ background: 'rgba(0,0,0,.4)', aspectRatio: '16/9', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', position: 'relative' }}
                       onClick={() => setPlaying(playing === v.id ? null : v.id)}>
                       {playing === v.id && vimeoEmbed(v.vimeo_url) ? (
@@ -12457,6 +12866,7 @@ function renderScreen(view, { me, org, setView, setViewAs }) {
       case "m_events":   return <MemberEvents me={me} setView={setView} />;
       case "m_partners": return <TrustedPartners />;
       case "m_community": return <Community me={me} />;
+      case "m_outreach": return <OutreachView me={me} org={org} />;
       case "m_benefits": return <Benefits me={me} setView={setView} />;
       case "m_vote":     return <VoteLink me={me} org={org} setView={setView} />;
       case "m_store":    return <Store me={me} />;
@@ -12678,7 +13088,7 @@ export default function App() {
             const on = activeView === id;
             return (
               <button key={id} className="nav-item" onClick={() => { setView(id); setSideOpen(false); }}
-                style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "9px 10px", borderRadius: 9, border: "none", cursor: "pointer", fontFamily: "inherit", fontSize: 13.5, fontWeight: on ? 600 : 400, color: on ? POA.accent : POA.navLabel, background: on ? 'linear-gradient(135deg, rgba(219,165,37,.18) 0%, rgba(219,165,37,.06) 100%)' : "transparent", marginBottom: 2, textAlign: "left", borderLeft: on ? '2px solid #DBA525' : "2px solid transparent", boxShadow: on ? 'inset 0 0 20px rgba(219,165,37,.05), 0 2px 8px rgba(0,0,0,.3)' : "none" }}>
+                style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "9px 10px", borderRadius: 9, border: "none", cursor: "pointer", fontFamily: "inherit", fontSize: 13.5, fontWeight: on ? 600 : 400, color: on ? POA.accent : POA.navLabel, background: on ? 'linear-gradient(135deg, rgba(219,165,37,.18) 0%, rgba(219,165,37,.06) 100%)' : "transparent", marginBottom: 2, textAlign: "left", borderLeft: on ? '2px solid #E4B84F' : "2px solid transparent", boxShadow: on ? 'inset 0 0 20px rgba(219,165,37,.05), 0 2px 8px rgba(0,0,0,.3)' : "none" }}>
                 <Icon size={16} style={{ flexShrink: 0, opacity: on ? 1 : 0.7 }} />
                 {label}
               </button>
@@ -12693,7 +13103,7 @@ export default function App() {
                 const on = activeView === id;
                 return (
                   <button key={id} className="nav-item" onClick={() => { setView(id); setSideOpen(false); }}
-                    style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "9px 10px", borderRadius: 9, border: "none", cursor: "pointer", fontFamily: "inherit", fontSize: 13.5, fontWeight: on ? 600 : 400, color: on ? POA.accent : POA.navLabel, background: on ? 'linear-gradient(135deg, rgba(219,165,37,.18) 0%, rgba(219,165,37,.06) 100%)' : "transparent", marginBottom: 2, textAlign: "left", borderLeft: on ? '2px solid #DBA525' : "2px solid transparent", boxShadow: on ? 'inset 0 0 20px rgba(219,165,37,.05), 0 2px 8px rgba(0,0,0,.3)' : "none" }}>
+                    style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "9px 10px", borderRadius: 9, border: "none", cursor: "pointer", fontFamily: "inherit", fontSize: 13.5, fontWeight: on ? 600 : 400, color: on ? POA.accent : POA.navLabel, background: on ? 'linear-gradient(135deg, rgba(219,165,37,.18) 0%, rgba(219,165,37,.06) 100%)' : "transparent", marginBottom: 2, textAlign: "left", borderLeft: on ? '2px solid #E4B84F' : "2px solid transparent", boxShadow: on ? 'inset 0 0 20px rgba(219,165,37,.05), 0 2px 8px rgba(0,0,0,.3)' : "none" }}>
                     <Icon size={16} style={{ flexShrink: 0, opacity: on ? 1 : 0.7 }} />
                     {label}
                   </button>
