@@ -8136,6 +8136,9 @@ function BoardCorrespondence({ me, members }) {
   const [responding, setResponding]   = useState(null);
   const [reqReply, setReqReply]       = useState('');
   const [replyBusy, setReplyBusy]     = useState(false);
+  const [emailMembers, setEmailMembers] = useState(false);
+  const [sendResult, setSendResult]     = useState(null);
+  const [testing, setTesting]           = useState(false);
 
   async function load() {
     const [ann, msgs, act, bqs, reqs] = await Promise.all([
@@ -8154,15 +8157,44 @@ function BoardCorrespondence({ me, members }) {
   }
   useEffect(() => { load(); }, []);
 
+  async function sendEmailNotification(category, subject, body, test) {
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    if (!token) throw new Error("You need to be signed in to send email.");
+    const r = await fetch("/api/send-notification", {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+      body: JSON.stringify({ category, subject, body, test }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.error || `Email failed (${r.status})`);
+    return data;
+  }
+
   async function doPostAnnouncement() {
     if (!form.subject.trim() || !form.body.trim()) { setErr("Subject and message are required."); return; }
-    setBusy(true); setErr("");
+    setBusy(true); setErr(""); setSendResult(null);
     try {
       await postAnnouncement(form.subject, form.body, form.audience, form.audience_value || null);
+      if (emailMembers) {
+        const result = await sendEmailNotification("announcements", form.subject, form.body, false);
+        setSendResult(result);
+      }
       setForm({ subject: "", body: "", audience: "all", audience_value: "" });
+      setEmailMembers(false);
       await load();
     } catch(e) { setErr(e.message); }
     finally { setBusy(false); }
+  }
+
+  async function doTestEmail() {
+    if (!form.subject.trim() || !form.body.trim()) { setErr("Add a subject and message first."); return; }
+    setTesting(true); setErr(""); setSendResult(null);
+    try {
+      const result = await sendEmailNotification("announcements", form.subject, form.body, true);
+      setSendResult({ ...result, test: true });
+    } catch(e) { setErr(e.message); }
+    finally { setTesting(false); }
   }
 
   async function doPostAlert() {
@@ -8367,9 +8399,21 @@ function BoardCorrespondence({ me, members }) {
                   style={PS.input} />
               </div>
             )}
-            <button style={{ ...PS.btnPrimary, width: "100%" }} disabled={busy} onClick={doPostAnnouncement}>
-              <Send size={14} /> Post announcement
-            </button>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, margin: "4px 0 10px", cursor: "pointer", fontSize: 13, color: POA.textSecondary }}>
+              <input type="checkbox" checked={emailMembers} onChange={e => setEmailMembers(e.target.checked)} />
+              Also email this to members (honors each member's notification preferences)
+            </label>
+            {sendResult && (
+              <div style={{ background: "rgba(52,227,171,.1)", border: "0.5px solid rgba(52,227,171,.3)", color: POA.greenText, borderRadius: 10, padding: "10px 14px", fontSize: 13, marginBottom: 10 }}>
+                {sendResult.test ? "Test email sent" : "Emailed members"}: {sendResult.sent} delivered{sendResult.failed ? `, ${sendResult.failed} failed` : ""}{sendResult.total === 0 ? " — no eligible recipients." : "."}
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 8 }}>
+              <button style={{ ...PS.btnPrimary, flex: 1 }} disabled={busy} onClick={doPostAnnouncement}>
+                <Send size={14} /> {emailMembers ? "Post & email members" : "Post announcement"}
+              </button>
+              <button style={PS.btn} disabled={testing} onClick={doTestEmail}>{testing ? "Sending…" : "Test email to me"}</button>
+            </div>
           </Card>
 
           <SectionTitle>Recent announcements</SectionTitle>
@@ -8560,7 +8604,27 @@ function MemberCorrespondence({ me }) {
     finally { setBusy(false); }
   }
 
-  const TABS = [{ id: 'announcements', label: 'Announcements' }, { id: 'messages', label: 'My Messages' }, { id: 'new', label: '+ New Message' }];
+  const NOTIF_CATS = [
+    { k: 'announcements', label: 'Announcements', desc: 'General association announcements' },
+    { k: 'meetings', label: 'Meetings & events', desc: 'Upcoming meetings and events' },
+    { k: 'voting', label: 'Voting', desc: 'Ballots and voting deadlines' },
+    { k: 'outreach', label: 'Community outreach', desc: 'Volunteer opportunities' },
+    { k: 'benefits', label: 'Benefits', desc: 'New benefits and member resources' },
+  ];
+  const [prefs, setPrefs]         = useState(me.notification_prefs || {});
+  const [prefBusy, setPrefBusy]   = useState(false);
+  const [prefSaved, setPrefSaved] = useState(false);
+  async function togglePref(k) {
+    const next = { ...prefs, [k]: prefs[k] === false };
+    setPrefs(next); setPrefBusy(true); setPrefSaved(false); setErr('');
+    try {
+      const { error } = await supabase.rpc('set_my_notification_prefs', { p_prefs: next });
+      if (error) throw error;
+      setPrefSaved(true); setTimeout(() => setPrefSaved(false), 2500);
+    } catch(e) { setErr(e.message); }
+    finally { setPrefBusy(false); }
+  }
+  const TABS = [{ id: 'announcements', label: 'Announcements' }, { id: 'messages', label: 'My Messages' }, { id: 'new', label: '+ New Message' }, { id: 'prefs', label: 'Notifications' }];
 
   return (
     <div>
@@ -8637,6 +8701,29 @@ function MemberCorrespondence({ me }) {
             <Send size={14} /> Send to board
           </button>
           <div style={{ fontSize: 11.5, color: POA.textMuted, marginTop: 8, fontStyle: 'italic' }}>Messages go directly to the board. Replies appear under 'My Messages'.</div>
+        </Card>
+      )}
+      {tab === 'prefs' && (
+        <Card>
+          <SectionTitle>Email notifications</SectionTitle>
+          <div style={{ fontSize: 13, color: POA.textMuted, marginBottom: 14 }}>Choose which association emails you'd like to receive. Critical alerts are always sent.</div>
+          <ErrBox msg={err} />
+          {NOTIF_CATS.map(c => {
+            const on = prefs[c.k] !== false;
+            return (
+              <div key={c.k} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 0', borderBottom: `0.5px solid ${POA.hairline}` }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 600, color: POA.textPrimary }}>{c.label}</div>
+                  <div style={{ fontSize: 12, color: POA.textMuted, marginTop: 2 }}>{c.desc}</div>
+                </div>
+                <button onClick={() => togglePref(c.k)} disabled={prefBusy} aria-pressed={on}
+                  style={{ width: 46, height: 26, borderRadius: 999, border: 'none', cursor: 'pointer', position: 'relative', flexShrink: 0, background: on ? POA.accent : POA.track, transition: '.15s' }}>
+                  <span style={{ position: 'absolute', top: 3, left: on ? 23 : 3, width: 20, height: 20, borderRadius: '50%', background: '#fff', transition: '.15s', boxShadow: '0 1px 3px rgba(0,0,0,.4)' }} />
+                </button>
+              </div>
+            );
+          })}
+          {prefSaved && <div style={{ fontSize: 12, color: POA.greenText, marginTop: 10 }}>✓ Preferences saved.</div>}
         </Card>
       )}
     </div>
